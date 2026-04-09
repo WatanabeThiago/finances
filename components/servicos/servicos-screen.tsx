@@ -15,11 +15,7 @@ import {
 import { formatBRL, parseMoney } from "@/lib/money";
 import type { Service } from "@/lib/service";
 import {
-  appendService,
-  updateService,
   parseServicesJson,
-  servicesStorageSnapshot,
-  subscribeServices,
 } from "@/lib/service";
 import {
   useCallback,
@@ -83,12 +79,34 @@ export function ServicosScreen() {
   );
   const produtos = useMemo(() => parseProdutosJson(produtosRaw), [produtosRaw]);
 
-  const servicesRaw = useSyncExternalStore(
-    subscribeServices,
-    servicesStorageSnapshot,
-    () => "[]"
-  );
-  const services = useMemo(() => parseServicesJson(servicesRaw), [servicesRaw]);
+  const [services, setServices] = useState<Service[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Fetch services from API
+  useEffect(() => {
+    const fetchServices = async () => {
+      try {
+        setLoading(true);
+        const response = await fetch("/api/servicos");
+        if (!response.ok) throw new Error("Falha ao carregar serviços");
+        const data = await response.json();
+        setServices(data);
+        setError(null);
+      } catch (err) {
+        console.error("Error fetching services:", err);
+        setError("Erro ao carregar serviços");
+        // Fallback to localStorage
+        const localData = localStorage.getItem("finances.servicos.v1");
+        if (localData) {
+          setServices(parseServicesJson(localData));
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchServices();
+  }, []);
 
   const partnerById = useMemo(() => {
     const m = new Map<string, Partner>();
@@ -107,6 +125,7 @@ export function ServicosScreen() {
   const [editingServiceId, setEditingServiceId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
   const [formError, setFormError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const titleId = useId();
   const descId = useId();
@@ -118,12 +137,12 @@ export function ServicosScreen() {
       setForm({
         fotoDataUrl: serviceToEdit.fotoDataUrl ?? "",
         nome: serviceToEdit.nome,
-        valor: serviceToEdit.valor > 0 ? (serviceToEdit.valor / 100).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "",
-        valorNoturno: serviceToEdit.valorNoturno > 0 ? (serviceToEdit.valorNoturno / 100).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "",
-        gastosEstimados: serviceToEdit.gastosEstimados > 0 ? (serviceToEdit.gastosEstimados / 100).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "",
+        valor: serviceToEdit.valor.toString(),
+        valorNoturno: serviceToEdit.valorNoturno.toString(),
+        gastosEstimados: serviceToEdit.gastosEstimados.toString(),
         observacoes: serviceToEdit.observacoes,
-        prestadorIds: [...serviceToEdit.prestadorIds],
-        produtoIds: [...serviceToEdit.produtoIds],
+        prestadorIds: [],
+        produtoIds: [],
         automotivo: serviceToEdit.automotivo,
         residencial: serviceToEdit.residencial,
       });
@@ -161,15 +180,15 @@ export function ServicosScreen() {
   }, []);
 
   const submit = useCallback(
-    (e: React.FormEvent) => {
+    async (e: React.FormEvent) => {
       e.preventDefault();
       const nome = form.nome.trim();
       if (!nome) {
         setFormError("Informe o nome do serviço.");
         return;
       }
-      const valor = parseMoney(form.valor);
-      if (valor === undefined) {
+      const valor = parseFloat(form.valor);
+      if (isNaN(valor)) {
         setFormError("Informe um valor válido.");
         return;
       }
@@ -177,37 +196,83 @@ export function ServicosScreen() {
         setFormError("O valor não pode ser negativo.");
         return;
       }
-      const vn = parseMoney(form.valorNoturno);
-      const gastos = parseMoney(form.gastosEstimados);
-      const valorNoturno = vn ?? 0;
-      const gastosEstimados = gastos ?? 0;
+      const valorNoturno = parseFloat(form.valorNoturno) || 0;
+      const gastosEstimados = parseFloat(form.gastosEstimados) || 0;
       if (valorNoturno < 0 || gastosEstimados < 0) {
         setFormError("Valores noturnos e gastos não podem ser negativos.");
         return;
       }
 
-      const service: Service = {
-        id: modalMode === "edit" && editingServiceId ? editingServiceId : newId(),
-        nome,
-        valor,
-        valorNoturno,
-        gastosEstimados,
-        observacoes: form.observacoes.trim(),
-        prestadorIds: [...form.prestadorIds],
-        produtoIds: [...form.produtoIds],
-        automotivo: form.automotivo,
-        residencial: form.residencial,
-        ...(form.fotoDataUrl ? { fotoDataUrl: form.fotoDataUrl } : {}),
-      };
+      setSubmitting(true);
+      try {
+        const url = modalMode === "edit" 
+          ? `/api/servicos/${editingServiceId}`
+          : "/api/servicos";
+        
+        const method = modalMode === "edit" ? "PUT" : "POST";
+        
+        const response = await fetch(url, {
+          method,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            nome,
+            valor,
+            valorNoturno,
+            gastosEstimados,
+            observacoes: form.observacoes.trim(),
+            fotoDataUrl: form.fotoDataUrl || null,
+            automotivo: form.automotivo,
+            residencial: form.residencial,
+          }),
+        });
 
-      if (modalMode === "edit") {
-        updateService(service);
-      } else {
-        appendService(service);
+        if (!response.ok) {
+          throw new Error("Falha ao salvar serviço");
+        }
+
+        // Refresh the services list
+        const refreshResponse = await fetch("/api/servicos");
+        if (refreshResponse.ok) {
+          const updatedServices = await refreshResponse.json();
+          setServices(updatedServices);
+        }
+
+        closeModal();
+      } catch (err) {
+        console.error("Error submitting service:", err);
+        setFormError("Erro ao salvar serviço. Tente novamente.");
+      } finally {
+        setSubmitting(false);
       }
-      closeModal();
     },
     [form, closeModal, modalMode, editingServiceId]
+  );
+
+  const deleteService = useCallback(
+    async (id: string) => {
+      if (!confirm("Tem certeza que deseja deletar este serviço?")) return;
+      
+      try {
+        const response = await fetch(`/api/servicos/${id}`, {
+          method: "DELETE",
+        });
+
+        if (!response.ok) {
+          throw new Error("Falha ao deletar serviço");
+        }
+
+        // Refresh the services list
+        const refreshResponse = await fetch("/api/servicos");
+        if (refreshResponse.ok) {
+          const updatedServices = await refreshResponse.json();
+          setServices(updatedServices);
+        }
+      } catch (err) {
+        console.error("Error deleting service:", err);
+        alert("Erro ao deletar serviço");
+      }
+    },
+    []
   );
 
   useEffect(() => {
@@ -269,7 +334,7 @@ export function ServicosScreen() {
                   {s.observacoes}
                 </p>
               ) : null}
-              {s.prestadorIds.length > 0 ? (
+              {s.prestadorIds && s.prestadorIds.length > 0 ? (
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   {s.prestadorIds.map((pid) => {
                     const name = partnerById.get(pid)?.nome ?? "Parceiro removido";
@@ -288,7 +353,7 @@ export function ServicosScreen() {
                   Nenhum prestador vinculado
                 </p>
               )}
-              {s.produtoIds.length > 0 ? (
+              {s.produtoIds && s.produtoIds.length > 0 ? (
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   {s.produtoIds.map((pid) => {
                     const label =
@@ -346,6 +411,26 @@ export function ServicosScreen() {
                 />
               </svg>
             </button>
+            <button
+              type="button"
+              onClick={() => deleteService(s.id)}
+              className="shrink-0 self-center rounded-lg p-2 text-zinc-400 transition-colors hover:bg-red-100 hover:text-red-600 dark:hover:bg-red-950/30 dark:hover:text-red-400"
+              aria-label="Deletar serviço"
+            >
+              <svg
+                className="h-5 w-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                />
+              </svg>
+            </button>
           </li>
         ))}
       </ul>
@@ -365,7 +450,7 @@ export function ServicosScreen() {
         <div className="mx-auto w-full max-w-lg">
           <button
             type="button"
-            onClick={openModal}
+            onClick={() => openModal()}
             className="flex h-12 w-full items-center justify-center rounded-xl bg-sky-600 text-base font-semibold text-white shadow-sm transition-colors hover:bg-sky-700 active:bg-sky-800 dark:bg-sky-600 dark:hover:bg-sky-500"
           >
             Adicionar serviço
@@ -674,9 +759,10 @@ export function ServicosScreen() {
                 <div className="shrink-0 border-t border-zinc-200 p-4 dark:border-zinc-800">
                   <button
                     type="submit"
-                    className="flex h-12 w-full items-center justify-center rounded-xl bg-sky-600 text-base font-semibold text-white hover:bg-sky-700 active:bg-sky-800"
+                    disabled={submitting}
+                    className="flex h-12 w-full items-center justify-center rounded-xl bg-sky-600 text-base font-semibold text-white hover:bg-sky-700 active:bg-sky-800 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    Salvar serviço
+                    {submitting ? "Salvando..." : "Salvar serviço"}
                   </button>
                 </div>
               </form>

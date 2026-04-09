@@ -1,9 +1,9 @@
-import { sql } from "@/lib/db";
+import { query } from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
 
 export async function GET() {
   try {
-    const rows = await sql.query(
+    const rows = await query(
       `SELECT * FROM public."Service" ORDER BY "createdAt" DESC`
     );
     return NextResponse.json(rows);
@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
       residencial,
     } = body;
 
-    const rows = await sql.query(
+    const rows = await query(
       `INSERT INTO public."Service" (
         nome,
         valor,

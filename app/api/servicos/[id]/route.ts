@@ -1,4 +1,4 @@
-import { sql } from "@/lib/db";
+import { query } from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
 
 export async function GET(
@@ -7,7 +7,7 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const rows = await sql.query(
+    const rows = await query(
       `SELECT * FROM public."Service" WHERE id = $1`,
       [id]
     );
@@ -47,7 +47,7 @@ export async function PUT(
       residencial,
     } = body;
 
-    const rows = await sql.query(
+    const rows = await query(
       `UPDATE public."Service"
       SET 
         nome = $1,
@@ -97,7 +97,7 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
-    await sql.query(
+    await query(
       `DELETE FROM public."Service" WHERE id = $1`,
       [id]
     );

@@ -1,32 +1,39 @@
-import { neon } from "@neondatabase/serverless";
+import { Pool } from "pg";
 
-const sql = neon(process.env.POSTGRES_URL!);
+const pool = new Pool({
+  connectionString: process.env.POSTGRES_URL,
+});
+
+export async function query(text: string, params?: unknown[]) {
+  const result = await pool.query(text, params);
+  return result.rows;
+}
 
 export async function initializeDatabase() {
   try {
     // Create tables
-    await sql`
-      CREATE TABLE IF NOT EXISTS public."Partner" (
+    await query(
+      `CREATE TABLE IF NOT EXISTS public."Partner" (
         id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
         nome TEXT NOT NULL,
         telefone TEXT,
         "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         "updatedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-    `;
+      )`
+    );
 
-    await sql`
-      CREATE TABLE IF NOT EXISTS public."Produto" (
+    await query(
+      `CREATE TABLE IF NOT EXISTS public."Produto" (
         id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
         nome TEXT NOT NULL,
         valor DECIMAL(10, 2) NOT NULL,
         "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         "updatedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-    `;
+      )`
+    );
 
-    await sql`
-      CREATE TABLE IF NOT EXISTS public."Service" (
+    await query(
+      `CREATE TABLE IF NOT EXISTS public."Service" (
         id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
         "fotoDataUrl" TEXT,
         nome TEXT NOT NULL,
@@ -38,29 +45,29 @@ export async function initializeDatabase() {
         residencial BOOLEAN DEFAULT false,
         "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         "updatedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-    `;
+      )`
+    );
 
     // Join tables for relationships
-    await sql`
-      CREATE TABLE IF NOT EXISTS public."_PartnerToService" (
+    await query(
+      `CREATE TABLE IF NOT EXISTS public."_PartnerToService" (
         "A" TEXT NOT NULL,
         "B" TEXT NOT NULL,
         PRIMARY KEY ("A", "B"),
         FOREIGN KEY ("A") REFERENCES public."Partner"(id) ON DELETE CASCADE,
         FOREIGN KEY ("B") REFERENCES public."Service"(id) ON DELETE CASCADE
-      );
-    `;
+      )`
+    );
 
-    await sql`
-      CREATE TABLE IF NOT EXISTS public."_ProdutoToService" (
+    await query(
+      `CREATE TABLE IF NOT EXISTS public."_ProdutoToService" (
         "A" TEXT NOT NULL,
         "B" TEXT NOT NULL,
         PRIMARY KEY ("A", "B"),
         FOREIGN KEY ("A") REFERENCES public."Produto"(id) ON DELETE CASCADE,
         FOREIGN KEY ("B") REFERENCES public."Service"(id) ON DELETE CASCADE
-      );
-    `;
+      )`
+    );
 
     console.log("Database initialized successfully!");
   } catch (error) {
@@ -68,5 +75,3 @@ export async function initializeDatabase() {
     throw error;
   }
 }
-
-export { sql };
