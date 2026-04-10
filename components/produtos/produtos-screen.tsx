@@ -1,13 +1,9 @@
 "use client";
 
-import { formatBRL, formatNumberBrInput, parseMoney } from "@/lib/money";
+import { formatBRL } from "@/lib/money";
 import type { Produto } from "@/lib/produto";
 import {
-  appendProduto,
-  updateProduto,
   parseProdutosJson,
-  produtosStorageSnapshot,
-  subscribeProdutos,
 } from "@/lib/produto";
 import {
   useCallback,
@@ -15,7 +11,6 @@ import {
   useId,
   useMemo,
   useState,
-  useSyncExternalStore,
 } from "react";
 
 function newId(): string {
@@ -40,45 +35,80 @@ const emptyForm = (): FormState => ({
 
 type ModalMode = "create" | "edit";
 
+// Helper to convert API response to Produto format
+function normalizeProdutos(data: any[]): Produto[] {
+  return data.map((p: any) => ({
+    ...p,
+    valorCompra: typeof p.valor === "string" ? parseFloat(p.valor) : (p.valor || p.valorCompra),
+  }));
+}
+
 export function ProdutosScreen() {
-  const raw = useSyncExternalStore(
-    subscribeProdutos,
-    produtosStorageSnapshot,
-    () => "[]"
-  );
-  const produtos = useMemo(() => parseProdutosJson(raw), [raw]);
+  const [produtos, setProdutos] = useState<Produto[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Fetch produtos from API
+  useEffect(() => {
+    const fetchProdutos = async () => {
+      try {
+        setLoading(true);
+        const response = await fetch("/api/produtos");
+        if (!response.ok) throw new Error("Falha ao carregar produtos");
+        const data = await response.json();
+        setProdutos(normalizeProdutos(data));
+        setError(null);
+      } catch (err) {
+        console.error("Error fetching produtos:", err);
+        setError("Erro ao carregar produtos");
+        // Fallback to localStorage
+        const localData = localStorage.getItem("finances.produtos.v1");
+        if (localData) {
+          setProdutos(parseProdutosJson(localData));
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchProdutos();
+  }, []);
 
   const [modalOpen, setModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<ModalMode>("create");
   const [editingProdutoId, setEditingProdutoId] = useState<string | null>(null);
-  const [form, setForm] = useState<FormState>(emptyForm);
+  const [form, setForm] = useState<FormState>(emptyForm());
   const [formError, setFormError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
   const titleId = useId();
   const descId = useId();
 
   const openModal = useCallback((produtoToEdit?: Produto) => {
+    // Always reset to create mode first
+    setModalMode("create");
+    setEditingProdutoId(null);
+    setFormError(null);
+    
     if (produtoToEdit) {
       setModalMode("edit");
       setEditingProdutoId(produtoToEdit.id);
       setForm({
         fotoDataUrl: produtoToEdit.fotoDataUrl ?? "",
         nome: produtoToEdit.nome,
-        valorCompra: produtoToEdit.valorCompra > 0 ? formatNumberBrInput(produtoToEdit.valorCompra) : "",
+        valorCompra: produtoToEdit.valorCompra.toString(),
         residencial: produtoToEdit.residencial,
         automotivo: produtoToEdit.automotivo,
       });
     } else {
-      setModalMode("create");
-      setEditingProdutoId(null);
       setForm(emptyForm());
     }
-    setFormError(null);
     setModalOpen(true);
   }, []);
 
   const closeModal = useCallback(() => {
     setModalOpen(false);
     setFormError(null);
+    setEditingProdutoId(null);
+    setModalMode("create");
   }, []);
 
   const onPickPhoto = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -101,45 +131,86 @@ export function ProdutosScreen() {
   }, []);
 
   const submit = useCallback(
-    (e: React.FormEvent) => {
+    async (e: React.FormEvent) => {
       e.preventDefault();
       const nome = form.nome.trim();
       if (!nome) {
         setFormError("Informe o nome do produto.");
         return;
       }
-      const compraRaw = form.valorCompra.trim();
-      let valorCompra = 0;
-      if (compraRaw) {
-        const vc = parseMoney(form.valorCompra);
-        if (vc === undefined) {
-          setFormError("Informe um valor de compra válido.");
-          return;
-        }
-        valorCompra = vc;
-      }
+      const valorCompra = parseFloat(form.valorCompra) || 0;
       if (valorCompra < 0) {
         setFormError("O valor de compra não pode ser negativo.");
         return;
       }
 
-      const produto: Produto = {
-        id: modalMode === "edit" && editingProdutoId ? editingProdutoId : newId(),
-        nome,
-        valorCompra,
-        residencial: form.residencial,
-        automotivo: form.automotivo,
-        ...(form.fotoDataUrl ? { fotoDataUrl: form.fotoDataUrl } : {}),
-      };
+      setSubmitting(true);
+      try {
+        const url = modalMode === "edit" 
+          ? `/api/produtos/${editingProdutoId}`
+          : "/api/produtos";
+        
+        const method = modalMode === "edit" ? "PUT" : "POST";
+        
+        const response = await fetch(url, {
+          method,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            nome,
+            valorCompra,
+            fotoDataUrl: form.fotoDataUrl || null,
+            automotivo: form.automotivo,
+            residencial: form.residencial,
+          }),
+        });
 
-      if (modalMode === "edit") {
-        updateProduto(produto);
-      } else {
-        appendProduto(produto);
+        if (!response.ok) {
+          throw new Error("Falha ao salvar produto");
+        }
+
+        // Refresh the produtos list
+        const refreshResponse = await fetch("/api/produtos");
+        if (refreshResponse.ok) {
+          const updatedProdutos = await refreshResponse.json();
+          setProdutos(normalizeProdutos(updatedProdutos));
+        }
+
+        closeModal();
+      } catch (err) {
+        console.error("Error submitting produto:", err);
+        setFormError("Erro ao salvar produto. Tente novamente.");
+      } finally {
+        setSubmitting(false);
       }
-      closeModal();
     },
     [form, closeModal, modalMode, editingProdutoId]
+  );
+
+  const deleteProduto = useCallback(
+    async (id: string) => {
+      if (!confirm("Tem certeza que deseja deletar este produto?")) return;
+      
+      try {
+        const response = await fetch(`/api/produtos/${id}`, {
+          method: "DELETE",
+        });
+
+        if (!response.ok) {
+          throw new Error("Falha ao deletar produto");
+        }
+
+        // Refresh the produtos list
+        const refreshResponse = await fetch("/api/produtos");
+        if (refreshResponse.ok) {
+          const updatedProdutos = await refreshResponse.json();
+          setProdutos(normalizeProdutos(updatedProdutos));
+        }
+      } catch (err) {
+        console.error("Error deleting produto:", err);
+        alert("Erro ao deletar produto");
+      }
+    },
+    []
   );
 
   useEffect(() => {
@@ -249,7 +320,7 @@ export function ProdutosScreen() {
         <div className="mx-auto w-full max-w-lg">
           <button
             type="button"
-            onClick={openModal}
+            onClick={() => openModal()}
             className="flex h-12 w-full items-center justify-center rounded-xl bg-sky-600 text-base font-semibold text-white shadow-sm transition-colors hover:bg-sky-700 active:bg-sky-800 dark:bg-sky-600 dark:hover:bg-sky-500"
           >
             Adicionar produto

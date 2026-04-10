@@ -64,6 +64,16 @@ function toggleId(ids: string[], id: string): string[] {
   return [...ids, id];
 }
 
+// Helper to convert API response to Service format
+function normalizeServices(data: any[]): Service[] {
+  return data.map((s: any) => ({
+    ...s,
+    valor: typeof s.valor === "string" ? parseFloat(s.valor) : s.valor,
+    valorNoturno: typeof s.valorNoturno === "string" ? parseFloat(s.valorNoturno) : s.valorNoturno,
+    gastosEstimados: typeof s.gastosEstimados === "string" ? parseFloat(s.gastosEstimados) : s.gastosEstimados,
+  }));
+}
+
 export function ServicosScreen() {
   const partnersRaw = useSyncExternalStore(
     subscribePartners,
@@ -91,7 +101,7 @@ export function ServicosScreen() {
         const response = await fetch("/api/servicos");
         if (!response.ok) throw new Error("Falha ao carregar serviços");
         const data = await response.json();
-        setServices(data);
+        setServices(normalizeServices(data));
         setError(null);
       } catch (err) {
         console.error("Error fetching services:", err);
@@ -123,7 +133,7 @@ export function ServicosScreen() {
   const [modalOpen, setModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<ModalMode>("create");
   const [editingServiceId, setEditingServiceId] = useState<string | null>(null);
-  const [form, setForm] = useState<FormState>(emptyForm);
+  const [form, setForm] = useState<FormState>(emptyForm());
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -131,6 +141,11 @@ export function ServicosScreen() {
   const descId = useId();
 
   const openModal = useCallback((serviceToEdit?: Service) => {
+    // Always reset to create mode first
+    setModalMode("create");
+    setEditingServiceId(null);
+    setFormError(null);
+    
     if (serviceToEdit) {
       setModalMode("edit");
       setEditingServiceId(serviceToEdit.id);
@@ -147,17 +162,16 @@ export function ServicosScreen() {
         residencial: serviceToEdit.residencial,
       });
     } else {
-      setModalMode("create");
-      setEditingServiceId(null);
       setForm(emptyForm());
     }
-    setFormError(null);
     setModalOpen(true);
   }, []);
 
   const closeModal = useCallback(() => {
     setModalOpen(false);
     setFormError(null);
+    setEditingServiceId(null);
+    setModalMode("create");
   }, []);
 
   const onPickPhoto = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {

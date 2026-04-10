@@ -52,23 +52,49 @@ const emptyForm = (): FormState => ({
 type ModalMode = "create" | "edit";
 
 export function ParceirosScreen() {
-  const raw = useSyncExternalStore(
-    subscribePartners,
-    partnersStorageSnapshot,
-    () => "[]"
-  );
-  const partners = useMemo(() => parsePartnersJson(raw), [raw]);
+  const [partners, setPartners] = useState<Partner[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Fetch partners from API
+  useEffect(() => {
+    const fetchPartners = async () => {
+      try {
+        setLoading(true);
+        const response = await fetch("/api/parceiros");
+        if (!response.ok) throw new Error("Falha ao carregar parceiros");
+        const data = await response.json();
+        setPartners(data);
+        setError(null);
+      } catch (err) {
+        setError("Erro ao carregar parceiros");
+        // Fallback to localStorage
+        const localData = localStorage.getItem("finances.parceiros.v1");
+        if (localData) {
+          setPartners(parsePartnersJson(localData));
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchPartners();
+  }, []);
 
   const [modalOpen, setModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<ModalMode>("create");
   const [editingPartnerId, setEditingPartnerId] = useState<string | null>(null);
-  const [form, setForm] = useState<FormState>(emptyForm);
+  const [form, setForm] = useState<FormState>(emptyForm());
   const [formError, setFormError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const titleId = useId();
   const descId = useId();
 
   const openModal = useCallback((partnerToEdit?: Partner) => {
+    // Always reset to create mode first
+    setModalMode("create");
+    setEditingPartnerId(null);
+    setFormError(null);
+    console.log('openModal called with partnerToEdit:', partnerToEdit);
     if (partnerToEdit) {
       setModalMode("edit");
       setEditingPartnerId(partnerToEdit.id);
@@ -82,18 +108,19 @@ export function ParceirosScreen() {
         residencial: partnerToEdit.residencial,
       });
     } else {
-      setModalMode("create");
-      setEditingPartnerId(null);
       setForm(emptyForm());
     }
-    setFormError(null);
     setModalOpen(true);
   }, []);
 
+  // Reset state when modal closes
   const closeModal = useCallback(() => {
     setModalOpen(false);
     setFormError(null);
+    setEditingPartnerId(null);
+    setModalMode("create");
   }, []);
+
 
   const onPickPhoto = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -114,8 +141,9 @@ export function ParceirosScreen() {
     e.target.value = "";
   }, []);
 
+  const [submitting, setSubmitting] = useState(false);
   const submit = useCallback(
-    (e: React.FormEvent) => {
+    async (e: React.FormEvent) => {
       e.preventDefault();
       const nome = form.nome.trim();
       const endereco = form.endereco.trim();
@@ -132,23 +160,40 @@ export function ParceirosScreen() {
         setFormError("Preencha latitude e longitude, ou deixe os dois vazios.");
         return;
       }
-
-      const partner: Partner = {
-        id: modalMode === "edit" && editingPartnerId ? editingPartnerId : newId(),
-        nome,
-        endereco,
-        automotivo: form.automotivo,
-        residencial: form.residencial,
-        ...(lat !== undefined && lng !== undefined ? { latitude: lat, longitude: lng } : {}),
-        ...(form.fotoDataUrl ? { fotoDataUrl: form.fotoDataUrl } : {}),
-      };
-
-      if (modalMode === "edit") {
-        updatePartner(partner);
-      } else {
-        appendPartner(partner);
+      setSubmitting(true);
+      try {
+        const url = modalMode === "edit"
+          ? `/api/parceiros/${editingPartnerId}`
+          : "/api/parceiros";
+        const method = modalMode === "edit" ? "PUT" : "POST";
+        const response = await fetch(url, {
+          method,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            nome,
+            endereco,
+            automotivo: form.automotivo,
+            residencial: form.residencial,
+            latitude: lat,
+            longitude: lng,
+            fotoDataUrl: form.fotoDataUrl || null,
+          }),
+        });
+        if (!response.ok) {
+          throw new Error("Falha ao salvar parceiro");
+        }
+        // Refresh the partners list
+        const refreshResponse = await fetch("/api/parceiros");
+        if (refreshResponse.ok) {
+          const updatedPartners = await refreshResponse.json();
+          setPartners(updatedPartners);
+        }
+        closeModal();
+      } catch (err) {
+        setFormError("Erro ao salvar parceiro. Tente novamente.");
+      } finally {
+        setSubmitting(false);
       }
-      closeModal();
     },
     [form, closeModal, modalMode, editingPartnerId]
   );
@@ -162,7 +207,48 @@ export function ParceirosScreen() {
     return () => window.removeEventListener("keydown", onKey);
   }, [modalOpen, closeModal]);
 
+  const deletePartner = useCallback(
+    async (id: string) => {
+      if (!confirm("Tem certeza que deseja deletar este parceiro?")) return;
+      try {
+        const response = await fetch(`/api/parceiros/${id}`, {
+          method: "DELETE",
+        });
+        if (!response.ok) {
+          throw new Error("Falha ao deletar parceiro");
+        }
+        // Refresh the partners list
+        const refreshResponse = await fetch("/api/parceiros");
+        if (refreshResponse.ok) {
+          const updatedPartners = await refreshResponse.json();
+          setPartners(updatedPartners);
+        }
+      } catch (err) {
+        alert("Erro ao deletar parceiro");
+      }
+    },
+    []
+  );
+
   const listContent = useMemo(() => {
+    if (loading) {
+      return (
+        <div className="rounded-2xl border border-dashed border-zinc-300 bg-zinc-50/80 px-4 py-10 text-center dark:border-zinc-700 dark:bg-zinc-900/40">
+          <p className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+            Carregando parceiros...
+          </p>
+        </div>
+      );
+    }
+    if (error) {
+      return (
+        <div className="rounded-2xl border border-dashed border-yellow-300 bg-yellow-50/80 px-4 py-4 dark:border-yellow-700 dark:bg-yellow-900/40">
+          <p className="text-sm font-medium text-yellow-700 dark:text-yellow-300">
+            ⚠️ {error}
+          </p>
+        </div>
+      );
+    }
     if (partners.length === 0) {
       return (
         <div className="rounded-2xl border border-dashed border-zinc-300 bg-zinc-50/80 px-4 py-10 text-center dark:border-zinc-700 dark:bg-zinc-900/40">
@@ -207,7 +293,7 @@ export function ParceirosScreen() {
               ) : null}
               {p.latitude !== undefined && p.longitude !== undefined ? (
                 <p className="mt-1 font-mono text-xs text-zinc-500 dark:text-zinc-500">
-                  {p.latitude.toFixed(5)}, {p.longitude.toFixed(5)}
+                  {Number(p.latitude).toFixed(5)}, {Number(p.longitude).toFixed(5)}
                 </p>
               ) : null}
               <div className="mt-2 flex flex-wrap gap-1.5">
@@ -248,6 +334,26 @@ export function ParceirosScreen() {
                 />
               </svg>
             </button>
+            <button
+              type="button"
+              onClick={() => deletePartner(p.id)}
+              className="shrink-0 self-center rounded-lg p-2 text-zinc-400 transition-colors hover:bg-red-100 hover:text-red-600 dark:hover:bg-red-950 dark:hover:text-red-400"
+              aria-label="Deletar parceiro"
+            >
+              <svg
+                className="h-5 w-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                />
+              </svg>
+            </button>
           </li>
         ))}
       </ul>
@@ -266,7 +372,7 @@ export function ParceirosScreen() {
         <div className="mx-auto w-full max-w-lg">
           <button
             type="button"
-            onClick={openModal}
+            onClick={() => openModal()}
             className="flex h-12 w-full items-center justify-center rounded-xl bg-sky-600 text-base font-semibold text-white shadow-sm transition-colors hover:bg-sky-700 active:bg-sky-800 dark:bg-sky-600 dark:hover:bg-sky-500 dark:active:bg-sky-600"
           >
             Adicionar parceiro

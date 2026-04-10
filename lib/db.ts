@@ -9,6 +9,21 @@ export async function query(text: string, params?: unknown[]) {
   return result.rows;
 }
 
+export function sanitizeData(data: unknown): unknown {
+  if (data === null || data === undefined) return data;
+  if (data instanceof Date) return data.toISOString();
+  if (Array.isArray(data)) return data.map(sanitizeData);
+  if (typeof data === "object") {
+    return Object.fromEntries(
+      Object.entries(data).map(([k, v]) => [
+        k,
+        v instanceof Date ? v.toISOString() : sanitizeData(v),
+      ])
+    );
+  }
+  return data;
+}
+
 export async function initializeDatabase() {
   try {
     // Create tables
@@ -16,10 +31,28 @@ export async function initializeDatabase() {
       `CREATE TABLE IF NOT EXISTS public."Partner" (
         id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
         nome TEXT NOT NULL,
-        telefone TEXT,
+        endereco TEXT,
+        latitude DECIMAL(10, 8),
+        longitude DECIMAL(11, 8),
+        automotivo BOOLEAN DEFAULT false,
+        residencial BOOLEAN DEFAULT false,
+        "fotoDataUrl" TEXT,
         "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         "updatedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )`
+    );
+
+    // Add missing columns if they don't exist
+    await query(
+      `ALTER TABLE public."Partner" 
+       ADD COLUMN IF NOT EXISTS endereco TEXT,
+       ADD COLUMN IF NOT EXISTS latitude DECIMAL(10, 8),
+       ADD COLUMN IF NOT EXISTS longitude DECIMAL(11, 8),
+       ADD COLUMN IF NOT EXISTS automotivo BOOLEAN DEFAULT false,
+       ADD COLUMN IF NOT EXISTS residencial BOOLEAN DEFAULT false,
+       ADD COLUMN IF NOT EXISTS "fotoDataUrl" TEXT,
+       ADD COLUMN IF NOT EXISTS "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+       ADD COLUMN IF NOT EXISTS "updatedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP`
     );
 
     await query(
@@ -27,9 +60,22 @@ export async function initializeDatabase() {
         id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
         nome TEXT NOT NULL,
         valor DECIMAL(10, 2) NOT NULL,
+        automotivo BOOLEAN DEFAULT false,
+        residencial BOOLEAN DEFAULT false,
+        "fotoDataUrl" TEXT,
         "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         "updatedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )`
+    );
+
+    // Add missing columns to Produto if they don't exist
+    await query(
+      `ALTER TABLE public."Produto" 
+       ADD COLUMN IF NOT EXISTS "fotoDataUrl" TEXT,
+       ADD COLUMN IF NOT EXISTS automotivo BOOLEAN DEFAULT false,
+       ADD COLUMN IF NOT EXISTS residencial BOOLEAN DEFAULT false,
+       ADD COLUMN IF NOT EXISTS "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+       ADD COLUMN IF NOT EXISTS "updatedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP`
     );
 
     await query(
@@ -46,6 +92,19 @@ export async function initializeDatabase() {
         "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         "updatedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )`
+    );
+
+    // Add missing columns to Service if they don't exist
+    await query(
+      `ALTER TABLE public."Service" 
+       ADD COLUMN IF NOT EXISTS "fotoDataUrl" TEXT,
+       ADD COLUMN IF NOT EXISTS "valorNoturno" DECIMAL(10, 2),
+       ADD COLUMN IF NOT EXISTS "gastosEstimados" DECIMAL(10, 2),
+       ADD COLUMN IF NOT EXISTS observacoes TEXT DEFAULT '',
+       ADD COLUMN IF NOT EXISTS automotivo BOOLEAN DEFAULT false,
+       ADD COLUMN IF NOT EXISTS residencial BOOLEAN DEFAULT false,
+       ADD COLUMN IF NOT EXISTS "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+       ADD COLUMN IF NOT EXISTS "updatedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP`
     );
 
     // Join tables for relationships

@@ -8,22 +8,22 @@ export async function GET(
   try {
     const { id } = await params;
     const rows = await query(
-      `SELECT * FROM public."Service" WHERE id = $1`,
+      `SELECT * FROM public."Produto" WHERE id = $1`,
       [id]
     );
 
     if (rows.length === 0) {
       return NextResponse.json(
-        { error: "Service not found" },
+        { error: "Produto not found" },
         { status: 404 }
       );
     }
 
     return NextResponse.json(sanitizeData(rows[0]));
   } catch (error) {
-    console.error("Error fetching service:", error);
+    console.error("Error fetching produto:", error);
     return NextResponse.json(
-      { error: "Failed to fetch service" },
+      { error: "Failed to fetch produto" },
       { status: 500 }
     );
   }
@@ -38,35 +38,26 @@ export async function PUT(
     const body = await req.json();
     const {
       nome,
-      valor,
-      valorNoturno,
-      gastosEstimados,
-      observacoes,
+      valorCompra,
       fotoDataUrl,
       automotivo,
       residencial,
     } = body;
 
     const rows = await query(
-      `UPDATE public."Service"
+      `UPDATE public."Produto"
       SET 
         nome = $1,
         valor = $2,
-        "valorNoturno" = $3,
-        "gastosEstimados" = $4,
-        observacoes = $5,
-        "fotoDataUrl" = $6,
-        automotivo = $7,
-        residencial = $8,
+        "fotoDataUrl" = $3,
+        automotivo = $4,
+        residencial = $5,
         "updatedAt" = CURRENT_TIMESTAMP
-      WHERE id = $9
+      WHERE id = $6
       RETURNING *`,
       [
         nome,
-        parseFloat(valor),
-        parseFloat(valorNoturno),
-        parseFloat(gastosEstimados),
-        observacoes || "",
+        parseFloat(valorCompra) || 0,
         fotoDataUrl || null,
         automotivo || false,
         residencial || false,
@@ -76,16 +67,16 @@ export async function PUT(
 
     if (rows.length === 0) {
       return NextResponse.json(
-        { error: "Service not found" },
+        { error: "Produto not found" },
         { status: 404 }
       );
     }
 
     return NextResponse.json(sanitizeData(rows[0]));
   } catch (error) {
-    console.error("Error updating service:", error);
+    console.error("Error updating produto:", error);
     return NextResponse.json(
-      { error: "Failed to update service" },
+      { error: "Failed to update produto" },
       { status: 500 }
     );
   }
@@ -98,15 +89,15 @@ export async function DELETE(
   try {
     const { id } = await params;
     await query(
-      `DELETE FROM public."Service" WHERE id = $1`,
+      `DELETE FROM public."Produto" WHERE id = $1`,
       [id]
     );
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("Error deleting service:", error);
+    console.error("Error deleting produto:", error);
     return NextResponse.json(
-      { error: "Failed to delete service" },
+      { error: "Failed to delete produto" },
       { status: 500 }
     );
   }

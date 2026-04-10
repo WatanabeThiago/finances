@@ -4,13 +4,13 @@ import { NextRequest, NextResponse } from "next/server";
 export async function GET() {
   try {
     const rows = await query(
-      `SELECT * FROM public."Service" ORDER BY "createdAt" DESC`
+      `SELECT * FROM public."Produto" ORDER BY "createdAt" DESC`
     );
     return NextResponse.json(sanitizeData(rows));
   } catch (error) {
-    console.error("Error fetching services:", error);
+    console.error("Error fetching produtos:", error);
     return NextResponse.json(
-      { error: "Failed to fetch services" },
+      { error: "Failed to fetch produtos" },
       { status: 500 }
     );
   }
@@ -21,35 +21,26 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const {
       nome,
-      valor,
-      valorNoturno,
-      gastosEstimados,
-      observacoes,
+      valorCompra,
       fotoDataUrl,
       automotivo,
       residencial,
     } = body;
 
     const rows = await query(
-      `INSERT INTO public."Service" (
+      `INSERT INTO public."Produto" (
         nome,
         valor,
-        "valorNoturno",
-        "gastosEstimados",
-        observacoes,
         "fotoDataUrl",
         automotivo,
         residencial
       ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8
+        $1, $2, $3, $4, $5
       )
       RETURNING *`,
       [
         nome,
-        parseFloat(valor),
-        parseFloat(valorNoturno),
-        parseFloat(gastosEstimados),
-        observacoes || "",
+        parseFloat(valorCompra) || 0,
         fotoDataUrl || null,
         automotivo || false,
         residencial || false,
@@ -58,9 +49,9 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json(rows[0], { status: 201 });
   } catch (error) {
-    console.error("Error creating service:", error);
+    console.error("Error creating produto:", error);
     return NextResponse.json(
-      { error: "Failed to create service" },
+      { error: "Failed to create produto" },
       { status: 500 }
     );
   }
