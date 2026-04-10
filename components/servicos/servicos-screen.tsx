@@ -248,7 +248,7 @@ export function ServicosScreen() {
         const refreshResponse = await fetch("/api/servicos");
         if (refreshResponse.ok) {
           const updatedServices = await refreshResponse.json();
-          setServices(updatedServices);
+          setServices(normalizeServices(updatedServices));
         }
 
         closeModal();
@@ -279,7 +279,7 @@ export function ServicosScreen() {
         const refreshResponse = await fetch("/api/servicos");
         if (refreshResponse.ok) {
           const updatedServices = await refreshResponse.json();
-          setServices(updatedServices);
+          setServices(normalizeServices(updatedServices));
         }
       } catch (err) {
         console.error("Error deleting service:", err);

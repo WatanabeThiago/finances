@@ -51,6 +51,15 @@ const emptyForm = (): FormState => ({
 
 type ModalMode = "create" | "edit";
 
+// Helper to convert API response to Partner format
+function normalizePartners(data: any[]): Partner[] {
+  return data.map((p: any) => ({
+    ...p,
+    latitude: typeof p.latitude === "string" ? parseFloat(p.latitude) : p.latitude,
+    longitude: typeof p.longitude === "string" ? parseFloat(p.longitude) : p.longitude,
+  }));
+}
+
 export function ParceirosScreen() {
   const [partners, setPartners] = useState<Partner[]>([]);
   const [loading, setLoading] = useState(true);
@@ -64,7 +73,7 @@ export function ParceirosScreen() {
         const response = await fetch("/api/parceiros");
         if (!response.ok) throw new Error("Falha ao carregar parceiros");
         const data = await response.json();
-        setPartners(data);
+        setPartners(normalizePartners(data));
         setError(null);
       } catch (err) {
         setError("Erro ao carregar parceiros");
@@ -186,7 +195,7 @@ export function ParceirosScreen() {
         const refreshResponse = await fetch("/api/parceiros");
         if (refreshResponse.ok) {
           const updatedPartners = await refreshResponse.json();
-          setPartners(updatedPartners);
+          setPartners(normalizePartners(updatedPartners));
         }
         closeModal();
       } catch (err) {
@@ -221,7 +230,7 @@ export function ParceirosScreen() {
         const refreshResponse = await fetch("/api/parceiros");
         if (refreshResponse.ok) {
           const updatedPartners = await refreshResponse.json();
-          setPartners(updatedPartners);
+          setPartners(normalizePartners(updatedPartners));
         }
       } catch (err) {
         alert("Erro ao deletar parceiro");
@@ -293,7 +302,7 @@ export function ParceirosScreen() {
               ) : null}
               {p.latitude !== undefined && p.longitude !== undefined ? (
                 <p className="mt-1 font-mono text-xs text-zinc-500 dark:text-zinc-500">
-                  {Number(p.latitude).toFixed(5)}, {Number(p.longitude).toFixed(5)}
+                  {p.latitude.toFixed(5)}, {p.longitude.toFixed(5)}
                 </p>
               ) : null}
               <div className="mt-2 flex flex-wrap gap-1.5">
