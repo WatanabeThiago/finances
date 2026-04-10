@@ -12,9 +12,13 @@ export type VendaLg = {
   clienteNome: string;
   clienteTelefone: string;
   clienteDoc?: string;
+  endereco?: string;
+  latitude?: number;
+  longitude?: number;
   prestadorId?: string;
   comissao?: number;
   comissaoPaga?: boolean;
+  dataVenda?: string;
   linhas: VendaLgLine[];
 };
 

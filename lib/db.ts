@@ -128,6 +128,43 @@ export async function initializeDatabase() {
       )`
     );
 
+    await query(
+      `CREATE TABLE IF NOT EXISTS public."VendaLg" (
+        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        "clienteNome" TEXT NOT NULL,
+        "clienteTelefone" TEXT DEFAULT '',
+        "clienteDoc" TEXT,
+        "prestadorId" TEXT,
+        comissao DECIMAL(10, 2),
+        "comissaoPaga" BOOLEAN DEFAULT false,
+        "dataVenda" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        "updatedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )`
+    );
+
+    // Add missing columns to VendaLg if they don't exist
+    await query(
+      `ALTER TABLE public."VendaLg"
+       ADD COLUMN IF NOT EXISTS "dataVenda" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+       ADD COLUMN IF NOT EXISTS endereco TEXT,
+       ADD COLUMN IF NOT EXISTS latitude DECIMAL(10, 8),
+       ADD COLUMN IF NOT EXISTS longitude DECIMAL(11, 8)`
+    );
+
+    await query(
+      `CREATE TABLE IF NOT EXISTS public."VendaLgLine" (
+        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        "vendaLgId" TEXT NOT NULL,
+        "servicoId" TEXT NOT NULL,
+        "precoOriginal" DECIMAL(10, 2) NOT NULL,
+        preco DECIMAL(10, 2) NOT NULL,
+        quantidade INTEGER NOT NULL,
+        FOREIGN KEY ("vendaLgId") REFERENCES public."VendaLg"(id) ON DELETE CASCADE,
+        FOREIGN KEY ("servicoId") REFERENCES public."Service"(id) ON DELETE SET NULL
+      )`
+    );
+
     console.log("Database initialized successfully!");
   } catch (error) {
     console.error("Error initializing database:", error);

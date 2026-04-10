@@ -6,37 +6,58 @@ import {
   parseMoney,
 } from "@/lib/money";
 import type { Partner } from "@/lib/partner";
-import {
-  parsePartnersJson,
-  partnersStorageSnapshot,
-  subscribePartners,
-} from "@/lib/partner";
+import { parsePartnersJson } from "@/lib/partner";
 import type { Service } from "@/lib/service";
 import {
   parseServicesJson,
-  servicesStorageSnapshot,
-  subscribeServices,
 } from "@/lib/service";
 import type { VendaLg, VendaLgLine } from "@/lib/venda-lg";
-import {
-  appendVendaLg,
-  updateVendaLg,
-  parseVendasLgJson,
-  totalVendaLg,
-  vendasLgStorageSnapshot,
-  subscribeVendasLg,
-} from "@/lib/venda-lg";
+import { totalVendaLg } from "@/lib/venda-lg";
 import {
   useCallback,
   useEffect,
   useId,
   useMemo,
   useState,
-  useSyncExternalStore,
 } from "react";
 
 function newId(): string {
   return crypto.randomUUID();
+}
+
+// Geocodification using OpenStreetMap Nominatim
+async function geocodeAddress(
+  address: string
+): Promise<{ latitude: string; longitude: string } | null> {
+  if (!address.trim()) return null;
+
+  try {
+    const response = await fetch(
+      `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(address)}&format=json&limit=1`,
+      {
+        headers: {
+          "Accept-Language": "pt-BR",
+        },
+      }
+    );
+
+    if (!response.ok) return null;
+
+    const data = (await response.json()) as Array<{
+      lat: string;
+      lon: string;
+    }>;
+
+    if (data.length === 0) return null;
+
+    return {
+      latitude: data[0].lat,
+      longitude: data[0].lon,
+    };
+  } catch (error) {
+    console.error("Geocoding error:", error);
+    return null;
+  }
 }
 
 type LineDraft = {
@@ -55,14 +76,39 @@ function parseQty(input: string): number | undefined {
   return n;
 }
 
+// Helper to convert API response to Service format
+function normalizeServices(data: any[]): Service[] {
+  return data.map((s: any) => ({
+    ...s,
+    valor: typeof s.valor === "string" ? parseFloat(s.valor) : s.valor,
+    valorNoturno: typeof s.valorNoturno === "string" ? parseFloat(s.valorNoturno) : s.valorNoturno,
+    gastosEstimados: typeof s.gastosEstimados === "string" ? parseFloat(s.gastosEstimados) : s.gastosEstimados,
+    prestadorIds: Array.isArray(s.prestadorIds) ? s.prestadorIds : [],
+    produtoIds: Array.isArray(s.produtoIds) ? s.produtoIds : [],
+  }));
+}
+
 function emptyModalState() {
+  // Get current date/time in ISO format and convert to local datetime-local format
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  const hours = String(now.getHours()).padStart(2, "0");
+  const minutes = String(now.getMinutes()).padStart(2, "0");
+  const dataVendaDefault = `${year}-${month}-${day}T${hours}:${minutes}`;
+
   return {
     clienteNome: "",
     clienteTelefone: "",
     clienteDoc: "",
+    endereco: "",
+    latitude: "",
+    longitude: "",
     prestadorId: "",
     comissao: "",
     comissaoPaga: false,
+    dataVenda: dataVendaDefault,
     servicoQuery: "",
     linhas: [] as LineDraft[],
   };
@@ -71,26 +117,96 @@ function emptyModalState() {
 type ModalMode = "create" | "edit";
 
 export function VendasLgScreen() {
-  const parcerosRaw = useSyncExternalStore(
-    subscribePartners,
-    partnersStorageSnapshot,
-    () => "[]"
-  );
-  const parceiros = useMemo(() => parsePartnersJson(parcerosRaw), [parcerosRaw]);
+  // Fetch parceiros from API
+  const [parceiros, setParceiros] = useState<Partner[]>([]);
 
-  const vendasRaw = useSyncExternalStore(
-    subscribeVendasLg,
-    vendasLgStorageSnapshot,
-    () => "[]"
-  );
-  const vendas = useMemo(() => parseVendasLgJson(vendasRaw), [vendasRaw]);
+  useEffect(() => {
+    const fetchParceiros = async () => {
+      try {
+        const response = await fetch("/api/parceiros");
+        if (!response.ok) throw new Error("Falha ao carregar parceiros");
+        const data = await response.json();
+        const normalizedParceiros = data.map((p: any) => ({
+          ...p,
+          latitude: typeof p.latitude === "string" ? parseFloat(p.latitude) : p.latitude,
+          longitude: typeof p.longitude === "string" ? parseFloat(p.longitude) : p.longitude,
+        }));
+        setParceiros(normalizedParceiros);
+      } catch (err) {
+        console.error("Error fetching parceiros:", err);
+        // Fallback to localStorage
+        try {
+          const localData = localStorage.getItem("finances.parceiros.v1");
+          if (localData) {
+            setParceiros(parsePartnersJson(localData));
+          }
+        } catch {
+          setParceiros([]);
+        }
+      }
+    };
+    fetchParceiros();
+  }, []);
 
-  const servicosRaw = useSyncExternalStore(
-    subscribeServices,
-    servicesStorageSnapshot,
-    () => "[]"
-  );
-  const servicos = useMemo(() => parseServicesJson(servicosRaw), [servicosRaw]);
+  // Fetch vendas from API
+  const [vendas, setVendas] = useState<VendaLg[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchVendas = async () => {
+      try {
+        setLoading(true);
+        const response = await fetch("/api/vendas-lg");
+        if (!response.ok) throw new Error("Falha ao carregar vendas");
+        const data = await response.json();
+        // Normalize numeric values from API
+        const normalizedVendas = data.map((v: any) => ({
+          ...v,
+          comissao: typeof v.comissao === "string" ? parseFloat(v.comissao) : v.comissao,
+          linhas: Array.isArray(v.linhas) ? v.linhas.map((l: any) => ({
+            ...l,
+            precoOriginal: typeof l.precoOriginal === "string" ? parseFloat(l.precoOriginal) : l.precoOriginal,
+            preco: typeof l.preco === "string" ? parseFloat(l.preco) : l.preco,
+          })) : [],
+        }));
+        setVendas(normalizedVendas);
+        setError(null);
+      } catch (err) {
+        console.error("Error fetching vendas:", err);
+        setError("Erro ao carregar vendas");
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchVendas();
+  }, []);
+
+  // Fetch servicos from API
+  const [servicos, setServicos] = useState<Service[]>([]);
+
+  useEffect(() => {
+    const fetchServicos = async () => {
+      try {
+        const response = await fetch("/api/servicos");
+        if (!response.ok) throw new Error("Falha ao carregar serviços");
+        const data = await response.json();
+        setServicos(normalizeServices(data));
+      } catch (err) {
+        console.error("Error fetching servicos:", err);
+        // Fallback to localStorage
+        try {
+          const localData = localStorage.getItem("finances.servicos.v1");
+          if (localData) {
+            setServicos(parseServicesJson(localData));
+          }
+        } catch {
+          setServicos([]);
+        }
+      }
+    };
+    fetchServicos();
+  }, []);
 
   const servicoById = useMemo(() => {
     const m = new Map<string, Service>();
@@ -101,12 +217,18 @@ export function VendasLgScreen() {
   const [modalOpen, setModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<ModalMode>("create");
   const [editingVendaId, setEditingVendaId] = useState<string | null>(null);
-  const [form, setForm] = useState(emptyModalState);
+  const [form, setForm] = useState(emptyModalState());
   const [formError, setFormError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
   const titleId = useId();
   const descId = useId();
 
   const openModal = useCallback((vendaToEdit?: VendaLg) => {
+    // Always reset to create mode first
+    setModalMode("create");
+    setEditingVendaId(null);
+    setFormError(null);
+
     if (vendaToEdit) {
       setModalMode("edit");
       setEditingVendaId(vendaToEdit.id);
@@ -121,24 +243,27 @@ export function VendasLgScreen() {
         clienteNome: vendaToEdit.clienteNome,
         clienteTelefone: vendaToEdit.clienteTelefone,
         clienteDoc: vendaToEdit.clienteDoc ?? "",
+        endereco: vendaToEdit.endereco ?? "",
+        latitude: vendaToEdit.latitude?.toString() ?? "",
+        longitude: vendaToEdit.longitude?.toString() ?? "",
         prestadorId: vendaToEdit.prestadorId ?? "",
         comissao: vendaToEdit.comissao ? vendaToEdit.comissao.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "",
         comissaoPaga: vendaToEdit.comissaoPaga ?? false,
+        dataVenda: vendaToEdit.dataVenda ? new Date(vendaToEdit.dataVenda).toISOString().slice(0, 16) : "",
         servicoQuery: "",
         linhas,
       });
     } else {
-      setModalMode("create");
-      setEditingVendaId(null);
       setForm(emptyModalState());
     }
-    setFormError(null);
     setModalOpen(true);
   }, []);
 
   const closeModal = useCallback(() => {
     setModalOpen(false);
     setFormError(null);
+    setEditingVendaId(null);
+    setModalMode("create");
   }, []);
 
   const filteredServicos = useMemo(() => {
@@ -186,7 +311,7 @@ export function VendasLgScreen() {
   );
 
   const submit = useCallback(
-    (e: React.FormEvent) => {
+    async (e: React.FormEvent) => {
       e.preventDefault();
       const nome = form.clienteNome.trim();
       const tel = form.clienteTelefone.trim();
@@ -232,26 +357,57 @@ export function VendasLgScreen() {
       const doc = form.clienteDoc.trim();
       const comissaoValue = parseMoney(form.comissao);
       const comissao = comissaoValue ?? 0;
-      const venda: VendaLg = {
-        id: modalMode === "edit" && editingVendaId ? editingVendaId : newId(),
-        createdAt: modalMode === "edit" && editingVendaId ? vendas.find((v) => v.id === editingVendaId)?.createdAt ?? new Date().toISOString() : new Date().toISOString(),
-        clienteNome: nome,
-        clienteTelefone: tel,
-        ...(doc ? { clienteDoc: doc } : {}),
-        ...(form.prestadorId ? { prestadorId: form.prestadorId } : {}),
-        ...(comissao > 0 ? { comissao } : {}),
-        ...(form.comissaoPaga && comissao > 0 ? { comissaoPaga: true } : {}),
-        linhas,
-      };
 
-      if (modalMode === "edit") {
-        updateVendaLg(venda);
-      } else {
-        appendVendaLg(venda);
+      setSubmitting(true);
+      try {
+        const url = modalMode === "edit" ? `/api/vendas-lg/${editingVendaId}` : "/api/vendas-lg";
+        const method = modalMode === "edit" ? "PUT" : "POST";
+        const response = await fetch(url, {
+          method,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            clienteNome: nome,
+            clienteTelefone: tel,
+            clienteDoc: doc || null,
+            endereco: form.endereco || null,
+            latitude: form.latitude ? parseFloat(form.latitude) : null,
+            longitude: form.longitude ? parseFloat(form.longitude) : null,
+            prestadorId: form.prestadorId || null,
+            comissao: comissao > 0 ? comissao : null,
+            comissaoPaga: form.comissaoPaga && comissao > 0,
+            dataVenda: form.dataVenda ? new Date(form.dataVenda).toISOString() : new Date().toISOString(),
+            linhas,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error("Falha ao salvar venda");
+        }
+
+        // Refresh vendas list
+        const refreshResponse = await fetch("/api/vendas-lg");
+        if (refreshResponse.ok) {
+          const data = await refreshResponse.json();
+          const normalizedVendas = data.map((v: any) => ({
+            ...v,
+            comissao: typeof v.comissao === "string" ? parseFloat(v.comissao) : v.comissao,
+            linhas: Array.isArray(v.linhas) ? v.linhas.map((l: any) => ({
+              ...l,
+              precoOriginal: typeof l.precoOriginal === "string" ? parseFloat(l.precoOriginal) : l.precoOriginal,
+              preco: typeof l.preco === "string" ? parseFloat(l.preco) : l.preco,
+            })) : [],
+          }));
+          setVendas(normalizedVendas);
+        }
+        closeModal();
+      } catch (err) {
+        console.error("Error submitting venda:", err);
+        setFormError("Erro ao salvar venda. Tente novamente.");
+      } finally {
+        setSubmitting(false);
       }
-      closeModal();
     },
-    [form, closeModal, modalMode, editingVendaId, vendas]
+    [form, closeModal, modalMode, editingVendaId]
   );
 
   useEffect(() => {
@@ -262,6 +418,39 @@ export function VendasLgScreen() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [modalOpen, closeModal]);
+
+  const deleteVenda = useCallback(
+    async (id: string) => {
+      if (!confirm("Tem certeza que deseja deletar esta venda?")) return;
+      try {
+        const response = await fetch(`/api/vendas-lg/${id}`, {
+          method: "DELETE",
+        });
+        if (!response.ok) {
+          throw new Error("Falha ao deletar venda");
+        }
+        // Refresh vendas list
+        const refreshResponse = await fetch("/api/vendas-lg");
+        if (refreshResponse.ok) {
+          const data = await refreshResponse.json();
+          const normalizedVendas = data.map((v: any) => ({
+            ...v,
+            comissao: typeof v.comissao === "string" ? parseFloat(v.comissao) : v.comissao,
+            linhas: Array.isArray(v.linhas) ? v.linhas.map((l: any) => ({
+              ...l,
+              precoOriginal: typeof l.precoOriginal === "string" ? parseFloat(l.precoOriginal) : l.precoOriginal,
+              preco: typeof l.preco === "string" ? parseFloat(l.preco) : l.preco,
+            })) : [],
+          }));
+          setVendas(normalizedVendas);
+        }
+      } catch (err) {
+        console.error("Error deleting venda:", err);
+        alert("Erro ao deletar venda");
+      }
+    },
+    []
+  );
 
   const listContent = useMemo(() => {
     if (vendas.length === 0) {
@@ -312,30 +501,52 @@ export function VendasLgScreen() {
                 <p className="text-lg font-semibold tabular-nums text-sky-700 dark:text-sky-400">
                   {formatBRL(totalVendaLg(v))}
                 </p>
-                <button
-                  type="button"
-                  onClick={() => openModal(v)}
-                  className="rounded-lg p-2 text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-600 dark:hover:bg-zinc-800 dark:hover:text-zinc-300"
-                  aria-label="Editar venda"
-                >
-                  <svg
-                    className="h-5 w-5"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
+                <div className="flex gap-1">
+                  <button
+                    type="button"
+                    onClick={() => openModal(v)}
+                    className="rounded-lg p-2 text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-600 dark:hover:bg-zinc-800 dark:hover:text-zinc-300"
+                    aria-label="Editar venda"
                   >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-                    />
-                  </svg>
-                </button>
+                    <svg
+                      className="h-5 w-5"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                      />
+                    </svg>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => deleteVenda(v.id)}
+                    className="rounded-lg p-2 text-zinc-400 transition-colors hover:bg-red-100 hover:text-red-600 dark:hover:bg-red-950 dark:hover:text-red-400"
+                    aria-label="Deletar venda"
+                  >
+                    <svg
+                      className="h-5 w-5"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                      />
+                    </svg>
+                  </button>
+                </div>
               </div>
             </div>
             <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-500">
-              {new Date(v.createdAt).toLocaleString("pt-BR", {
+              {new Date(v.dataVenda).toLocaleString("pt-BR", {
                 dateStyle: "short",
                 timeStyle: "short",
               })}
@@ -499,6 +710,65 @@ export function VendasLgScreen() {
                         }
                         className="mt-1.5 w-full rounded-xl border border-zinc-300 bg-white px-3 py-2.5 text-[15px] text-zinc-900 outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500/30 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-100"
                         placeholder="Somente se precisar"
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
+                        Endereço{" "}
+                        <span className="font-normal text-zinc-500">
+                          (opcional)
+                        </span>
+                      </span>
+                      <input
+                        type="text"
+                        value={form.endereco}
+                        onChange={(e) =>
+                          setForm((f) => ({
+                            ...f,
+                            endereco: e.target.value,
+                          }))
+                        }
+                        onBlur={async (e) => {
+                          const address = e.target.value.trim();
+                          if (address) {
+                            const coords = await geocodeAddress(address);
+                            if (coords) {
+                              setForm((f) => ({
+                                ...f,
+                                latitude: coords.latitude,
+                                longitude: coords.longitude,
+                              }));
+                            }
+                          }
+                        }}
+                        className="mt-1.5 w-full rounded-xl border border-zinc-300 bg-white px-3 py-2.5 text-[15px] text-zinc-900 outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500/30 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-100"
+                        placeholder="Rua, número, cidade..."
+                      />
+                    </label>
+                    {form.latitude && form.longitude && (
+                      <div className="rounded-lg bg-sky-50 p-3 dark:bg-sky-950/20">
+                        <p className="text-xs text-sky-900 dark:text-sky-200">
+                          📍 Coordenadas capturadas:
+                        </p>
+                        <p className="mt-1 font-mono text-xs text-sky-800 dark:text-sky-300">
+                          {Number(form.latitude).toFixed(5)}, {Number(form.longitude).toFixed(5)}
+                        </p>
+                      </div>
+                    )}
+                    <label className="block">
+                      <span className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
+                        Data e Hora
+                      </span>
+                      <input
+                        type="datetime-local"
+                        value={form.dataVenda}
+                        onChange={(e) =>
+                          setForm((f) => ({
+                            ...f,
+                            dataVenda: e.target.value,
+                          }))
+                        }
+                        className="mt-1.5 w-full rounded-xl border border-zinc-300 bg-white px-3 py-2.5 text-[15px] text-zinc-900 outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500/30 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-100"
                       />
                     </label>
                   </div>
@@ -746,9 +1016,10 @@ export function VendasLgScreen() {
               <div className="shrink-0 border-t border-zinc-200 p-4 dark:border-zinc-800">
                 <button
                   type="submit"
-                  className="flex h-12 w-full items-center justify-center rounded-xl bg-sky-600 text-base font-semibold text-white hover:bg-sky-700 active:bg-sky-800"
+                  disabled={submitting}
+                  className="flex h-12 w-full items-center justify-center rounded-xl bg-sky-600 text-base font-semibold text-white hover:bg-sky-700 active:bg-sky-800 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Salvar venda
+                  {submitting ? "Salvando..." : "Salvar venda"}
                 </button>
               </div>
             </form>
