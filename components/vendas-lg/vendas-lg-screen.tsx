@@ -13,6 +13,7 @@ import {
 } from "@/lib/service";
 import type { VendaLg, VendaLgLine } from "@/lib/venda-lg";
 import { totalVendaLg } from "@/lib/venda-lg";
+import { generateReceiptHTML } from "@/lib/pdf-receipt";
 import {
   useCallback,
   useEffect,
@@ -23,6 +24,37 @@ import {
 
 function newId(): string {
   return crypto.randomUUID();
+}
+
+// Function to download PDF receipt
+async function downloadReceiptPDF(
+  venda: VendaLg,
+  servicoById: Map<string, Service>,
+  prestadorById: Map<string, Partner>
+): Promise<void> {
+  // Dynamically import html2pdf
+  const html2pdf = (await import("html2pdf.js")).default;
+
+  const htmlContent = generateReceiptHTML(venda, servicoById, prestadorById);
+
+  const opt = {
+    margin: 10,
+    filename: `recibo_${venda.clienteNome.replace(/\s+/g, "_")}_${new Date().getTime()}.pdf`,
+    image: { type: "jpeg", quality: 0.98 },
+    html2canvas: { scale: 2 },
+    jsPDF: { orientation: "portrait", unit: "mm", format: "a4" },
+  };
+
+  // Create a temporary div to hold the HTML content
+  const element = document.createElement("div");
+  element.innerHTML = htmlContent;
+  document.body.appendChild(element);
+
+  try {
+    await html2pdf().set(opt).from(element).save();
+  } finally {
+    document.body.removeChild(element);
+  }
 }
 
 // Geocodification using OpenStreetMap Nominatim
@@ -168,6 +200,7 @@ export function VendasLgScreen() {
             ...l,
             precoOriginal: typeof l.precoOriginal === "string" ? parseFloat(l.precoOriginal) : l.precoOriginal,
             preco: typeof l.preco === "string" ? parseFloat(l.preco) : l.preco,
+            quantidade: typeof l.quantidade === "string" ? parseInt(l.quantidade, 10) : l.quantidade,
           })) : [],
         }));
         setVendas(normalizedVendas);
@@ -395,6 +428,7 @@ export function VendasLgScreen() {
               ...l,
               precoOriginal: typeof l.precoOriginal === "string" ? parseFloat(l.precoOriginal) : l.precoOriginal,
               preco: typeof l.preco === "string" ? parseFloat(l.preco) : l.preco,
+              quantidade: typeof l.quantidade === "string" ? parseInt(l.quantidade, 10) : l.quantidade,
             })) : [],
           }));
           setVendas(normalizedVendas);
@@ -440,6 +474,7 @@ export function VendasLgScreen() {
               ...l,
               precoOriginal: typeof l.precoOriginal === "string" ? parseFloat(l.precoOriginal) : l.precoOriginal,
               preco: typeof l.preco === "string" ? parseFloat(l.preco) : l.preco,
+              quantidade: typeof l.quantidade === "string" ? parseInt(l.quantidade, 10) : l.quantidade,
             })) : [],
           }));
           setVendas(normalizedVendas);
@@ -542,14 +577,34 @@ export function VendasLgScreen() {
                       />
                     </svg>
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => downloadReceiptPDF(v, servicoById, new Map(parceiros.map(p => [p.id, p])))}
+                    className="rounded-lg p-2 text-zinc-400 transition-colors hover:bg-sky-100 hover:text-sky-600 dark:hover:bg-sky-950 dark:hover:text-sky-400"
+                    aria-label="Baixar recibo em PDF"
+                  >
+                    <svg
+                      className="h-5 w-5"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M12 19l9 2-9-18-9 18 9-2m0-8v6m0 0l-3-3m3 3l3-3"
+                      />
+                    </svg>
+                  </button>
                 </div>
               </div>
             </div>
             <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-500">
-              {new Date(v.dataVenda).toLocaleString("pt-BR", {
+              {v.dataVenda ? new Date(v.dataVenda).toLocaleString("pt-BR", {
                 dateStyle: "short",
                 timeStyle: "short",
-              })}
+              }) : "Data não registrada"}
             </p>
             <ul className="mt-3 space-y-1.5 border-t border-zinc-100 pt-3 text-sm dark:border-zinc-800">
               {v.linhas.map((ln) => {

@@ -26,12 +26,20 @@ export const NAV_ITEMS: NavItem[] = [
     label: "Lead generation",
     description: "Captação e venda do serviço",
   },
+  {
+    href: "/daily-ads",
+    label: "Google Ads",
+    description: "Controle de gastos diários",
+  },
 ];
 
 export function navItemActive(pathname: string, href: string): boolean {
   if (href === "/") return pathname === "/";
   if (href === "/vendas-lg") {
     return pathname === "/vendas-lg" || pathname.startsWith("/vendas-lg/");
+  }
+  if (href === "/daily-ads") {
+    return pathname === "/daily-ads" || pathname.startsWith("/daily-ads/");
   }
   return pathname === href || pathname.startsWith(`${href}/`);
 }

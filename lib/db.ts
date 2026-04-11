@@ -165,6 +165,24 @@ export async function initializeDatabase() {
       )`
     );
 
+    await query(
+      `CREATE TABLE IF NOT EXISTS public."DailyAds" (
+        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        data DATE NOT NULL UNIQUE,
+        "entradaReal" DECIMAL(10, 2) NOT NULL,
+        "gastosGoogleAds" DECIMAL(10, 2) NOT NULL,
+        clientes INTEGER NOT NULL,
+        cac DECIMAL(10, 2) NOT NULL,
+        "ticketMedio" DECIMAL(10, 2) NOT NULL,
+        cpc DECIMAL(10, 2) NOT NULL,
+        resultado DECIMAL(10, 2) NOT NULL,
+        comissao DECIMAL(10, 2) DEFAULT 0,
+        "resultadoComissao" DECIMAL(10, 2) DEFAULT 0,
+        "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        "updatedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )`
+    );
+
     console.log("Database initialized successfully!");
   } catch (error) {
     console.error("Error initializing database:", error);

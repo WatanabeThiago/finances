@@ -4,7 +4,12 @@ import { NextRequest, NextResponse } from "next/server";
 export async function GET() {
   try {
     const result = await query(
-      'SELECT * FROM "VendaLg" ORDER BY "createdAt" DESC'
+      `SELECT v.*, 
+              COALESCE(json_agg(json_build_object('id', l.id, 'servicoId', l."servicoId", 'precoOriginal', l."precoOriginal", 'preco', l.preco, 'quantidade', l.quantidade)) FILTER (WHERE l.id IS NOT NULL), '[]'::json) as linhas
+       FROM "VendaLg" v
+       LEFT JOIN "VendaLgLine" l ON l."vendaLgId" = v.id
+       GROUP BY v.id
+       ORDER BY v."createdAt" DESC`
     );
     return NextResponse.json(sanitizeData(result));
   } catch (error) {
