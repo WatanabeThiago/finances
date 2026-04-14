@@ -571,7 +571,17 @@ export function VendasLgScreen() {
       ? comissoes.reduce((acc, v) => acc + (v.comissao || 0), 0) / comissoes.length 
       : 0;
 
-    return { comissaoMedia, totalVendas: filteredVendas.length };
+    const comissaoPaga = filteredVendas
+      .filter((v) => v.comissaoPaga && v.comissao)
+      .reduce((acc, v) => acc + (v.comissao || 0), 0);
+
+    const comissaoNaoPaga = filteredVendas
+      .filter((v) => v.comissao && !v.comissaoPaga)
+      .reduce((acc, v) => acc + (v.comissao || 0), 0);
+
+    const comissaoTotal = comissaoPaga + comissaoNaoPaga;
+
+    return { comissaoMedia, totalVendas: filteredVendas.length, comissaoPaga, comissaoNaoPaga, comissaoTotal };
   }, [vendas, filterParceiro, filterComissao, filterDataRange]);
 
   const listContent = useMemo(() => {
@@ -774,17 +784,49 @@ export function VendasLgScreen() {
         &quot;Serviços&quot; para poder selecioná-los aqui.
       </p>
 
-      {/* Stats Card */}
-      <div className="rounded-xl border border-zinc-200 bg-violet-50 p-4 dark:border-zinc-800 dark:bg-violet-950/30">
-        <p className="text-sm font-medium text-zinc-600 dark:text-zinc-400">
-          Comissão Média
-        </p>
-        <p className="mt-2 text-3xl font-bold text-violet-700 dark:text-violet-400">
-          {formatBRL(stats.comissaoMedia)}
-        </p>
-        <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-          {stats.totalVendas} venda{stats.totalVendas !== 1 ? "s" : ""}
-        </p>
+      {/* Stats Cards */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="rounded-xl border border-zinc-200 bg-violet-50 p-4 dark:border-zinc-800 dark:bg-violet-950/30">
+          <p className="text-sm font-medium text-zinc-600 dark:text-zinc-400">
+            Comissão Média
+          </p>
+          <p className="mt-2 text-2xl font-bold text-violet-700 dark:text-violet-400">
+            {formatBRL(stats.comissaoMedia)}
+          </p>
+          <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+            {stats.totalVendas} venda{stats.totalVendas !== 1 ? "s" : ""}
+          </p>
+        </div>
+
+        <div className="rounded-xl border border-zinc-200 bg-indigo-50 p-4 dark:border-zinc-800 dark:bg-indigo-950/30">
+          <p className="text-sm font-medium text-zinc-600 dark:text-zinc-400">
+            Comissão
+          </p>
+          <p className="mt-2 text-2xl font-bold text-indigo-700 dark:text-indigo-400">
+            {formatBRL(stats.comissaoTotal)}
+          </p>
+          <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+            Total
+          </p>
+        </div>
+
+        <div className="rounded-xl border border-zinc-200 bg-emerald-50 p-4 dark:border-zinc-800 dark:bg-emerald-950/30">
+          <p className="text-sm font-medium text-zinc-600 dark:text-zinc-400">
+            Comissões Pagas
+          </p>
+          <p className="mt-2 text-2xl font-bold text-emerald-700 dark:text-emerald-400">
+            {formatBRL(stats.comissaoPaga)}
+          </p>
+        </div>
+
+        <div className="rounded-xl border border-zinc-200 bg-amber-50 p-4 dark:border-zinc-800 dark:bg-amber-950/30">
+          <p className="text-sm font-medium text-zinc-600 dark:text-zinc-400">
+            Comissões Não Pagas
+          </p>
+          <p className="mt-2 text-2xl font-bold text-amber-700 dark:text-amber-400">
+            {formatBRL(stats.comissaoNaoPaga)}
+          </p>
+        </div>
       </div>
 
       {/* Filters */}
