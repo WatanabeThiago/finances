@@ -29,6 +29,41 @@ function parseCoord(value: string): number | undefined {
   return Number.isFinite(n) ? n : undefined;
 }
 
+// Geocodification using OpenStreetMap Nominatim
+async function geocodeAddress(
+  address: string
+): Promise<{ latitude: string; longitude: string } | null> {
+  if (!address.trim()) return null;
+
+  try {
+    const response = await fetch(
+      `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(address)}&format=json&limit=1`,
+      {
+        headers: {
+          "Accept-Language": "pt-BR",
+        },
+      }
+    );
+
+    if (!response.ok) return null;
+
+    const data = (await response.json()) as Array<{
+      lat: string;
+      lon: string;
+    }>;
+
+    if (data.length === 0) return null;
+
+    return {
+      latitude: data[0].lat,
+      longitude: data[0].lon,
+    };
+  } catch (error) {
+    console.error("Geocoding error:", error);
+    return null;
+  }
+}
+
 type FormState = {
   fotoDataUrl: string;
   nome: string;
@@ -94,6 +129,7 @@ export function ParceirosScreen() {
   const [editingPartnerId, setEditingPartnerId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm());
   const [formError, setFormError] = useState<string | null>(null);
+  const [geoLoading, setGeoLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const titleId = useId();
   const descId = useId();
@@ -149,6 +185,34 @@ export function ParceirosScreen() {
     reader.readAsDataURL(file);
     e.target.value = "";
   }, []);
+
+  const handleGeocode = useCallback(async () => {
+    const address = form.endereco.trim();
+    if (!address) {
+      setFormError("Por favor, preencha o endereço primeiro");
+      return;
+    }
+
+    setGeoLoading(true);
+    try {
+      const coords = await geocodeAddress(address);
+      if (coords) {
+        setForm((f) => ({
+          ...f,
+          latitude: coords.latitude,
+          longitude: coords.longitude,
+        }));
+        setFormError(null);
+      } else {
+        setFormError("Não foi possível encontrar as coordenadas para este endereço");
+      }
+    } catch (err) {
+      console.error("Geocoding error:", err);
+      setFormError("Erro ao buscar coordenadas");
+    } finally {
+      setGeoLoading(false);
+    }
+  }, [form.endereco]);
 
   const [submitting, setSubmitting] = useState(false);
   const submit = useCallback(
@@ -300,9 +364,9 @@ export function ParceirosScreen() {
                   {p.endereco}
                 </p>
               ) : null}
-              {p.latitude !== undefined && p.longitude !== undefined ? (
+              {p.latitude != null && p.longitude != null ? (
                 <p className="mt-1 font-mono text-xs text-zinc-500 dark:text-zinc-500">
-                  {p.latitude.toFixed(5)}, {p.longitude.toFixed(5)}
+                  {Number(p.latitude).toFixed(5)}, {Number(p.longitude).toFixed(5)}
                 </p>
               ) : null}
               <div className="mt-2 flex flex-wrap gap-1.5">
@@ -509,15 +573,25 @@ export function ParceirosScreen() {
                     <span className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
                       Endereço
                     </span>
-                    <textarea
-                      value={form.endereco}
-                      onChange={(e) =>
-                        setForm((f) => ({ ...f, endereco: e.target.value }))
-                      }
-                      rows={3}
-                      className="mt-1.5 w-full resize-none rounded-xl border border-zinc-300 bg-white px-3 py-2.5 text-[15px] text-zinc-900 outline-none ring-sky-500/40 focus:border-sky-500 focus:ring-2 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-100"
-                      placeholder="Rua, número, bairro, cidade…"
-                    />
+                    <div className="mt-1.5 flex gap-2">
+                      <textarea
+                        value={form.endereco}
+                        onChange={(e) =>
+                          setForm((f) => ({ ...f, endereco: e.target.value }))
+                        }
+                        rows={3}
+                        className="flex-1 resize-none rounded-xl border border-zinc-300 bg-white px-3 py-2.5 text-[15px] text-zinc-900 outline-none ring-sky-500/40 focus:border-sky-500 focus:ring-2 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-100"
+                        placeholder="Rua, número, bairro, cidade…"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleGeocode}
+                        disabled={geoLoading || !form.endereco.trim()}
+                        className="rounded-xl bg-sky-600 px-3 py-2.5 text-sm font-semibold text-white hover:bg-sky-700 disabled:bg-zinc-300 disabled:cursor-not-allowed dark:disabled:bg-zinc-700 h-fit"
+                      >
+                        {geoLoading ? "🔍 Buscando..." : "🔍 Buscar"}
+                      </button>
+                    </div>
                   </label>
 
                   <fieldset className="rounded-xl border border-zinc-200 p-3 dark:border-zinc-700">

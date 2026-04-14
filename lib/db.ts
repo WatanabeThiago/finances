@@ -183,6 +183,13 @@ export async function initializeDatabase() {
       )`
     );
 
+    // Add missing columns if they don't exist
+    await query(
+      `ALTER TABLE public."DailyAds"
+       ADD COLUMN IF NOT EXISTS comissao DECIMAL(10, 2) DEFAULT 0,
+       ADD COLUMN IF NOT EXISTS "resultadoComissao" DECIMAL(10, 2) DEFAULT 0`
+    );
+
     console.log("Database initialized successfully!");
   } catch (error) {
     console.error("Error initializing database:", error);

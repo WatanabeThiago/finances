@@ -253,6 +253,7 @@ export function VendasLgScreen() {
   const [form, setForm] = useState(emptyModalState());
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [geoLoading, setGeoLoading] = useState(false);
   const titleId = useId();
   const descId = useId();
 
@@ -298,6 +299,34 @@ export function VendasLgScreen() {
     setEditingVendaId(null);
     setModalMode("create");
   }, []);
+
+  const handleGeocode = useCallback(async () => {
+    const address = form.endereco.trim();
+    if (!address) {
+      setFormError("Por favor, preencha o endereço primeiro");
+      return;
+    }
+
+    setGeoLoading(true);
+    try {
+      const coords = await geocodeAddress(address);
+      if (coords) {
+        setForm((f) => ({
+          ...f,
+          latitude: coords.latitude,
+          longitude: coords.longitude,
+        }));
+        setFormError(null);
+      } else {
+        setFormError("Não foi possível encontrar as coordenadas para este endereço");
+      }
+    } catch (err) {
+      console.error("Geocoding error:", err);
+      setFormError("Erro ao buscar coordenadas");
+    } finally {
+      setGeoLoading(false);
+    }
+  }, [form.endereco]);
 
   const filteredServicos = useMemo(() => {
     const q = form.servicoQuery.trim().toLowerCase();
@@ -774,31 +803,28 @@ export function VendasLgScreen() {
                           (opcional)
                         </span>
                       </span>
-                      <input
-                        type="text"
-                        value={form.endereco}
-                        onChange={(e) =>
-                          setForm((f) => ({
-                            ...f,
-                            endereco: e.target.value,
-                          }))
-                        }
-                        onBlur={async (e) => {
-                          const address = e.target.value.trim();
-                          if (address) {
-                            const coords = await geocodeAddress(address);
-                            if (coords) {
-                              setForm((f) => ({
-                                ...f,
-                                latitude: coords.latitude,
-                                longitude: coords.longitude,
-                              }));
-                            }
+                      <div className="mt-1.5 flex gap-2">
+                        <input
+                          type="text"
+                          value={form.endereco}
+                          onChange={(e) =>
+                            setForm((f) => ({
+                              ...f,
+                              endereco: e.target.value,
+                            }))
                           }
-                        }}
-                        className="mt-1.5 w-full rounded-xl border border-zinc-300 bg-white px-3 py-2.5 text-[15px] text-zinc-900 outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500/30 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-100"
-                        placeholder="Rua, número, cidade..."
-                      />
+                          className="flex-1 rounded-xl border border-zinc-300 bg-white px-3 py-2.5 text-[15px] text-zinc-900 outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500/30 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-100"
+                          placeholder="Rua, número, cidade..."
+                        />
+                        <button
+                          type="button"
+                          onClick={handleGeocode}
+                          disabled={geoLoading || !form.endereco.trim()}
+                          className="rounded-xl bg-sky-600 px-3 py-2.5 text-sm font-semibold text-white hover:bg-sky-700 disabled:bg-zinc-300 disabled:cursor-not-allowed dark:disabled:bg-zinc-700"
+                        >
+                          {geoLoading ? "🔍 Buscando..." : "🔍 Buscar"}
+                        </button>
+                      </div>
                     </label>
                     {form.latitude && form.longitude && (
                       <div className="rounded-lg bg-sky-50 p-3 dark:bg-sky-950/20">

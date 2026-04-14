@@ -151,6 +151,46 @@ export function DailyAdsScreen() {
     setModalMode("create");
   }, []);
 
+  // Auto-fill entrada real and clientes based on sales for the selected date (GMT-4)
+  useEffect(() => {
+    if (!modalOpen || !form.data || vendas.length === 0 || modalMode === "edit") return;
+
+    const selectedDate = form.data; // Format: YYYY-MM-DD
+    let totalEntrada = 0;
+    let numClientes = 0;
+
+    vendas.forEach((v) => {
+      if (!v.dataVenda) return;
+
+      // Convert sale date to GMT-4
+      const saleDateTime = new Date(v.dataVenda);
+      // Adjust to GMT-4 by subtracting 4 hours from current timezone offset
+      const offsetMs = saleDateTime.getTimezoneOffset() * 60 * 1000;
+      const gmt4AdjustedTime = saleDateTime.getTime() + offsetMs - (4 * 60 * 60 * 1000);
+      const adjustedDate = new Date(gmt4AdjustedTime);
+      const saleDateString = adjustedDate.toISOString().split("T")[0];
+
+      if (saleDateString === selectedDate) {
+        // Sum up line item totals
+        v.linhas.forEach((l) => {
+          totalEntrada += l.preco * l.quantidade;
+        });
+        numClientes++;
+      }
+    });
+
+    // Update form with calculated values
+    const gastos = parseFloat(form.gastosGoogleAds) || 0;
+    const derived = calculateDerivedFields(totalEntrada, gastos, numClientes);
+    
+    setForm((f) => ({
+      ...f,
+      entradaReal: totalEntrada.toFixed(2),
+      clientes: numClientes.toString(),
+      ...derived,
+    }));
+  }, [form.data, vendas, modalOpen, modalMode, calculateDerivedFields]);
+
   const submit = useCallback(async () => {
     setFormError(null);
 

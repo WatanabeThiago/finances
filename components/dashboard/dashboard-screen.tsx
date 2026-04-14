@@ -141,7 +141,7 @@ export function DashboardScreen() {
       const endOfYesterday = new Date(cutoffDate);
       endOfYesterday.setDate(endOfYesterday.getDate() + 1);
       const filteredVendas = data.vendas.filter((v) => {
-        const vendaDate = new Date(v.createdAt);
+        const vendaDate = new Date(v.dataVenda);
         return vendaDate >= cutoffDate && vendaDate < endOfYesterday;
       });
       const filteredAds = data.dailyAds.filter((d) => {
@@ -159,7 +159,7 @@ export function DashboardScreen() {
     }
 
     const filteredVendas = data.vendas.filter((v) => {
-      const vendaDate = new Date(v.createdAt);
+      const vendaDate = new Date(v.dataVenda);
       return vendaDate >= cutoffDate;
     });
 
@@ -184,6 +184,7 @@ export function DashboardScreen() {
       ? filteredData.dailyAds.reduce((acc, d) => acc + d.cac, 0) / filteredData.dailyAds.length
       : 0;
 
+    const resultadoComissao = totalComissao - totalGastosAds;
     const roi = totalGastosAds > 0 ? ((totalVendas - totalGastosAds) / totalGastosAds) * 100 : 0;
 
     return {
@@ -194,6 +195,7 @@ export function DashboardScreen() {
       totalClientesAds,
       avgCAC,
       roi,
+      resultadoComissao,
     };
   }, [filteredData]);
 
@@ -204,7 +206,7 @@ export function DashboardScreen() {
       const subtotal = v.linhas.reduce((s, l) => s + l.preco * l.quantidade, 0);
       events.push({
         type: "venda",
-        date: new Date(v.createdAt).toISOString(),
+        date: new Date(v.dataVenda).toISOString(),
         description: `Venda para ${v.clienteNome}`,
         value: subtotal,
       });
@@ -302,10 +304,10 @@ export function DashboardScreen() {
             color="red"
           />
           <QuickStats
-            label="ROI"
-            value={`${stats.roi.toFixed(1)}%`}
-            change={stats.roi >= 0 ? "Lucrativo" : "Prejuízo"}
-            color={stats.roi >= 0 ? "green" : "red"}
+            label="Resultado Comissão"
+            value={formatBRL(stats.resultadoComissao)}
+            change={stats.resultadoComissao >= 0 ? "Positivo" : "Negativo"}
+            color={stats.resultadoComissao >= 0 ? "green" : "red"}
           />
           <QuickStats
             label="CAC Médio"

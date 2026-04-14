@@ -28,6 +28,8 @@ export async function POST(req: NextRequest) {
       ticketMedio,
       cpc,
       resultado,
+      comissao,
+      resultadoComissao,
     } = body;
 
     if (!data) {
