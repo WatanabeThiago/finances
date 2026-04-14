@@ -284,6 +284,11 @@ export function DailyAdsScreen() {
         avgROI: 0,
         avgCAC: 0,
         totalComissao: 0,
+        comissaoMedia: 0,
+        lucroLiquido: 0,
+        avgTicketMedio: 0,
+        avgCpc: 0,
+        resultadoComissao: 0,
       };
     }
 
@@ -293,6 +298,16 @@ export function DailyAdsScreen() {
     const roi = ((totalEntrada - totalGastos) / totalGastos) * 100;
     const avgCAC = dailyAds.reduce((acc, d) => acc + d.cac, 0) / dailyAds.length;
     const totalComissao = vendas.reduce((acc, v) => acc + (v.comissao || 0), 0);
+    
+    // New metrics
+    const vendasComComissao = vendas.filter((v) => v.comissao && v.comissao > 0);
+    const comissaoMedia = vendasComComissao.length > 0 
+      ? totalComissao / vendasComComissao.length 
+      : 0;
+    const lucroLiquido = totalEntrada - totalGastos;
+    const avgTicketMedio = dailyAds.reduce((acc, d) => acc + d.ticketMedio, 0) / dailyAds.length;
+    const avgCpc = dailyAds.reduce((acc, d) => acc + d.cpc, 0) / dailyAds.length;
+    const resultadoComissao = totalComissao - totalGastos;
 
     return {
       totalGastos,
@@ -301,6 +316,11 @@ export function DailyAdsScreen() {
       avgROI: isFinite(roi) ? roi : 0,
       avgCAC,
       totalComissao,
+      comissaoMedia,
+      lucroLiquido,
+      avgTicketMedio,
+      avgCpc: isFinite(avgCpc) ? avgCpc : 0,
+      resultadoComissao,
     };
   }, [dailyAds, vendas]);
 
@@ -325,15 +345,8 @@ export function DailyAdsScreen() {
         </div>
 
         {/* Stats Cards */}
-        <div className="mb-8 grid gap-4 md:grid-cols-6">
-          <div className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
-            <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400">
-              Gasto Total
-            </p>
-            <p className="mt-2 text-2xl font-bold text-zinc-900 dark:text-white">
-              {formatBRL(stats.totalGastos)}
-            </p>
-          </div>
+        <div className="mb-8 grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {/* Entrada Total */}
           <div className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
             <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400">
               Entrada Total
@@ -341,23 +354,64 @@ export function DailyAdsScreen() {
             <p className="mt-2 text-2xl font-bold text-green-600 dark:text-green-400">
               {formatBRL(stats.totalEntrada)}
             </p>
+            <p className="mt-1 text-xs text-zinc-500">
+              {stats.totalClientes} cliente{stats.totalClientes !== 1 ? "s" : ""}
+            </p>
           </div>
+
+          {/* Gasto Total */}
           <div className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
             <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400">
-              Total de Clientes
+              Gasto Google Ads
             </p>
-            <p className="mt-2 text-2xl font-bold text-blue-600 dark:text-blue-400">
-              {stats.totalClientes}
+            <p className="mt-2 text-2xl font-bold text-red-600 dark:text-red-400">
+              {formatBRL(stats.totalGastos)}
+            </p>
+            <p className="mt-1 text-xs text-zinc-500">
+              Gastos totais
             </p>
           </div>
-          <div className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
+
+          {/* Lucro Líquido */}
+          <div className={`rounded-xl border border-zinc-200 p-4 dark:border-zinc-800 ${stats.lucroLiquido >= 0 ? 'bg-emerald-50 dark:bg-emerald-950/30' : 'bg-red-50 dark:bg-red-950/30'}`}>
+            <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400">
+              Lucro Líquido
+            </p>
+            <p className={`mt-2 text-2xl font-bold ${stats.lucroLiquido >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+              {formatBRL(stats.lucroLiquido)}
+            </p>
+            <p className="mt-1 text-xs text-zinc-500">
+              Entrada - Gasto
+            </p>
+          </div>
+
+          {/* ROI Médio */}
+          <div className={`rounded-xl border border-zinc-200 p-4 dark:border-zinc-800 ${stats.avgROI >= 0 ? 'bg-blue-50 dark:bg-blue-950/30' : 'bg-red-50 dark:bg-red-950/30'}`}>
             <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400">
               ROI Médio
             </p>
-            <p className={`mt-2 text-2xl font-bold ${stats.avgROI >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+            <p className={`mt-2 text-2xl font-bold ${stats.avgROI >= 0 ? 'text-blue-600 dark:text-blue-400' : 'text-red-600 dark:text-red-400'}`}>
               {stats.avgROI.toFixed(1)}%
             </p>
+            <p className="mt-1 text-xs text-zinc-500">
+              Retorno sobre investimento
+            </p>
           </div>
+
+          {/* Ticket Médio */}
+          <div className="rounded-xl border border-zinc-200 bg-sky-50 p-4 dark:border-zinc-800 dark:bg-sky-950/30">
+            <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400">
+              Ticket Médio
+            </p>
+            <p className="mt-2 text-2xl font-bold text-sky-600 dark:text-sky-400">
+              {formatBRL(stats.avgTicketMedio)}
+            </p>
+            <p className="mt-1 text-xs text-zinc-500">
+              Por cliente
+            </p>
+          </div>
+
+          {/* CAC Médio */}
           <div className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
             <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400">
               CAC Médio
@@ -365,13 +419,60 @@ export function DailyAdsScreen() {
             <p className="mt-2 text-2xl font-bold text-zinc-900 dark:text-white">
               {formatBRL(stats.avgCAC)}
             </p>
+            <p className="mt-1 text-xs text-zinc-500">
+              Custo por cliente
+            </p>
           </div>
+
+          {/* CPC Médio */}
           <div className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
+            <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400">
+              CPC Médio
+            </p>
+            <p className="mt-2 text-2xl font-bold text-zinc-900 dark:text-white">
+              {formatBRL(stats.avgCpc)}
+            </p>
+            <p className="mt-1 text-xs text-zinc-500">
+              Custo por clique
+            </p>
+          </div>
+
+          {/* Comissão Total */}
+          <div className="rounded-xl border border-zinc-200 bg-violet-50 p-4 dark:border-zinc-800 dark:bg-violet-950/30">
             <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400">
               Comissão Total
             </p>
-            <p className="mt-2 text-2xl font-bold text-zinc-900 dark:text-white">
+            <p className="mt-2 text-2xl font-bold text-violet-600 dark:text-violet-400">
               {formatBRL(stats.totalComissao)}
+            </p>
+            <p className="mt-1 text-xs text-zinc-500">
+              Total a pagar
+            </p>
+          </div>
+
+          {/* Comissão Média */}
+          <div className="rounded-xl border border-zinc-200 bg-indigo-50 p-4 dark:border-zinc-800 dark:bg-indigo-950/30">
+            <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400">
+              Comissão Média
+            </p>
+            <p className="mt-2 text-2xl font-bold text-indigo-600 dark:text-indigo-400">
+              {formatBRL(stats.comissaoMedia)}
+            </p>
+            <p className="mt-1 text-xs text-zinc-500">
+              Por venda
+            </p>
+          </div>
+
+          {/* Resultado Comissão */}
+          <div className={`rounded-xl border border-zinc-200 p-4 dark:border-zinc-800 ${stats.resultadoComissao >= 0 ? 'bg-amber-50 dark:bg-amber-950/30' : 'bg-orange-50 dark:bg-orange-950/30'}`}>
+            <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400">
+              Resultado Comissão
+            </p>
+            <p className={`mt-2 text-2xl font-bold ${stats.resultadoComissao >= 0 ? 'text-amber-600 dark:text-amber-400' : 'text-orange-600 dark:text-orange-400'}`}>
+              {formatBRL(stats.resultadoComissao)}
+            </p>
+            <p className="mt-1 text-xs text-zinc-500">
+              Comissão - Gasto
             </p>
           </div>
         </div>

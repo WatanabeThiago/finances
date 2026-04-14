@@ -184,6 +184,9 @@ export function VendasLgScreen() {
   const [vendas, setVendas] = useState<VendaLg[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [filterParceiro, setFilterParceiro] = useState<string>("");
+  const [filterComissao, setFilterComissao] = useState<"all" | "pago" | "nao-pago">("all");
+  const [filterDataRange, setFilterDataRange] = useState<"today" | "yesterday" | "7d" | "30d" | "all">("7d");
 
   useEffect(() => {
     const fetchVendas = async () => {
@@ -516,8 +519,109 @@ export function VendasLgScreen() {
     []
   );
 
+  const stats = useMemo(() => {
+    // Calculate stats for filtered vendas
+    let filteredVendas = vendas;
+
+    // Filter by date range
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    let cutoffDate: Date | null = null;
+
+    if (filterDataRange === "today") {
+      cutoffDate = startOfToday;
+    } else if (filterDataRange === "yesterday") {
+      cutoffDate = new Date(startOfToday);
+      cutoffDate.setDate(cutoffDate.getDate() - 1);
+      const endOfYesterday = new Date(cutoffDate);
+      endOfYesterday.setDate(endOfYesterday.getDate() + 1);
+      filteredVendas = filteredVendas.filter((v) => {
+        const vendaDate = new Date(v.dataVenda);
+        return vendaDate >= cutoffDate! && vendaDate < endOfYesterday;
+      });
+    } else if (filterDataRange === "7d") {
+      cutoffDate = new Date(startOfToday);
+      cutoffDate.setDate(cutoffDate.getDate() - 7);
+    } else if (filterDataRange === "30d") {
+      cutoffDate = new Date(startOfToday);
+      cutoffDate.setDate(cutoffDate.getDate() - 30);
+    }
+
+    if (cutoffDate && filterDataRange !== "yesterday") {
+      filteredVendas = filteredVendas.filter((v) => {
+        const vendaDate = new Date(v.dataVenda);
+        return vendaDate >= cutoffDate!;
+      });
+    }
+
+    // Filter by parceiro
+    if (filterParceiro) {
+      filteredVendas = filteredVendas.filter((v) => v.prestadorId === filterParceiro);
+    }
+
+    // Filter by comissao status
+    if (filterComissao === "pago") {
+      filteredVendas = filteredVendas.filter((v) => v.comissaoPaga === true);
+    } else if (filterComissao === "nao-pago") {
+      filteredVendas = filteredVendas.filter((v) => v.comissao && !v.comissaoPaga);
+    }
+
+    const comissoes = filteredVendas.filter((v) => v.comissao && v.comissao > 0);
+    const comissaoMedia = comissoes.length > 0 
+      ? comissoes.reduce((acc, v) => acc + (v.comissao || 0), 0) / comissoes.length 
+      : 0;
+
+    return { comissaoMedia, totalVendas: filteredVendas.length };
+  }, [vendas, filterParceiro, filterComissao, filterDataRange]);
+
   const listContent = useMemo(() => {
-    if (vendas.length === 0) {
+    // Filter vendas based on filters
+    let filteredVendas = vendas;
+
+    // Filter by date range
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    let cutoffDate: Date | null = null;
+
+    if (filterDataRange === "today") {
+      cutoffDate = startOfToday;
+    } else if (filterDataRange === "yesterday") {
+      cutoffDate = new Date(startOfToday);
+      cutoffDate.setDate(cutoffDate.getDate() - 1);
+      const endOfYesterday = new Date(cutoffDate);
+      endOfYesterday.setDate(endOfYesterday.getDate() + 1);
+      filteredVendas = filteredVendas.filter((v) => {
+        const vendaDate = new Date(v.dataVenda);
+        return vendaDate >= cutoffDate! && vendaDate < endOfYesterday;
+      });
+    } else if (filterDataRange === "7d") {
+      cutoffDate = new Date(startOfToday);
+      cutoffDate.setDate(cutoffDate.getDate() - 7);
+    } else if (filterDataRange === "30d") {
+      cutoffDate = new Date(startOfToday);
+      cutoffDate.setDate(cutoffDate.getDate() - 30);
+    }
+
+    if (cutoffDate && filterDataRange !== "yesterday") {
+      filteredVendas = filteredVendas.filter((v) => {
+        const vendaDate = new Date(v.dataVenda);
+        return vendaDate >= cutoffDate!;
+      });
+    }
+
+    // Filter by parceiro
+    if (filterParceiro) {
+      filteredVendas = filteredVendas.filter((v) => v.prestadorId === filterParceiro);
+    }
+
+    // Filter by comissao status
+    if (filterComissao === "pago") {
+      filteredVendas = filteredVendas.filter((v) => v.comissaoPaga === true);
+    } else if (filterComissao === "nao-pago") {
+      filteredVendas = filteredVendas.filter((v) => v.comissao && !v.comissaoPaga);
+    }
+
+    if (filteredVendas.length === 0) {
       return (
         <div className="rounded-2xl border border-dashed border-zinc-300 bg-zinc-50/80 px-4 py-10 text-center dark:border-zinc-700 dark:bg-zinc-900/40">
           <p className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
@@ -531,7 +635,7 @@ export function VendasLgScreen() {
     }
     return (
       <ul className="flex flex-col gap-3">
-        {vendas.map((v) => (
+        {filteredVendas.map((v) => (
           <li
             key={v.id}
             className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950"
@@ -661,7 +765,7 @@ export function VendasLgScreen() {
         ))}
       </ul>
     );
-  }, [vendas, servicoById, parceiros]);
+  }, [vendas, servicoById, parceiros, filterParceiro, filterComissao, filterDataRange]);
 
   return (
     <div className="mx-auto flex w-full max-w-lg flex-col gap-5 pb-28">
@@ -669,6 +773,136 @@ export function VendasLgScreen() {
         Registro local de vendas (lead generation). Cadastre serviços em
         &quot;Serviços&quot; para poder selecioná-los aqui.
       </p>
+
+      {/* Stats Card */}
+      <div className="rounded-xl border border-zinc-200 bg-violet-50 p-4 dark:border-zinc-800 dark:bg-violet-950/30">
+        <p className="text-sm font-medium text-zinc-600 dark:text-zinc-400">
+          Comissão Média
+        </p>
+        <p className="mt-2 text-3xl font-bold text-violet-700 dark:text-violet-400">
+          {formatBRL(stats.comissaoMedia)}
+        </p>
+        <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+          {stats.totalVendas} venda{stats.totalVendas !== 1 ? "s" : ""}
+        </p>
+      </div>
+
+      {/* Filters */}
+      <div className="space-y-3 rounded-xl border border-zinc-200 bg-white/50 p-4 dark:border-zinc-800 dark:bg-zinc-900/30">
+        <div>
+          <label className="block text-xs font-semibold uppercase tracking-wide text-zinc-600 dark:text-zinc-400 mb-2">
+            Filtrar por Data
+          </label>
+          <div className="flex gap-2 flex-wrap">
+            <button
+              onClick={() => setFilterDataRange("today")}
+              className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                filterDataRange === "today"
+                  ? "bg-sky-600 text-white dark:bg-sky-700"
+                  : "border border-zinc-300 bg-white text-zinc-900 hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-100 dark:hover:bg-zinc-900"
+              }`}
+            >
+              Hoje
+            </button>
+            <button
+              onClick={() => setFilterDataRange("yesterday")}
+              className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                filterDataRange === "yesterday"
+                  ? "bg-sky-600 text-white dark:bg-sky-700"
+                  : "border border-zinc-300 bg-white text-zinc-900 hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-100 dark:hover:bg-zinc-900"
+              }`}
+            >
+              Ontem
+            </button>
+            <button
+              onClick={() => setFilterDataRange("7d")}
+              className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                filterDataRange === "7d"
+                  ? "bg-sky-600 text-white dark:bg-sky-700"
+                  : "border border-zinc-300 bg-white text-zinc-900 hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-100 dark:hover:bg-zinc-900"
+              }`}
+            >
+              Últimos 7 dias
+            </button>
+            <button
+              onClick={() => setFilterDataRange("30d")}
+              className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                filterDataRange === "30d"
+                  ? "bg-sky-600 text-white dark:bg-sky-700"
+                  : "border border-zinc-300 bg-white text-zinc-900 hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-100 dark:hover:bg-zinc-900"
+              }`}
+            >
+              Últimos 30 dias
+            </button>
+            <button
+              onClick={() => setFilterDataRange("all")}
+              className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                filterDataRange === "all"
+                  ? "bg-sky-600 text-white dark:bg-sky-700"
+                  : "border border-zinc-300 bg-white text-zinc-900 hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-100 dark:hover:bg-zinc-900"
+              }`}
+            >
+              Todas
+            </button>
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold uppercase tracking-wide text-zinc-600 dark:text-zinc-400 mb-2">
+            Filtrar por Parceiro
+          </label>
+          <select
+            value={filterParceiro}
+            onChange={(e) => setFilterParceiro(e.target.value)}
+            className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-100"
+          >
+            <option value="">Todos os parceiros</option>
+            {parceiros.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.nome}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold uppercase tracking-wide text-zinc-600 dark:text-zinc-400 mb-2">
+            Filtrar por Comissão
+          </label>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setFilterComissao("all")}
+              className={`flex-1 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                filterComissao === "all"
+                  ? "bg-sky-600 text-white dark:bg-sky-700"
+                  : "border border-zinc-300 bg-white text-zinc-900 hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-100 dark:hover:bg-zinc-900"
+              }`}
+            >
+              Todas
+            </button>
+            <button
+              onClick={() => setFilterComissao("pago")}
+              className={`flex-1 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                filterComissao === "pago"
+                  ? "bg-green-600 text-white dark:bg-green-700"
+                  : "border border-zinc-300 bg-white text-zinc-900 hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-100 dark:hover:bg-zinc-900"
+              }`}
+            >
+              Pagas ✓
+            </button>
+            <button
+              onClick={() => setFilterComissao("nao-pago")}
+              className={`flex-1 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                filterComissao === "nao-pago"
+                  ? "bg-red-600 text-white dark:bg-red-700"
+                  : "border border-zinc-300 bg-white text-zinc-900 hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-100 dark:hover:bg-zinc-900"
+              }`}
+            >
+              Não Pagas
+            </button>
+          </div>
+        </div>
+      </div>
 
       {listContent}
 
