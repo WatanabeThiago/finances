@@ -37,10 +37,10 @@ async function downloadReceiptPDF(
 
   const htmlContent = generateReceiptHTML(venda, servicoById, prestadorById);
 
-  const opt = {
+  const opt: any = {
     margin: 10,
     filename: `recibo_${venda.clienteNome.replace(/\s+/g, "_")}_${new Date().getTime()}.pdf`,
-    image: { type: "jpeg", quality: 0.98 },
+    image: { type: "jpeg" as const, quality: 0.98 },
     html2canvas: { scale: 2 },
     jsPDF: { orientation: "portrait", unit: "mm", format: "a4" },
   };
@@ -536,6 +536,7 @@ export function VendasLgScreen() {
       const endOfYesterday = new Date(cutoffDate);
       endOfYesterday.setDate(endOfYesterday.getDate() + 1);
       filteredVendas = filteredVendas.filter((v) => {
+        if (!v.dataVenda) return false;
         const vendaDate = new Date(v.dataVenda);
         return vendaDate >= cutoffDate! && vendaDate < endOfYesterday;
       });
@@ -549,6 +550,7 @@ export function VendasLgScreen() {
 
     if (cutoffDate && filterDataRange !== "yesterday") {
       filteredVendas = filteredVendas.filter((v) => {
+        if (!v.dataVenda) return false;
         const vendaDate = new Date(v.dataVenda);
         return vendaDate >= cutoffDate!;
       });
@@ -583,7 +585,7 @@ export function VendasLgScreen() {
 
     const faturamentoParceiro = filteredVendas
       .filter((v) => v.comissao && v.comissao > 0)
-      .reduce((acc, v) => acc + (totalVendaLg(v) - v.comissao), 0);
+      .reduce((acc, v) => acc + (totalVendaLg(v) - (v.comissao || 0)), 0);
 
     return { comissaoMedia, totalVendas: filteredVendas.length, comissaoPaga, comissaoNaoPaga, comissaoTotal, faturamentoParceiro };
   }, [vendas, filterParceiro, filterComissao, filterDataRange]);
@@ -605,6 +607,7 @@ export function VendasLgScreen() {
       const endOfYesterday = new Date(cutoffDate);
       endOfYesterday.setDate(endOfYesterday.getDate() + 1);
       filteredVendas = filteredVendas.filter((v) => {
+        if (!v.dataVenda) return false;
         const vendaDate = new Date(v.dataVenda);
         return vendaDate >= cutoffDate! && vendaDate < endOfYesterday;
       });
@@ -618,6 +621,7 @@ export function VendasLgScreen() {
 
     if (cutoffDate && filterDataRange !== "yesterday") {
       filteredVendas = filteredVendas.filter((v) => {
+        if (!v.dataVenda) return false;
         const vendaDate = new Date(v.dataVenda);
         return vendaDate >= cutoffDate!;
       });

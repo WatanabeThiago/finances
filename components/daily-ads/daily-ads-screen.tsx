@@ -20,8 +20,6 @@ type FormState = {
   ticketMedio: string;
   cpc: string;
   resultado: string;
-  comissao: string;
-  resultadoComissao: string;
 };
 
 const emptyForm = (): FormState => ({
@@ -33,8 +31,6 @@ const emptyForm = (): FormState => ({
   ticketMedio: "",
   cpc: "",
   resultado: "",
-  comissao: "",
-  resultadoComissao: "",
 });
 
 type ModalMode = "create" | "edit";
@@ -135,8 +131,6 @@ export function DailyAdsScreen() {
         ticketMedio: recordToEdit.ticketMedio.toString(),
         cpc: recordToEdit.cpc.toString(),
         resultado: recordToEdit.resultado.toString(),
-        comissao: recordToEdit.comissao?.toString() || "",
-        resultadoComissao: recordToEdit.resultadoComissao?.toString() || "",
       });
     } else {
       setForm(emptyForm());
@@ -216,8 +210,6 @@ export function DailyAdsScreen() {
           ticketMedio: parseFloat(form.ticketMedio) || 0,
           cpc: parseFloat(form.cpc) || 0,
           resultado: parseFloat(form.resultado) || 0,
-          comissao: parseFloat(form.comissao) || 0,
-          resultadoComissao: parseFloat(form.resultadoComissao) || 0,
         }),
       });
 
@@ -288,7 +280,6 @@ export function DailyAdsScreen() {
         lucroLiquido: 0,
         avgTicketMedio: 0,
         avgCpc: 0,
-        resultadoComissao: 0,
       };
     }
 
@@ -307,7 +298,6 @@ export function DailyAdsScreen() {
     const lucroLiquido = totalEntrada - totalGastos;
     const avgTicketMedio = dailyAds.reduce((acc, d) => acc + d.ticketMedio, 0) / dailyAds.length;
     const avgCpc = dailyAds.reduce((acc, d) => acc + d.cpc, 0) / dailyAds.length;
-    const resultadoComissao = totalComissao - totalGastos;
 
     return {
       totalGastos,
@@ -320,7 +310,6 @@ export function DailyAdsScreen() {
       lucroLiquido,
       avgTicketMedio,
       avgCpc: isFinite(avgCpc) ? avgCpc : 0,
-      resultadoComissao,
     };
   }, [dailyAds, vendas]);
 
@@ -463,18 +452,6 @@ export function DailyAdsScreen() {
             </p>
           </div>
 
-          {/* Resultado Comissão */}
-          <div className={`rounded-xl border border-zinc-200 p-4 dark:border-zinc-800 ${stats.resultadoComissao >= 0 ? 'bg-amber-50 dark:bg-amber-950/30' : 'bg-orange-50 dark:bg-orange-950/30'}`}>
-            <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400">
-              Resultado Comissão
-            </p>
-            <p className={`mt-2 text-2xl font-bold ${stats.resultadoComissao >= 0 ? 'text-amber-600 dark:text-amber-400' : 'text-orange-600 dark:text-orange-400'}`}>
-              {formatBRL(stats.resultadoComissao)}
-            </p>
-            <p className="mt-1 text-xs text-zinc-500">
-              Comissão - Gasto
-            </p>
-          </div>
         </div>
 
         {/* Button */}
@@ -516,9 +493,6 @@ export function DailyAdsScreen() {
                 <th className="px-6 py-4 text-right text-sm font-semibold text-zinc-900 dark:text-white">
                   Resultado
                 </th>
-                <th className="px-6 py-4 text-right text-sm font-semibold text-zinc-900 dark:text-white">
-                  Resultado Comissão
-                </th>
                 <th className="px-6 py-4 text-center text-sm font-semibold text-zinc-900 dark:text-white">
                   Ações
                 </th>
@@ -553,9 +527,6 @@ export function DailyAdsScreen() {
                   </td>
                   <td className={`px-6 py-4 text-right text-sm font-semibold ${d.resultado >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                     {formatBRL(d.resultado)}
-                  </td>
-                  <td className={`px-6 py-4 text-right text-sm font-semibold text-violet-600 dark:text-violet-400`}>
-                    {formatBRL(d.resultadoComissao)}
                   </td>
                   <td className="px-6 py-4 text-center">
                     <button
@@ -647,14 +618,11 @@ export function DailyAdsScreen() {
                       const entrada = parseFloat(form.entradaReal) || 0;
                       const gastos = parseFloat(e.target.value) || 0;
                       const clientes = parseInt(form.clientes, 10) || 0;
-                      const comissao = parseFloat(form.comissao) || 0;
                       const derived = calculateDerivedFields(entrada, gastos, clientes);
-                      const resultadoComissao = (comissao - gastos).toFixed(2);
                       setForm((f) => ({ 
                         ...f, 
                         gastosGoogleAds: e.target.value,
                         ...derived,
-                        resultadoComissao
                       }));
                     }}
                     className="mt-1.5 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2.5 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-100"
@@ -742,44 +710,6 @@ export function DailyAdsScreen() {
                     className="mt-1.5 w-full rounded-lg border border-zinc-300 bg-zinc-100 px-3 py-2.5 cursor-not-allowed dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
                   />
                   <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">Calculado automaticamente</p>
-                </label>
-
-                <label className="block">
-                  <span className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
-                    Comissão (R$)
-                  </span>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={form.comissao}
-                    onChange={(e) => {
-                      const comissao = parseFloat(e.target.value) || 0;
-                      const gastos = parseFloat(form.gastosGoogleAds) || 0;
-                      const resultadoComissao = (comissao - gastos).toFixed(2);
-                      setForm((f) => ({ 
-                        ...f, 
-                        comissao: e.target.value,
-                        resultadoComissao
-                      }));
-                    }}
-                    className="mt-1.5 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2.5 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-100"
-                    placeholder="0,00"
-                  />
-                </label>
-
-                <label className="block">
-                  <span className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
-                    Resultado Comissão (R$)
-                  </span>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={form.resultadoComissao}
-                    disabled
-                    readOnly
-                    className="mt-1.5 w-full rounded-lg border border-zinc-300 bg-zinc-100 px-3 py-2.5 cursor-not-allowed dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
-                  />
-                  <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">Calculado automaticamente (Comissão - Gasto Google Ads)</p>
                 </label>
               </div>
 

@@ -141,6 +141,7 @@ export function DashboardScreen() {
       const endOfYesterday = new Date(cutoffDate);
       endOfYesterday.setDate(endOfYesterday.getDate() + 1);
       const filteredVendas = data.vendas.filter((v) => {
+        if (!v.dataVenda) return false;
         const vendaDate = new Date(v.dataVenda);
         return vendaDate >= cutoffDate && vendaDate < endOfYesterday;
       });
@@ -159,6 +160,7 @@ export function DashboardScreen() {
     }
 
     const filteredVendas = data.vendas.filter((v) => {
+      if (!v.dataVenda) return false;
       const vendaDate = new Date(v.dataVenda);
       return vendaDate >= cutoffDate;
     });
@@ -228,6 +230,7 @@ export function DashboardScreen() {
     const events: Array<{ type: "venda" | "ads"; date: string; description: string; value: number }> = [];
 
     filteredData.vendas.slice(0, 5).forEach((v) => {
+      if (!v.dataVenda) return;
       events.push({
         type: "venda",
         date: new Date(v.dataVenda).toISOString(),
