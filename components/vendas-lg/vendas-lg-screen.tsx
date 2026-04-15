@@ -581,7 +581,11 @@ export function VendasLgScreen() {
 
     const comissaoTotal = comissaoPaga + comissaoNaoPaga;
 
-    return { comissaoMedia, totalVendas: filteredVendas.length, comissaoPaga, comissaoNaoPaga, comissaoTotal };
+    const faturamentoParceiro = filteredVendas
+      .filter((v) => v.comissao && v.comissao > 0)
+      .reduce((acc, v) => acc + (totalVendaLg(v) - v.comissao), 0);
+
+    return { comissaoMedia, totalVendas: filteredVendas.length, comissaoPaga, comissaoNaoPaga, comissaoTotal, faturamentoParceiro };
   }, [vendas, filterParceiro, filterComissao, filterDataRange]);
 
   const listContent = useMemo(() => {
@@ -668,11 +672,18 @@ export function VendasLgScreen() {
                   </p>
                 ) : null}
                 {v.comissao ? (
-                  <p className="mt-1 text-xs">
-                    <span className={v.comissaoPaga ? "rounded-full bg-emerald-100 px-2 py-0.5 text-emerald-900 dark:bg-emerald-950/80 dark:text-emerald-200" : "rounded-full bg-amber-100 px-2 py-0.5 text-amber-900 dark:bg-amber-950/80 dark:text-amber-200"}>
-                      Comissão {v.comissaoPaga ? "✓ Paga" : "Pendente"} · {formatBRL(v.comissao)}
-                    </span>
-                  </p>
+                  <>
+                    <p className="mt-1 text-xs">
+                      <span className={v.comissaoPaga ? "rounded-full bg-emerald-100 px-2 py-0.5 text-emerald-900 dark:bg-emerald-950/80 dark:text-emerald-200" : "rounded-full bg-amber-100 px-2 py-0.5 text-amber-900 dark:bg-amber-950/80 dark:text-amber-200"}>
+                        Comissão {v.comissaoPaga ? "✓ Paga" : "Pendente"} · {formatBRL(v.comissao)}
+                      </span>
+                    </p>
+                    <p className="mt-1 text-xs">
+                      <span className="rounded-full bg-blue-100 px-2 py-0.5 text-blue-900 dark:bg-blue-950/80 dark:text-blue-200">
+                        Faturamento do Parceiro · {formatBRL(totalVendaLg(v) - v.comissao)}
+                      </span>
+                    </p>
+                  </>
                 ) : null}
               </div>
               <div className="flex flex-col items-end gap-2">
@@ -825,6 +836,15 @@ export function VendasLgScreen() {
           </p>
           <p className="mt-2 text-2xl font-bold text-amber-700 dark:text-amber-400">
             {formatBRL(stats.comissaoNaoPaga)}
+          </p>
+        </div>
+
+        <div className="rounded-xl border border-zinc-200 bg-blue-50 p-4 dark:border-zinc-800 dark:bg-blue-950/30">
+          <p className="text-sm font-medium text-zinc-600 dark:text-zinc-400">
+            Faturamento do Parceiro
+          </p>
+          <p className="mt-2 text-2xl font-bold text-blue-700 dark:text-blue-400">
+            {formatBRL(stats.faturamentoParceiro)}
           </p>
         </div>
       </div>

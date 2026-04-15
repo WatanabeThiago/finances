@@ -186,6 +186,25 @@ export function DashboardScreen() {
 
     const resultadoComissao = totalComissao - totalGastosAds;
     const roi = totalGastosAds > 0 ? ((totalVendas - totalGastosAds) / totalGastosAds) * 100 : 0;
+    
+    // Additional metrics
+    const vendaComComissao = filteredData.vendas.filter((v) => v.comissao && v.comissao > 0);
+    const comissaoMedia = vendaComComissao.length > 0 
+      ? vendaComComissao.reduce((acc, v) => acc + (v.comissao || 0), 0) / vendaComComissao.length
+      : 0;
+    
+    const comissaoPaga = filteredData.vendas
+      .filter((v) => v.comissaoPaga && v.comissao)
+      .reduce((acc, v) => acc + (v.comissao || 0), 0);
+    
+    const comissaoNaoPaga = totalComissao - comissaoPaga;
+    
+    const ticketMedio = filteredData.vendas.length > 0 ? totalVendas / filteredData.vendas.length : 0;
+    
+    const faturamentoParceiro = vendaComComissao.reduce((acc, v) => {
+      const subtotal = v.linhas.reduce((s, l) => s + l.preco * l.quantidade, 0);
+      return acc + (subtotal - (v.comissao || 0));
+    }, 0);
 
     return {
       totalVendas,
@@ -196,6 +215,12 @@ export function DashboardScreen() {
       avgCAC,
       roi,
       resultadoComissao,
+      comissaoMedia,
+      comissaoPaga,
+      comissaoNaoPaga,
+      ticketMedio,
+      faturamentoParceiro,
+      vendaComComissaoCount: vendaComComissao.length,
     };
   }, [filteredData]);
 
@@ -203,12 +228,11 @@ export function DashboardScreen() {
     const events: Array<{ type: "venda" | "ads"; date: string; description: string; value: number }> = [];
 
     filteredData.vendas.slice(0, 5).forEach((v) => {
-      const subtotal = v.linhas.reduce((s, l) => s + l.preco * l.quantidade, 0);
       events.push({
         type: "venda",
         date: new Date(v.dataVenda).toISOString(),
         description: `Venda para ${v.clienteNome}`,
-        value: subtotal,
+        value: v.comissao || 0,
       });
     });
 
@@ -290,12 +314,48 @@ export function DashboardScreen() {
         </div>
 
         {/* KPI Cards */}
-        <div className="mb-8 grid gap-4 md:grid-cols-2 lg:grid-cols-6">
+        <div className="mb-8 grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           <QuickStats
             label="Total de Vendas"
             value={formatBRL(stats.totalVendas)}
             change={`${stats.totalVendidas} venda${stats.totalVendidas !== 1 ? "s" : ""}`}
             color="green"
+          />
+          <QuickStats
+            label="Ticket Médio"
+            value={formatBRL(stats.ticketMedio)}
+            change={`${stats.totalVendidas} vendas`}
+            color="sky"
+          />
+          <QuickStats
+            label="Comissão Total"
+            value={formatBRL(stats.totalComissao)}
+            change={`${stats.vendaComComissaoCount} com comissão`}
+            color="violet"
+          />
+          <QuickStats
+            label="Comissão Média"
+            value={formatBRL(stats.comissaoMedia)}
+            change={`${stats.vendaComComissaoCount} venda${stats.vendaComComissaoCount !== 1 ? "s" : ""}`}
+            color="violet"
+          />
+          <QuickStats
+            label="Comissões Pagas"
+            value={formatBRL(stats.comissaoPaga)}
+            change="Pendentes de pagamento"
+            color="emerald"
+          />
+          <QuickStats
+            label="Comissões Não Pagas"
+            value={formatBRL(stats.comissaoNaoPaga)}
+            change="Aguardando pagamento"
+            color="amber"
+          />
+          <QuickStats
+            label="Faturamento do Parceiro"
+            value={formatBRL(stats.faturamentoParceiro)}
+            change="Receita parceira"
+            color="blue"
           />
           <QuickStats
             label="Gasto Google Ads"
@@ -304,26 +364,27 @@ export function DashboardScreen() {
             color="red"
           />
           <QuickStats
-            label="Resultado Comissão"
-            value={formatBRL(stats.resultadoComissao)}
-            change={stats.resultadoComissao >= 0 ? "Positivo" : "Negativo"}
-            color={stats.resultadoComissao >= 0 ? "green" : "red"}
-          />
-          <QuickStats
             label="CAC Médio"
             value={formatBRL(stats.avgCAC)}
             change="Custo por cliente"
             color="amber"
           />
           <QuickStats
-            label="Comissão"
-            value={formatBRL(stats.totalComissao)}
-            change={`${filteredData.vendas.filter((v) => v.comissao > 0).length} com comissão`}
-            color="violet"
+            label="Resultado Comissão"
+            value={formatBRL(stats.resultadoComissao)}
+            change={stats.resultadoComissao >= 0 ? "Positivo" : "Negativo"}
+            color={stats.resultadoComissao >= 0 ? "green" : "red"}
           />
           <QuickStats
-            label="Saúde"
+            label="ROI Ads"
+            value={`${stats.roi.toFixed(1)}%`}
+            change="Retorno do investimento"
+            color={stats.roi > 100 ? "green" : stats.roi > 0 ? "sky" : "red"}
+          />
+          <QuickStats
+            label="Saúde Geral"
             value={stats.roi > 100 ? "🚀 Ótima" : stats.roi > 0 ? "✅ Boa" : "⚠️ Atenção"}
+            change="Status do negócio"
             color="sky"
           />
         </div>
@@ -429,7 +490,7 @@ export function DashboardScreen() {
         </div>
 
         {/* Quick Links */}
-        <div className="mt-8 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <div className="mt-8 grid gap-4 md:grid-cols-2 lg:grid-cols-5">
           <a
             href="/vendas-lg"
             className="rounded-xl border border-zinc-200 bg-white p-4 transition-all hover:shadow-lg dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-zinc-700"
@@ -449,6 +510,17 @@ export function DashboardScreen() {
             <p className="font-semibold text-zinc-900 dark:text-white">Google Ads</p>
             <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1">
               Controlar gastos
+            </p>
+          </a>
+
+          <a
+            href="/locations"
+            className="rounded-xl border border-zinc-200 bg-white p-4 transition-all hover:shadow-lg dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-zinc-700"
+          >
+            <p className="text-2xl mb-2">🗺️</p>
+            <p className="font-semibold text-zinc-900 dark:text-white">Mapa de Calor</p>
+            <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1">
+              Localização das vendas
             </p>
           </a>
 

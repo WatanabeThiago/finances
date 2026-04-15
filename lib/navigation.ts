@@ -31,6 +31,11 @@ export const NAV_ITEMS: NavItem[] = [
     label: "Google Ads",
     description: "Controle de gastos diários",
   },
+  {
+    href: "/tracking",
+    label: "Tracking",
+    description: "Análise do funil de vendas",
+  },
 ];
 
 export function navItemActive(pathname: string, href: string): boolean {
