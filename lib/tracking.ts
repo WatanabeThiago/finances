@@ -58,6 +58,24 @@ export function extractUTMParams(url: string): Record<string, string> {
 }
 
 export type TrackingEvent = {
+  phone: string;
+  utm_source: any;
+  utm_medium: any;
+  venda: boolean;
+  utm_campaign: string;
+  utm_content: string;
+  utm_term: string;
+  gclid: any;
+  fbclid: any;
+  msclkid: any;
+  gad_source: string;
+  gad_campaignid: string;
+  gbraid: any;
+  keyword: any;
+  device: any;
+  matchtype: string;
+  network: any;
+  group: any;
   id: string;
   created_at: string;
   event: string;
