@@ -2,7 +2,14 @@
 
 import { useEffect, useMemo, useState, useRef } from "react";
 import { MapContainer, TileLayer, Popup, Marker, useMap } from "react-leaflet";
-import L from "leaflet";
+import dynamic from "next/dynamic";
+
+// Only import L on the client side
+let L: any;
+if (typeof window !== "undefined") {
+  L = require("leaflet");
+}
+
 import "leaflet/dist/leaflet.css";
 import type { VendaLg } from "@/lib/venda-lg";
 import { formatBRL } from "@/lib/money";
@@ -13,17 +20,19 @@ declare global {
   }
 }
 
-// Initialize Leaflet icon
-const DefaultIcon = L.icon({
-  iconUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png",
-  shadowUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png",
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-  popupAnchor: [1, -34],
-  shadowSize: [41, 41],
-});
+// Initialize Leaflet icon - only on client
+if (typeof window !== "undefined" && L) {
+  const DefaultIcon = L.icon({
+    iconUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png",
+    shadowUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png",
+    iconSize: [25, 41],
+    iconAnchor: [12, 41],
+    popupAnchor: [1, -34],
+    shadowSize: [41, 41],
+  });
 
-L.Marker.prototype.options.icon = DefaultIcon;
+  L.Marker.prototype.options.icon = DefaultIcon;
+}
 
 // Heat layer component
 function HeatLayer({ data }: { data: [number, number, number][] }) {
