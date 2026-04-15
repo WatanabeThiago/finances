@@ -1,0 +1,270 @@
+================================================================================
+                    API DE TRACKING - DOCUMENTACAO
+================================================================================
+
+URL Base: https://finances-beige.vercel.app/api/tracking
+
+================================================================================
+                          ENDPOINTS DISPONIVEIS
+================================================================================
+
+1. GET - RECUPERAR TODOS OS EVENTOS DE TRACKING
+================================================================================
+
+curl -X GET "https://finances-beige.vercel.app/api/tracking" \
+  -H "Content-Type: application/json"
+
+Resposta (200):
+[
+  {
+    "id": "uuid-string",
+    "created_at": "2026-04-15T10:30:00.000Z",
+    "event": "page_view",
+    "visitor_id": "c4c320a6-9d6d-43e5-83ad-baa68f321295",
+    "user_agent": "Mozilla/5.0...",
+    "is_bot": false,
+    "phone": "(11) 98765-4321",
+    "utm_source": "google",
+    "utm_medium": "cpc",
+    "utm_campaign": "promo_abril",
+    "utm_content": "v1",
+    "utm_term": "keyword",
+    "gclid": "CjwKCAj4e48Aaa1test...",
+    "fbclid": "IwAR3test123...",
+    "msclkid": "..."
+  }
+]
+
+
+2. POST - REGISTRAR NOVO EVENTO DE TRACKING
+================================================================================
+
+curl -X POST "https://finances-beige.vercel.app/api/tracking" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "created_at": "2026-04-15T10:30:00.000Z",
+    "event": "page_view",
+    "visitor_id": "c4c320a6-9d6d-43e5-83ad-baa68f321295",
+    "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+    "utm_source": "google",
+    "utm_medium": "cpc",
+    "utm_campaign": "promo_abril",
+    "utm_content": "banner_homepage",
+    "utm_term": "keyword_search",
+    "gclid": "CjwKCAj4e48Aaa1test...",
+    "fbclid": "IwAR3test123...",
+    "msclkid": "..."
+  }'
+
+Campos Obrigatorios:
+- created_at (string ISO 8601) - Data/hora do evento
+- event (string) - Tipo do evento (ex: page_view, form_submit, click)
+- visitor_id (string UUID) - ID unico do visitante
+- user_agent (string) - User agent do navegador/dispositivo
+
+Campos Opcionais (UTM Parameters):
+- utm_source (string) - Fonte do trafego (google, facebook, instagram, etc)
+- utm_medium (string) - Meio (cpc, social, email, organic)
+- utm_campaign (string) - Nome da campanha
+- utm_content (string) - Versao do anuncio
+- utm_term (string) - Palavra-chave
+- gclid (string) - Google Click ID (Google Ads)
+- fbclid (string) - Facebook Click ID (Facebook Ads)
+- msclkid (string) - Microsoft Click ID (Bing Ads)
+
+Resposta (201):
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "created_at": "2026-04-15T10:30:00.000Z",
+  "event": "page_view",
+  "visitor_id": "c4c320a6-9d6d-43e5-83ad-baa68f321295",
+  "user_agent": "Mozilla/5.0...",
+  "is_bot": false,
+  "utm_source": "google",
+  "utm_medium": "cpc",
+  "utm_campaign": "promo_abril",
+  "utm_content": "banner_homepage"
+}
+
+
+3. PATCH - ATUALIZAR TELEFONE DE UM EVENTO
+================================================================================
+
+curl -X PATCH "https://finances-beige.vercel.app/api/tracking/{id}" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "phone": "(11) 98765-4321"
+  }'
+
+Resposta (200):
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "phone": "(11) 98765-4321",
+  "updated_at": "2026-04-15T10:35:00.000Z"
+}
+
+
+================================================================================
+                      EXEMPLOS PRATICOS DE EVENTOS
+================================================================================
+
+EXEMPLO 1: PAGE VIEW (Visualizacao de Pagina)
+================================================================================
+
+curl -X POST "https://finances-beige.vercel.app/api/tracking" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "created_at": "2026-04-15T10:30:00.000Z",
+    "event": "page_view",
+    "visitor_id": "550e8400-e29b-41d4-a716-446655440000",
+    "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+    "utm_source": "instagram",
+    "utm_medium": "social",
+    "utm_campaign": "primavera_2026"
+  }'
+
+
+EXEMPLO 2: FORM SUBMIT (Envio de Formulario)
+================================================================================
+
+curl -X POST "https://finances-beige.vercel.app/api/tracking" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "created_at": "2026-04-15T10:30:00.000Z",
+    "event": "form_submit",
+    "visitor_id": "550e8400-e29b-41d4-a716-446655440000",
+    "user_agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X)",
+    "utm_source": "google",
+    "utm_medium": "cpc",
+    "utm_campaign": "conversao_abril",
+    "gclid": "CjwKCAj4e48Aaa1test..."
+  }'
+
+
+EXEMPLO 3: CLICK (Clique em Link)
+================================================================================
+
+curl -X POST "https://finances-beige.vercel.app/api/tracking" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "created_at": "2026-04-15T10:30:00.000Z",
+    "event": "click",
+    "visitor_id": "550e8400-e29b-41d4-a716-446655440000",
+    "user_agent": "Mozilla/5.0 (Linux; Android 10)",
+    "utm_source": "facebook",
+    "utm_medium": "social",
+    "fbclid": "IwAR3test123..."
+  }'
+
+
+================================================================================
+                        BOT DETECTION AUTOMATICO
+================================================================================
+
+A API detecta automaticamente bots usando os seguintes padroes:
+- AdsBot
+- Googlebot
+- crawler
+- spider
+- curl
+- wget
+- python
+- java
+- Bing
+- Baidu
+- Yandex
+- DuckDuckGo
+- Facebook
+- Twitter
+- LinkedIn
+- WhatsApp
+- Telegram
+
+Campo 'is_bot' sempre incluso na resposta
+Valor: true para bots, false para visitantes reais
+
+
+================================================================================
+                        HEADERS RECOMENDADOS
+================================================================================
+
+curl -X POST "https://finances-beige.vercel.app/api/tracking" \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json" \
+  -H "User-Agent: MyBot/1.0" \
+  -d '{...}'
+
+
+================================================================================
+                    DADOS RETORNADOS (EXEMPLO COMPLETO)
+================================================================================
+
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "created_at": "2026-04-15T10:30:00.000Z",
+  "event": "page_view",
+  "visitor_id": "c4c320a6-9d6d-43e5-83ad-baa68f321295",
+  "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+  "is_bot": false,
+  "phone": "(11) 98765-4321",
+  "utm_source": "google",
+  "utm_medium": "cpc",
+  "utm_campaign": "promo_abril",
+  "utm_content": "banner_v1",
+  "utm_term": "keyword_search",
+  "gclid": "CjwKCAj4e48Aaa1test...",
+  "fbclid": "IwAR3test123...",
+  "msclkid": null
+}
+
+
+================================================================================
+                            STATUS CODES
+================================================================================
+
+200 - OK - Sucesso na leitura
+201 - Created - Evento registrado com sucesso
+400 - Bad Request - Campos obrigatorios faltando
+404 - Not Found - Evento nao encontrado
+500 - Internal Server Error - Erro no servidor
+
+
+================================================================================
+                    EXEMPLO EM JAVASCRIPT/NODE.JS
+================================================================================
+
+// Registrar evento
+async function trackEvent(eventData) {
+  const response = await fetch('https://finances-beige.vercel.app/api/tracking', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      created_at: new Date().toISOString(),
+      event: eventData.event,
+      visitor_id: eventData.visitorId,
+      user_agent: navigator.userAgent,
+      utm_source: new URLSearchParams(location.search).get('utm_source'),
+      utm_medium: new URLSearchParams(location.search).get('utm_medium'),
+      utm_campaign: new URLSearchParams(location.search).get('utm_campaign'),
+      utm_content: new URLSearchParams(location.search).get('utm_content'),
+      utm_term: new URLSearchParams(location.search).get('utm_term'),
+      gclid: new URLSearchParams(location.search).get('gclid'),
+      fbclid: new URLSearchParams(location.search).get('fbclid'),
+    })
+  });
+  
+  return response.json();
+}
+
+// Usar
+trackEvent({
+  event: 'page_view',
+  visitorId: 'seu-uuid-aqui'
+});
+
+
+================================================================================
+                              FIM DA DOCUMENTACAO
+================================================================================

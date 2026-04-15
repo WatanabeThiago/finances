@@ -1,5 +1,12 @@
 import { isBot } from "@/lib/tracking";
 
+// Headers CORS para permitir requisições cross-origin
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, PATCH, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type",
+};
+
 // Mock data - você vai conectar isso ao banco depois
 const mockEvents = [
   {
@@ -71,10 +78,13 @@ export async function GET() {
       }))
       .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
-    return Response.json(events);
+    return Response.json(events, { headers: corsHeaders });
   } catch (error) {
     console.error("Erro ao buscar eventos:", error);
-    return Response.json({ error: "Falha ao buscar eventos" }, { status: 500 });
+    return Response.json(
+      { error: "Falha ao buscar eventos" },
+      { status: 500, headers: corsHeaders }
+    );
   }
 }
 
@@ -88,7 +98,7 @@ export async function POST(request: Request) {
     if (!created_at || !event || !visitor_id || !user_agent) {
       return Response.json(
         { error: "Campos obrigatórios faltando" },
-        { status: 400 }
+        { status: 400, headers: corsHeaders }
       );
     }
 
@@ -109,12 +119,22 @@ export async function POST(request: Request) {
     // TODO: Salvar no banco de dados
     console.log("Evento de tracking registrado:", trackingEvent);
 
-    return Response.json(trackingEvent, { status: 201 });
+    return Response.json(trackingEvent, { 
+      status: 201, 
+      headers: corsHeaders 
+    });
   } catch (error) {
     console.error("Erro ao processar evento:", error);
     return Response.json(
       { error: "Falha ao processar evento" },
-      { status: 500 }
+      { status: 500, headers: corsHeaders }
     );
   }
+}
+
+export async function OPTIONS() {
+  return new Response(null, {
+    status: 200,
+    headers: corsHeaders,
+  });
 }
