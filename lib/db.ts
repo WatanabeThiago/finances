@@ -191,13 +191,11 @@ export async function initializeDatabase() {
     );
 
     await query(
-      `CREATE TABLE IF NOT EXISTS public."Tracking" (
+      `CREATE TABLE IF NOT EXISTS public."TrackingSession" (
         id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-        "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        event TEXT NOT NULL,
-        "visitorId" TEXT NOT NULL,
-        "userAgent" TEXT NOT NULL,
+        "visitorId" TEXT NOT NULL UNIQUE,
         phone TEXT,
+        venda BOOLEAN DEFAULT false,
         "utmSource" TEXT,
         "utmMedium" TEXT,
         "utmCampaign" TEXT,
@@ -205,9 +203,51 @@ export async function initializeDatabase() {
         "utmTerm" TEXT,
         gclid TEXT,
         fbclid TEXT,
-        "isBot" BOOLEAN DEFAULT false,
+        msclkid TEXT,
+        gad_source TEXT,
+        gad_campaignid TEXT,
+        gbraid TEXT,
+        keyword TEXT,
+        device TEXT,
+        matchtype TEXT,
+        network TEXT,
+        "group" TEXT,
+        "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         "updatedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )`
+    );
+
+    await query(
+      `CREATE TABLE IF NOT EXISTS public."Tracking" (
+        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        event TEXT NOT NULL,
+        "visitorId" TEXT NOT NULL,
+        "userAgent" TEXT NOT NULL,
+        "isBot" BOOLEAN DEFAULT false
+      )`
+    );
+
+    await query(
+      `ALTER TABLE public."TrackingSession" 
+       ADD COLUMN IF NOT EXISTS phone TEXT,
+       ADD COLUMN IF NOT EXISTS venda BOOLEAN DEFAULT false,
+       ADD COLUMN IF NOT EXISTS "utmSource" TEXT,
+       ADD COLUMN IF NOT EXISTS "utmMedium" TEXT,
+       ADD COLUMN IF NOT EXISTS "utmCampaign" TEXT,
+       ADD COLUMN IF NOT EXISTS "utmContent" TEXT,
+       ADD COLUMN IF NOT EXISTS "utmTerm" TEXT,
+       ADD COLUMN IF NOT EXISTS gclid TEXT,
+       ADD COLUMN IF NOT EXISTS fbclid TEXT,
+       ADD COLUMN IF NOT EXISTS msclkid TEXT,
+       ADD COLUMN IF NOT EXISTS gad_source TEXT,
+       ADD COLUMN IF NOT EXISTS gad_campaignid TEXT,
+       ADD COLUMN IF NOT EXISTS gbraid TEXT,
+       ADD COLUMN IF NOT EXISTS keyword TEXT,
+       ADD COLUMN IF NOT EXISTS device TEXT,
+       ADD COLUMN IF NOT EXISTS matchtype TEXT,
+       ADD COLUMN IF NOT EXISTS network TEXT,
+       ADD COLUMN IF NOT EXISTS "group" TEXT`
     );
 
     console.log("Database initialized successfully!");

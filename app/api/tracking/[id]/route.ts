@@ -15,27 +15,83 @@ export async function PATCH(
   try {
     const { id } = await context.params;
     const body = await request.json();
-    const { phone } = body;
 
-    if (!phone || !phone.trim()) {
+    // Monta a query dinamicamente baseado no campos enviados
+    const allowedFields = [
+      "phone",
+      "venda",
+      "utm_source",
+      "utm_medium",
+      "utm_campaign",
+      "utm_content",
+      "utm_term",
+      "gclid",
+      "fbclid",
+      "msclkid",
+      "gad_source",
+      "gad_campaignid",
+      "gbraid",
+      "keyword",
+      "device",
+      "matchtype",
+      "network",
+      "group",
+    ];
+
+    const fieldMapping: Record<string, string> = {
+      phone: "phone",
+      venda: "venda",
+      utm_source: '"utmSource"',
+      utm_medium: '"utmMedium"',
+      utm_campaign: '"utmCampaign"',
+      utm_content: '"utmContent"',
+      utm_term: '"utmTerm"',
+      gclid: "gclid",
+      fbclid: "fbclid",
+      msclkid: "msclkid",
+      gad_source: "gad_source",
+      gad_campaignid: "gad_campaignid",
+      gbraid: "gbraid",
+      keyword: "keyword",
+      device: "device",
+      matchtype: "matchtype",
+      network: "network",
+      group: '"group"',
+    };
+
+    const updateClauses: string[] = [];
+    const params: unknown[] = [];
+    let paramIndex = 1;
+
+    // Construir SET clauses
+    Object.entries(body).forEach(([key, value]) => {
+      if (allowedFields.includes(key)) {
+        updateClauses.push(`${fieldMapping[key]} = $${paramIndex}`);
+        params.push(value);
+        paramIndex++;
+      }
+    });
+
+    if (updateClauses.length === 0) {
       return Response.json(
-        { error: "Telefone requerido" },
+        { error: "Nenhum campo para atualizar" },
         { status: 400, headers: corsHeaders }
       );
     }
 
-    // Atualizar no banco de dados
+    updateClauses.push(`"updatedAt" = CURRENT_TIMESTAMP`);
+    params.push(id);
+
+    // ID é visitor_id ou event id? Vou tentar primeiro como visitor_id na sessão
     const result = await query(
-      `UPDATE public."Tracking"
-       SET phone = $1, "updatedAt" = CURRENT_TIMESTAMP
-       WHERE id = $2
+      `UPDATE public."TrackingSession"
+       SET ${updateClauses.join(", ")}
+       WHERE "visitorId" = $${paramIndex}
        RETURNING 
          id,
-         "createdAt" as created_at,
-         event,
          "visitorId" as visitor_id,
-         "userAgent" as user_agent,
          phone,
+         venda,
          "utmSource" as utm_source,
          "utmMedium" as utm_medium,
          "utmCampaign" as utm_campaign,
@@ -43,24 +99,33 @@ export async function PATCH(
          "utmTerm" as utm_term,
          gclid,
          fbclid,
-         "isBot" as is_bot,
+         msclkid,
+         gad_source,
+         gad_campaignid,
+         gbraid,
+         keyword,
+         device,
+         matchtype,
+         network,
+         "group",
+         "createdAt" as created_at,
          "updatedAt" as updated_at`,
-      [phone.trim(), id]
+      params
     );
 
     if (!result.length) {
       return Response.json(
-        { error: "Evento não encontrado" },
+        { error: "Sessão não encontrada" },
         { status: 404, headers: corsHeaders }
       );
     }
 
-    console.log(`Atualizado telefone do evento ${id}:`, phone);
+    console.log(`Atualizada sessão:`, body);
     return Response.json(result[0], { headers: corsHeaders });
   } catch (error) {
-    console.error("Erro ao atualizar telefone:", error);
+    console.error("Erro ao atualizar sessão:", error);
     return Response.json(
-      { error: "Falha ao atualizar telefone" },
+      { error: "Falha ao atualizar sessão" },
       { status: 500, headers: corsHeaders }
     );
   }

@@ -28,6 +28,7 @@ export function TrackingScreen() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingPhone, setEditingPhone] = useState("");
   const [savingId, setSavingId] = useState<string | null>(null);
+  const [togglingVendaId, setTogglingVendaId] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchEvents = async () => {
@@ -47,20 +48,35 @@ export function TrackingScreen() {
     fetchEvents();
   }, []);
 
+  const handleRefresh = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch("/api/tracking");
+      if (!response.ok) throw new Error("Falha ao carregar eventos");
+      const data = await response.json();
+      setEvents(data);
+    } catch (err) {
+      console.error("Erro ao carregar eventos:", err);
+      alert("Erro ao recarregar eventos");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleEditPhone = (event: TrackingEvent) => {
-    setEditingId(event.id);
+    setEditingId(event.visitor_id);
     setEditingPhone(event.phone || "");
   };
 
-  const handleSavePhone = async (eventId: string) => {
+  const handleSavePhone = async (visitorId: string) => {
     if (!editingPhone.trim()) {
       setEditingId(null);
       return;
     }
 
-    setSavingId(eventId);
+    setSavingId(visitorId);
     try {
-      const response = await fetch(`/api/tracking/${eventId}`, {
+      const response = await fetch(`/api/tracking/${visitorId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ phone: editingPhone }),
@@ -68,10 +84,10 @@ export function TrackingScreen() {
 
       if (!response.ok) throw new Error("Falha ao salvar telefone");
 
-      // Atualizar evento localmente
+      // Atualizar eventos localmente
       setEvents((prev) =>
         prev.map((e) =>
-          e.id === eventId ? { ...e, phone: editingPhone } : e
+          e.visitor_id === visitorId ? { ...e, phone: editingPhone } : e
         )
       );
       setEditingId(null);
@@ -81,6 +97,31 @@ export function TrackingScreen() {
       alert("Erro ao salvar telefone");
     } finally {
       setSavingId(null);
+    }
+  };
+
+  const handleToggleVenda = async (visitorId: string, currentVenda: boolean) => {
+    setTogglingVendaId(visitorId);
+    try {
+      const response = await fetch(`/api/tracking/${visitorId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ venda: !currentVenda }),
+      });
+
+      if (!response.ok) throw new Error("Falha ao atualizar venda");
+
+      // Atualizar eventos localmente (todos do mesmo visitor)
+      setEvents((prev) =>
+        prev.map((e) =>
+          e.visitor_id === visitorId ? { ...e, venda: !currentVenda } : e
+        )
+      );
+    } catch (err) {
+      console.error("Erro ao atualizar venda:", err);
+      alert("Erro ao atualizar venda");
+    } finally {
+      setTogglingVendaId(null);
     }
   };
 
@@ -174,6 +215,31 @@ export function TrackingScreen() {
         </p>
       </div>
 
+      {/* Refresh Button */}
+      <div className="flex justify-end">
+        <button
+          onClick={handleRefresh}
+          disabled={loading}
+          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          title="Recarregar dados"
+        >
+          <svg
+            className={`w-4 h-4 ${loading ? "animate-spin" : ""}`}
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+            />
+          </svg>
+          Atualizar
+        </button>
+      </div>
+
       {/* Stats Cards */}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
         <StatCard
@@ -208,170 +274,247 @@ export function TrackingScreen() {
         />
       </div>
 
-      {/* Data Table */}
-      <div className="rounded-xl border border-zinc-200 bg-white overflow-x-auto dark:border-zinc-800 dark:bg-zinc-950">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-zinc-200 dark:border-zinc-800">
-              <th className="px-4 py-3 text-left font-semibold text-zinc-900 dark:text-white">
-                Data/Hora
-              </th>
-              <th className="px-4 py-3 text-left font-semibold text-zinc-900 dark:text-white">
-                Evento
-              </th>
-              <th className="px-4 py-3 text-left font-semibold text-zinc-900 dark:text-white">
-                Visitor ID
-              </th>
-              <th className="px-4 py-3 text-left font-semibold text-zinc-900 dark:text-white">
-                Telefone
-              </th>
-              <th className="px-4 py-3 text-left font-semibold text-zinc-900 dark:text-white">
-                User Agent
-              </th>
-              <th className="px-4 py-3 text-left font-semibold text-zinc-900 dark:text-white">
-                Fonte (UTM)
-              </th>
-              <th className="px-4 py-3 text-left font-semibold text-zinc-900 dark:text-white">
-                Meio (UTM)
-              </th>
-              <th className="px-4 py-3 text-left font-semibold text-zinc-900 dark:text-white">
-                Campanha (UTM)
-              </th>
-              <th className="px-4 py-3 text-left font-semibold text-zinc-900 dark:text-white">
-                Conteúdo (UTM)
-              </th>
-              <th className="px-4 py-3 text-left font-semibold text-zinc-900 dark:text-white">
-                Palavra (UTM)
-              </th>
-              <th className="px-4 py-3 text-left font-semibold text-zinc-900 dark:text-white">
-                GCLID
-              </th>
-              <th className="px-4 py-3 text-left font-semibold text-zinc-900 dark:text-white">
-                FBCLID
-              </th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
-            {groupedVisitors.length > 0 ? (
-              groupedVisitors.map(([visitorId, eventList]) => (
-                <Fragment key={visitorId}>
-                  {/* Header do grupo */}
-                  <tr className="bg-zinc-100 dark:bg-zinc-800">
-                    <td colSpan={11} className="px-4 py-2 font-semibold text-zinc-900 dark:text-white text-sm">
-                      👤 {visitorId.slice(0, 8)}...{visitorId.slice(-4)} | {eventList.length} evento{eventList.length !== 1 ? "s" : ""} {eventList.some((e) => e.phone) && `| 📞 ${eventList.find((e) => e.phone)?.phone}`}
-                    </td>
-                  </tr>
-                  {/* Eventos do grupo */}
-                  {eventList.map((event) => (
-                    <tr
-                      key={event.id}
-                      className="hover:bg-zinc-50 dark:hover:bg-zinc-900/50 transition-colors"
-                    >
-                      <td className="px-4 py-3 text-zinc-900 dark:text-zinc-100 whitespace-nowrap text-xs">
-                        {new Date(event.created_at).toLocaleString("pt-BR")}
+      {/* Sessions Table */}
+      <div className="rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="sticky top-0 z-20">
+              <tr className="border-b border-zinc-200 dark:border-zinc-800 bg-zinc-900 dark:bg-zinc-950">
+                <th className="px-4 py-3 text-left font-semibold text-white whitespace-nowrap sticky left-0 z-30 bg-zinc-900 dark:bg-zinc-950">
+                  📅 Data/Hora
+                </th>
+                <th className="px-4 py-3 text-left font-semibold text-white whitespace-nowrap">
+                  Eventos
+                </th>
+                <th className="px-4 py-3 text-center font-semibold text-white whitespace-nowrap">
+                  Venda
+                </th>
+                <th className="px-4 py-3 text-left font-semibold text-white whitespace-nowrap">
+                  📞 Telefone
+                </th>
+                <th className="px-4 py-3 text-left font-semibold text-white whitespace-nowrap">
+                  🎯 Fonte (UTM)
+                </th>
+                <th className="px-4 py-3 text-left font-semibold text-white whitespace-nowrap">
+                  📊 Meio (UTM)
+                </th>
+                <th className="px-4 py-3 text-left font-semibold text-white whitespace-nowrap">
+                  🎪 Campanha (UTM)
+                </th>
+                <th className="px-4 py-3 text-left font-semibold text-white whitespace-nowrap">
+                  📝 Conteúdo (UTM)
+                </th>
+                <th className="px-4 py-3 text-left font-semibold text-white whitespace-nowrap">
+                  🔍 Palavra (UTM)
+                </th>
+                <th className="px-4 py-3 text-left font-semibold text-white whitespace-nowrap">
+                  🔗 GCLID
+                </th>
+                <th className="px-4 py-3 text-left font-semibold text-white whitespace-nowrap">
+                  📘 FBCLID
+                </th>
+                <th className="px-4 py-3 text-left font-semibold text-white whitespace-nowrap">
+                  🏷️ MSCLKID
+                </th>
+                <th className="px-4 py-3 text-left font-semibold text-white whitespace-nowrap">
+                  🌐 GAD Source
+                </th>
+                <th className="px-4 py-3 text-left font-semibold text-white whitespace-nowrap">
+                  🔢 Campaign ID
+                </th>
+                <th className="px-4 py-3 text-left font-semibold text-white whitespace-nowrap">
+                  📱 GBRAID
+                </th>
+                <th className="px-4 py-3 text-left font-semibold text-white whitespace-nowrap">
+                  🔍 Keyword
+                </th>
+                <th className="px-4 py-3 text-left font-semibold text-white whitespace-nowrap">
+                  📱 Device
+                </th>
+                <th className="px-4 py-3 text-left font-semibold text-white whitespace-nowrap">
+                  🎯 Match Type
+                </th>
+                <th className="px-4 py-3 text-left font-semibold text-white whitespace-nowrap">
+                  🌍 Network
+                </th>
+                <th className="px-4 py-3 text-left font-semibold text-white whitespace-nowrap">
+                  📍 Grupo
+                </th>
+                <th className="px-4 py-3 text-left font-semibold text-white whitespace-nowrap">
+                  Visitor ID
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
+              {groupedVisitors.length > 0 ? (
+                groupedVisitors.map(([visitorId, eventList]) => {
+                  const firstEvent = eventList[0];
+                  return (
+                    <tr key={visitorId} className="hover:bg-zinc-50 dark:hover:bg-zinc-900/30 transition-colors">
+                      <td className="px-4 py-3 text-zinc-900 dark:text-zinc-100 whitespace-nowrap text-xs sticky left-0 z-10 bg-white dark:bg-zinc-950">
+                        {new Date(firstEvent?.created_at || '').toLocaleString("pt-BR")}
                       </td>
-                      <td className="px-4 py-3 text-zinc-900 dark:text-zinc-100">
-                        <span className="inline-block rounded-full bg-sky-100 px-2.5 py-0.5 text-sky-900 dark:bg-sky-950 dark:text-sky-200">
-                          {event.event}
+                      <td className="px-4 py-3 text-zinc-900 dark:text-zinc-100 whitespace-nowrap">
+                        <span className="inline-block bg-sky-100 dark:bg-sky-900/30 text-sky-900 dark:text-sky-200 px-2 py-1 rounded text-xs font-medium">
+                          {eventList.length}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-zinc-900 dark:text-zinc-100">
-                        {editingId === event.id ? (
-                          <div className="flex gap-2">
-                        <input
-                          type="tel"
-                          value={editingPhone}
-                          onChange={(e) => setEditingPhone(e.target.value)}
-                          placeholder="(11) 99999-9999"
-                          className="px-2 py-1 rounded border border-zinc-300 text-sm dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
-                          autoFocus
-                        />
+                      <td className="px-4 py-3 text-center whitespace-nowrap">
                         <button
-                          onClick={() => handleSavePhone(event.id)}
-                          disabled={savingId === event.id}
-                          className="text-green-600 hover:text-green-700 dark:text-green-400 dark:hover:text-green-300 disabled:opacity-50"
-                          title="Salvar"
+                          onClick={() => handleToggleVenda(visitorId, firstEvent?.venda || false)}
+                          disabled={togglingVendaId === visitorId}
+                          className="text-2xl transition-transform hover:scale-110 disabled:opacity-50 inline-block"
                         >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                          </svg>
+                          {firstEvent?.venda ? "✅" : "❌"}
                         </button>
-                        <button
-                          onClick={() => setEditingId(null)}
-                          className="text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
-                          title="Cancelar"
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                          </svg>
-                        </button>
-                      </div>
-                        ) : (
-                          <div className="flex items-center gap-2 group">
-                            <span className="text-zinc-900 dark:text-zinc-100 text-sm">
-                              {event.phone ? event.phone : "—"}
-                            </span>
+                      </td>
+                      <td className="px-4 py-3 text-zinc-900 dark:text-zinc-100 whitespace-nowrap">
+                        {editingId === visitorId ? (
+                          <div className="flex gap-1">
+                            <input
+                              type="tel"
+                              value={editingPhone}
+                              onChange={(e) => setEditingPhone(e.target.value)}
+                              placeholder="(11) 99999-9999"
+                              className="px-2 py-1 rounded border border-zinc-300 text-sm dark:border-zinc-600 dark:bg-zinc-700 dark:text-zinc-100 w-40"
+                              autoFocus
+                            />
                             <button
-                              onClick={() => handleEditPhone(event)}
-                              className="opacity-0 group-hover:opacity-100 transition-opacity text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
-                              title="Editar telefone"
+                              onClick={() => handleSavePhone(visitorId)}
+                              disabled={savingId === visitorId}
+                              className="text-green-600 hover:text-green-700 dark:text-green-400 disabled:opacity-50"
                             >
                               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                              </svg>
+                            </button>
+                            <button
+                              onClick={() => setEditingId(null)}
+                              className="text-red-600 hover:text-red-700 dark:text-red-400"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                               </svg>
                             </button>
                           </div>
+                        ) : (
+                          <div className="flex items-center gap-2 group">
+                            <span className="text-sm font-mono">
+                              {firstEvent?.phone ? firstEvent.phone : "—"}
+                            </span>
+                            {!editingId && (
+                              <button
+                                onClick={() => handleEditPhone(firstEvent)}
+                                className="opacity-0 group-hover:opacity-100 transition-opacity text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                </svg>
+                              </button>
+                            )}
+                          </div>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400 max-w-xs truncate text-xs">
-                        {event.user_agent}
-                      </td>
-                      <td className="px-4 py-3 text-zinc-900 dark:text-zinc-100">
-                        {event.utm_source ? (
-                          <span className="inline-block rounded bg-violet-100 px-2 py-1 text-xs font-medium text-violet-900 dark:bg-violet-950 dark:text-violet-200">
-                            {event.utm_source}
+                      <td className="px-4 py-3 text-zinc-900 dark:text-zinc-100 whitespace-nowrap text-xs">
+                        {firstEvent?.utm_source ? (
+                          <span className="inline-block bg-violet-100 dark:bg-violet-900/30 text-violet-900 dark:text-violet-200 px-2 py-1 rounded">
+                            {firstEvent.utm_source}
                           </span>
                         ) : (
                           <span className="text-zinc-400">—</span>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-zinc-900 dark:text-zinc-100">
-                        {event.utm_medium ? (
-                          <span className="inline-block rounded bg-amber-100 px-2 py-1 text-xs font-medium text-amber-900 dark:bg-amber-950 dark:text-amber-200">
-                            {event.utm_medium}
+                      <td className="px-4 py-3 text-zinc-900 dark:text-zinc-100 whitespace-nowrap text-xs">
+                        {firstEvent?.utm_medium ? (
+                          <span className="inline-block bg-amber-100 dark:bg-amber-900/30 text-amber-900 dark:text-amber-200 px-2 py-1 rounded">
+                            {firstEvent.utm_medium}
                           </span>
                         ) : (
                           <span className="text-zinc-400">—</span>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-zinc-900 dark:text-zinc-100 text-xs">
-                        {event.utm_campaign || "—"}
+                      <td className="px-4 py-3 text-zinc-900 dark:text-zinc-100 whitespace-nowrap text-xs">
+                        {firstEvent?.utm_campaign || "—"}
                       </td>
-                      <td className="px-4 py-3 text-zinc-900 dark:text-zinc-100 text-xs">
-                        {event.utm_content || "—"}
+                      <td className="px-4 py-3 text-zinc-900 dark:text-zinc-100 whitespace-nowrap text-xs">
+                        {firstEvent?.utm_content || "—"}
                       </td>
-                      <td className="px-4 py-3 text-zinc-900 dark:text-zinc-100 text-xs">
-                        {event.utm_term || "—"}
+                      <td className="px-4 py-3 text-zinc-900 dark:text-zinc-100 whitespace-nowrap text-xs">
+                        {firstEvent?.utm_term || "—"}
                       </td>
-                      <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400 font-mono text-xs">
-                        {event.gclid ? event.gclid.slice(0, 8) + "..." : "—"}
+                      <td className="px-4 py-3 text-zinc-900 dark:text-zinc-100 whitespace-nowrap text-xs font-mono">
+                        {firstEvent?.gclid ? firstEvent.gclid.slice(0, 12) + "..." : "—"}
                       </td>
-                      <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400 font-mono text-xs">
-                        {event.fbclid ? event.fbclid.slice(0, 8) + "..." : "—"}
+                      <td className="px-4 py-3 text-zinc-900 dark:text-zinc-100 whitespace-nowrap text-xs font-mono">
+                        {firstEvent?.fbclid ? firstEvent.fbclid.slice(0, 12) + "..." : "—"}
+                      </td>
+                      <td className="px-4 py-3 text-zinc-900 dark:text-zinc-100 whitespace-nowrap text-xs font-mono">
+                        {firstEvent?.msclkid ? firstEvent.msclkid.slice(0, 12) + "..." : "—"}
+                      </td>
+                      <td className="px-4 py-3 text-zinc-900 dark:text-zinc-100 whitespace-nowrap text-xs">
+                        {firstEvent?.gad_source || "—"}
+                      </td>
+                      <td className="px-4 py-3 text-zinc-900 dark:text-zinc-100 whitespace-nowrap text-xs">
+                        {firstEvent?.gad_campaignid || "—"}
+                      </td>
+                      <td className="px-4 py-3 text-zinc-900 dark:text-zinc-100 whitespace-nowrap text-xs font-mono">
+                        {firstEvent?.gbraid ? firstEvent.gbraid.slice(0, 12) + "..." : "—"}
+                      </td>
+                      <td className="px-4 py-3 text-zinc-900 dark:text-zinc-100 whitespace-nowrap text-xs font-semibold">
+                        {firstEvent?.keyword ? (
+                          <span className="inline-block bg-pink-100 dark:bg-pink-900/30 text-pink-900 dark:text-pink-200 px-2 py-1 rounded">
+                            {firstEvent.keyword}
+                          </span>
+                        ) : (
+                          <span className="text-zinc-400">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-zinc-900 dark:text-zinc-100 whitespace-nowrap text-xs">
+                        {firstEvent?.device ? (
+                          <span className="inline-block bg-slate-100 dark:bg-slate-900/30 text-slate-900 dark:text-slate-200 px-2 py-1 rounded">
+                            {firstEvent.device === 'm' ? '📱 Mobile' : firstEvent.device === 't' ? '🖥️ Desktop' : firstEvent.device === 'c' ? '📱 Tablet' : firstEvent.device}
+                          </span>
+                        ) : (
+                          <span className="text-zinc-400">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-zinc-900 dark:text-zinc-100 whitespace-nowrap text-xs">
+                        {firstEvent?.matchtype || "—"}
+                      </td>
+                      <td className="px-4 py-3 text-zinc-900 dark:text-zinc-100 whitespace-nowrap text-xs">
+                        {firstEvent?.network ? (
+                          <span className="inline-block bg-blue-100 dark:bg-blue-900/30 text-blue-900 dark:text-blue-200 px-2 py-1 rounded">
+                            {firstEvent.network === 'g' ? '🔍 Search' : firstEvent.network === 's' ? '🔄 Partners' : firstEvent.network === 'd' ? '📺 Display' : firstEvent.network}
+                          </span>
+                        ) : (
+                          <span className="text-zinc-400">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-zinc-900 dark:text-zinc-100 whitespace-nowrap text-xs font-semibold">
+                        {firstEvent?.group ? (
+                          <span className="inline-block bg-indigo-100 dark:bg-indigo-900/30 text-indigo-900 dark:text-indigo-200 px-2 py-1 rounded">
+                            📍 {firstEvent.group}
+                          </span>
+                        ) : (
+                          <span className="text-zinc-400">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 font-mono text-xs text-zinc-600 dark:text-zinc-400 whitespace-nowrap">
+                        {visitorId.slice(0, 8)}...{visitorId.slice(-4)}
                       </td>
                     </tr>
-                  ))}
-                </Fragment>
-              ))
-            ) : (
-              <tr>
-                <td colSpan={12} className="px-4 py-8 text-center text-zinc-500 dark:text-zinc-400">
-                  Nenhum evento de visitante real registrado ainda
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+                  );
+                })
+              ) : (
+                <tr>
+                  <td colSpan={21} className="px-4 py-8 text-center text-zinc-500 dark:text-zinc-400">
+                    Nenhuma sessão registrada ainda
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {realVisitors.length > 0 && (

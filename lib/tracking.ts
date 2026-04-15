@@ -64,7 +64,13 @@ export type TrackingEvent = {
   visitor_id: string;
   user_agent: string;
   is_bot: boolean;
+};
+
+export type TrackingSession = {
+  id: string;
+  visitor_id: string;
   phone?: string;
+  venda?: boolean;
   utm_source?: string;
   utm_medium?: string;
   utm_campaign?: string;
@@ -73,4 +79,14 @@ export type TrackingEvent = {
   gclid?: string;
   fbclid?: string;
   msclkid?: string;
+  gad_source?: string;
+  gad_campaignid?: string;
+  gbraid?: string;
+  keyword?: string;
+  device?: string;
+  matchtype?: string;
+  network?: string;
+  group?: string;
+  created_at?: string;
+  updated_at?: string;
 };
