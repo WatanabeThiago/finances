@@ -190,6 +190,26 @@ export async function initializeDatabase() {
        ADD COLUMN IF NOT EXISTS "resultadoComissao" DECIMAL(10, 2) DEFAULT 0`
     );
 
+    await query(
+      `CREATE TABLE IF NOT EXISTS public."Tracking" (
+        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        event TEXT NOT NULL,
+        "visitorId" TEXT NOT NULL,
+        "userAgent" TEXT NOT NULL,
+        phone TEXT,
+        "utmSource" TEXT,
+        "utmMedium" TEXT,
+        "utmCampaign" TEXT,
+        "utmContent" TEXT,
+        "utmTerm" TEXT,
+        gclid TEXT,
+        fbclid TEXT,
+        "isBot" BOOLEAN DEFAULT false,
+        "updatedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )`
+    );
+
     console.log("Database initialized successfully!");
   } catch (error) {
     console.error("Error initializing database:", error);
