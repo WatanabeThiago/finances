@@ -36,6 +36,11 @@ export const NAV_ITEMS: NavItem[] = [
     label: "Tracking",
     description: "Análise do funil de vendas",
   },
+  {
+    href: "/whatsapp",
+    label: "WhatsApp",
+    description: "Conexão e gerenciamento do WhatsApp",
+  },
 ];
 
 export function navItemActive(pathname: string, href: string): boolean {
@@ -45,6 +50,9 @@ export function navItemActive(pathname: string, href: string): boolean {
   }
   if (href === "/daily-ads") {
     return pathname === "/daily-ads" || pathname.startsWith("/daily-ads/");
+  }
+  if (href === "/whatsapp") {
+    return pathname === "/whatsapp" || pathname.startsWith("/whatsapp/");
   }
   return pathname === href || pathname.startsWith(`${href}/`);
 }
