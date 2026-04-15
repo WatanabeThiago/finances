@@ -29,6 +29,7 @@ export function TrackingScreen() {
   const [editingPhone, setEditingPhone] = useState("");
   const [savingId, setSavingId] = useState<string | null>(null);
   const [togglingVendaId, setTogglingVendaId] = useState<string | null>(null);
+  const [expandedVisitors, setExpandedVisitors] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     const fetchEvents = async () => {
@@ -122,6 +123,47 @@ export function TrackingScreen() {
       alert("Erro ao atualizar venda");
     } finally {
       setTogglingVendaId(null);
+    }
+  };
+
+  const toggleExpanded = (visitorId: string) => {
+    const newExpanded = new Set(expandedVisitors);
+    if (newExpanded.has(visitorId)) {
+      newExpanded.delete(visitorId);
+    } else {
+      newExpanded.add(visitorId);
+    }
+    setExpandedVisitors(newExpanded);
+  };
+
+  const formatTimeDifference = (current: string, next: string | null): string => {
+    if (!next) return "";
+    
+    const currentTime = new Date(current).getTime();
+    const nextTime = new Date(next).getTime();
+    const diffMs = currentTime - nextTime;
+    
+    if (diffMs < 0) return "";
+    
+    const seconds = Math.floor(diffMs / 1000);
+    const minutes = Math.floor(seconds / 60);
+    const hours = Math.floor(minutes / 60);
+    const days = Math.floor(hours / 24);
+    
+    if (days > 0) return `${days}d ${hours % 24}h`;
+    if (hours > 0) return `${hours}h ${minutes % 60}m`;
+    if (minutes > 0) return `${minutes}m ${seconds % 60}s`;
+    return `${seconds}s`;
+  };
+
+  const getEventEmoji = (eventType: string): string => {
+    switch (eventType.toLowerCase()) {
+      case "page_view":
+        return "📄";
+      case "click":
+        return "🫵";
+      default:
+        return "📍";
     }
   };
 
@@ -349,11 +391,27 @@ export function TrackingScreen() {
               {groupedVisitors.length > 0 ? (
                 groupedVisitors.map(([visitorId, eventList]) => {
                   const firstEvent = eventList[0];
+                  const isExpanded = expandedVisitors.has(visitorId);
                   return (
-                    <tr key={visitorId} className="hover:bg-zinc-50 dark:hover:bg-zinc-900/30 transition-colors">
-                      <td className="px-4 py-3 text-zinc-900 dark:text-zinc-100 whitespace-nowrap text-xs sticky left-0 z-10 bg-white dark:bg-zinc-950">
-                        {new Date(firstEvent?.created_at || '').toLocaleString("pt-BR")}
-                      </td>
+                    <Fragment key={visitorId}>
+                      <tr className="hover:bg-zinc-50 dark:hover:bg-zinc-900/30 transition-colors">
+                        <td className="px-4 py-3 text-zinc-900 dark:text-zinc-100 whitespace-nowrap text-xs sticky left-0 z-10 bg-white dark:bg-zinc-950 flex items-center gap-2">
+                          <button
+                            onClick={() => toggleExpanded(visitorId)}
+                            className="p-1 hover:bg-zinc-200 dark:hover:bg-zinc-800 rounded transition-colors"
+                            title={isExpanded ? "Recolher eventos" : "Expandir eventos"}
+                          >
+                            <svg
+                              className={`w-4 h-4 transition-transform ${isExpanded ? "rotate-90" : ""}`}
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                            </svg>
+                          </button>
+                          <span>{new Date(firstEvent?.created_at || '').toLocaleString("pt-BR")}</span>
+                        </td>
                       <td className="px-4 py-3 text-zinc-900 dark:text-zinc-100 whitespace-nowrap">
                         <span className="inline-block bg-sky-100 dark:bg-sky-900/30 text-sky-900 dark:text-sky-200 px-2 py-1 rounded text-xs font-medium">
                           {eventList.length}
@@ -503,6 +561,66 @@ export function TrackingScreen() {
                         {visitorId.slice(0, 8)}...{visitorId.slice(-4)}
                       </td>
                     </tr>
+                    {isExpanded && (
+                      <tr className="bg-zinc-50 dark:bg-zinc-900/50">
+                        <td colSpan={21} className="p-4">
+                          <div className="space-y-2">
+                            <h4 className="text-sm font-semibold text-zinc-900 dark:text-white mb-3">
+                              Eventos ({eventList.length})
+                            </h4>
+                            <div className="space-y-1 max-h-80 overflow-y-auto rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-950 p-3">
+                              {eventList.map((event, idx) => {
+                                const nextEvent = idx < eventList.length - 1 ? eventList[idx + 1] : null;
+                                const timeDiff = formatTimeDifference(event.created_at, nextEvent?.created_at || null);
+                                return (
+                                  <div
+                                    key={`${event.id}-${idx}`}
+                                    className="text-xs p-2 rounded bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700"
+                                  >
+                                    <div className="flex justify-between items-start gap-2">
+                                      <div className="flex-1">
+                                        <div className="flex items-center gap-2 mb-1">
+                                          <div className="flex items-center gap-1">
+                                            {event.event === "page_view" && (
+                                              <span className="text-lg text-blue-600 dark:text-blue-400">📄</span>
+                                            )}
+                                            {event.event === "click" && (
+                                              <span className="text-lg text-red-600 dark:text-red-400">🫵</span>
+                                            )}
+                                            {event.event !== "page_view" && event.event !== "click" && (
+                                              <span className="text-lg text-purple-600 dark:text-purple-400">📍</span>
+                                            )}
+                                            <span className="font-semibold text-zinc-900 dark:text-white">
+                                              {event.event}
+                                            </span>
+                                          </div>
+                                          <span className="text-xs px-1.5 py-0.5 rounded bg-zinc-200 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-300">
+                                            #{idx + 1}
+                                          </span>
+                                          {timeDiff && (
+                                            <span className="text-xs px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border border-zinc-300 dark:border-zinc-600">
+                                              +{timeDiff}
+                                            </span>
+                                          )}
+                                        </div>
+                                        <div className="text-zinc-600 dark:text-zinc-400 font-mono text-xs">
+                                          {new Date(event.created_at).toLocaleString("pt-BR")}
+                                        </div>
+                                        <div className="text-zinc-600 dark:text-zinc-400 mt-1 break-words">
+                                          <span className="text-xs">🔗 User-Agent: </span>
+                                          <span className="font-mono text-xs">{event.user_agent}</span>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                    </Fragment>
                   );
                 })
               ) : (
