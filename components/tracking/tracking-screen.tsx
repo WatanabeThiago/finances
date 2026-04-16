@@ -335,6 +335,9 @@ export function TrackingScreen() {
                   📞 Telefone
                 </th>
                 <th className="px-4 py-3 text-left font-semibold text-white whitespace-nowrap">
+                  🔑 Palavra-Chave (UTM)
+                </th>
+                <th className="px-4 py-3 text-left font-semibold text-white whitespace-nowrap">
                   🎯 Fonte (UTM)
                 </th>
                 <th className="px-4 py-3 text-left font-semibold text-white whitespace-nowrap">
@@ -345,9 +348,6 @@ export function TrackingScreen() {
                 </th>
                 <th className="px-4 py-3 text-left font-semibold text-white whitespace-nowrap">
                   📝 Conteúdo (UTM)
-                </th>
-                <th className="px-4 py-3 text-left font-semibold text-white whitespace-nowrap">
-                  🔍 Palavra (UTM)
                 </th>
                 <th className="px-4 py-3 text-left font-semibold text-white whitespace-nowrap">
                   🔗 GCLID
@@ -474,6 +474,15 @@ export function TrackingScreen() {
                         )}
                       </td>
                       <td className="px-4 py-3 text-zinc-900 dark:text-zinc-100 whitespace-nowrap text-xs">
+                        {firstEvent?.utm_term ? (
+                          <span className="inline-block bg-red-100 dark:bg-red-900/30 text-red-900 dark:text-red-200 px-2 py-1 rounded">
+                            {firstEvent.utm_term}
+                          </span>
+                        ) : (
+                          <span className="text-zinc-400">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-zinc-900 dark:text-zinc-100 whitespace-nowrap text-xs">
                         {firstEvent?.utm_source ? (
                           <span className="inline-block bg-violet-100 dark:bg-violet-900/30 text-violet-900 dark:text-violet-200 px-2 py-1 rounded">
                             {firstEvent.utm_source}
@@ -496,9 +505,6 @@ export function TrackingScreen() {
                       </td>
                       <td className="px-4 py-3 text-zinc-900 dark:text-zinc-100 whitespace-nowrap text-xs">
                         {firstEvent?.utm_content || "—"}
-                      </td>
-                      <td className="px-4 py-3 text-zinc-900 dark:text-zinc-100 whitespace-nowrap text-xs">
-                        {firstEvent?.utm_term || "—"}
                       </td>
                       <td className="px-4 py-3 text-zinc-900 dark:text-zinc-100 whitespace-nowrap text-xs font-mono">
                         {firstEvent?.gclid ? firstEvent.gclid.slice(0, 12) + "..." : "—"}

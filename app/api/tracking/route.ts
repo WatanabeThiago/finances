@@ -14,7 +14,7 @@ export async function GET() {
     const events = await query(
       `SELECT 
         t.id,
-        t."createdAt" as created_at,
+        to_char(t."createdAt" AT TIME ZONE 'America/Sao_Paulo', 'YYYY-MM-DD HH24:MI:SS') as created_at,
         t.event,
         t."visitorId" as visitor_id,
         t."userAgent" as user_agent,
@@ -57,7 +57,6 @@ export async function POST(request: Request) {
     const body = await request.json();
 
     const {
-      created_at,
       event,
       visitor_id,
       user_agent,
@@ -83,7 +82,7 @@ export async function POST(request: Request) {
     } = body;
 
     // Validar campos obrigatórios
-    if (!created_at || !event || !visitor_id || !user_agent) {
+    if (!event || !visitor_id || !user_agent) {
       return Response.json(
         { error: "Campos obrigatórios faltando" },
         { status: 400, headers: corsHeaders }
@@ -156,23 +155,22 @@ export async function POST(request: Request) {
       ]
     );
 
-    // Inserir evento
+    // Inserir evento (createdAt gerado automaticamente pelo banco)
     const result = await query(
       `INSERT INTO public."Tracking" (
-        "createdAt",
         event,
         "visitorId",
         "userAgent",
         "isBot"
-      ) VALUES ($1, $2, $3, $4, $5)
+      ) VALUES ($1, $2, $3, $4)
       RETURNING 
         id,
-        "createdAt" as created_at,
+        to_char("createdAt" AT TIME ZONE 'America/Sao_Paulo', 'YYYY-MM-DD HH24:MI:SS') as created_at,
         event,
         "visitorId" as visitor_id,
         "userAgent" as user_agent,
         "isBot" as is_bot`,
-      [created_at, event, visitor_id, user_agent, is_bot]
+      [event, visitor_id, user_agent, is_bot]
     );
 
     const trackingEvent = result[0];
