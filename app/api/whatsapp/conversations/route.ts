@@ -56,7 +56,6 @@ export async function GET(request: NextRequest) {
         phone,
         name: chat.name,
         isGroup: chat.isGroup,
-        isBroadcast: chat.isBroadcast,
         messageCount: messages.length,
         firstMessageAt: new Date(firstMsg.timestamp * 1000).toISOString(),
         lastMessageAt: new Date(lastMsg.timestamp * 1000).toISOString(),
