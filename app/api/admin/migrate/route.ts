@@ -39,6 +39,18 @@ export async function POST(request: Request) {
       ON contact_requests(created_at DESC)
     `);
 
+    // Adicionar coluna displayed se não existir
+    await query(`
+      ALTER TABLE contact_requests 
+      ADD COLUMN IF NOT EXISTS displayed BOOLEAN DEFAULT FALSE
+    `);
+
+    // Criar índice para displayed
+    await query(`
+      CREATE INDEX IF NOT EXISTS idx_contact_requests_displayed 
+      ON contact_requests(displayed)
+    `);
+
     return Response.json(
       {
         success: true,

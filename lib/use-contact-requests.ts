@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { playNotificationSound } from './notification-sound';
 
 export interface ContactRequest {
   id: string;
@@ -10,6 +11,17 @@ export function useContactRequests() {
   const [requests, setRequests] = useState<ContactRequest[]>([]);
   const [loading, setLoading] = useState(false);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const displayedIdsRef = useRef<Set<string>>(new Set());
+
+  const markAsDisplayed = async (id: string) => {
+    try {
+      await fetch(`/api/contact-requests/${id}/display`, {
+        method: 'PATCH',
+      });
+    } catch (error) {
+      console.error('Erro ao marcar como exibido:', error);
+    }
+  };
 
   const fetchRequests = async () => {
     try {
@@ -17,8 +29,24 @@ export function useContactRequests() {
       const response = await fetch('/api/contact-requests');
       if (!response.ok) throw new Error('Falha ao buscar requisições');
 
-      const data = await response.json();
-      setRequests(data);
+      const data = await response.json() as ContactRequest[];
+      
+      // Filtrar apenas as requisições que não foram exibidas ainda
+      const newRequests = data.filter((req) => !displayedIdsRef.current.has(req.id));
+
+      if (newRequests.length > 0) {
+        // Tocar som
+        playNotificationSound();
+
+        // Marcar como exibidas
+        newRequests.forEach((req) => {
+          markAsDisplayed(req.id);
+          displayedIdsRef.current.add(req.id);
+        });
+
+        // Adicionar à lista
+        setRequests((prev) => [...newRequests, ...prev]);
+      }
     } catch (error) {
       console.error('Erro ao buscar requisições de contato:', error);
     } finally {

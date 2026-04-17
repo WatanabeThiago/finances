@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { AppShell } from "@/components/app-shell";
 import { TrackingNotificationListener } from "@/components/tracking-notification-listener";
+import { TrackingNotificationsVisual } from "@/components/tracking-notifications-visual";
 import { ContactRequestNotifications } from "@/components/contact-request-notifications";
 import "./globals.css";
 
@@ -40,6 +41,7 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col font-sans">
         <TrackingNotificationListener />
+        <TrackingNotificationsVisual />
         <ContactRequestNotifications />
         <AppShell>{children}</AppShell>
       </body>

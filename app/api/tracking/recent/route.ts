@@ -11,17 +11,18 @@ export async function GET() {
     const now = new Date();
     const twoMinutesAgo = new Date(now.getTime() - 2 * 60 * 1000);
 
-    // Buscar eventos dos últimos 2 minutos
+    // Buscar eventos dos últimos 2 minutos (excluindo bots)
     const events = await query(
       `SELECT 
         t.id,
         to_char(t."createdAt" AT TIME ZONE 'America/Sao_Paulo', 'YYYY-MM-DD HH24:MI:SS') as created_at,
         t.event,
         t."visitorId" as visitor_id,
+        s."visitorId" as session_id,
         s.phone
        FROM public."Tracking" t
        LEFT JOIN public."TrackingSession" s ON t."visitorId" = s."visitorId"
-       WHERE t."createdAt" >= $1
+       WHERE t."createdAt" >= $1 AND t."isBot" = false
        ORDER BY t."createdAt" DESC`,
       [twoMinutesAgo.toISOString()]
     );

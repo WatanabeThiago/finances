@@ -8,15 +8,16 @@ const corsHeaders = {
 
 export async function GET() {
   try {
-    // Buscar todas as requisições de contato que ainda não foram respondidas
+    // Buscar requisições de contato não respondidas e não exibidas
     const requests = await query(
       `SELECT 
         id,
         phone,
         to_char(created_at AT TIME ZONE 'America/Sao_Paulo', 'YYYY-MM-DD HH24:MI:SS') as created_at,
-        responded_at
+        responded_at,
+        COALESCE(displayed, false) as displayed
        FROM contact_requests
-       WHERE responded_at IS NULL
+       WHERE responded_at IS NULL AND (displayed = FALSE OR displayed IS NULL)
        ORDER BY created_at DESC`
     );
 
