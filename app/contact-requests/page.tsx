@@ -6,7 +6,6 @@ export default function ContactRequestsPage() {
     <div className="space-y-6">
       <PageIntro
         title="Requisições de Contato"
-        description="Pessoas que gostariam de ser contatadas"
       />
       <ContactRequestsScreen />
     </div>
