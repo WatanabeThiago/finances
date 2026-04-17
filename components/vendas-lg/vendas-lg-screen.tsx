@@ -186,7 +186,7 @@ export function VendasLgScreen() {
   const [error, setError] = useState<string | null>(null);
   const [filterParceiro, setFilterParceiro] = useState<string>("");
   const [filterComissao, setFilterComissao] = useState<"all" | "pago" | "nao-pago">("all");
-  const [filterDataRange, setFilterDataRange] = useState<"today" | "yesterday" | "7d" | "30d" | "all">("7d");
+  const [filterDataRange, setFilterDataRange] = useState<"today" | "yesterday" | "7d" | "30d" | "upcoming" | "all">("7d");
 
   useEffect(() => {
     const fetchVendas = async () => {
@@ -546,9 +546,20 @@ export function VendasLgScreen() {
     } else if (filterDataRange === "30d") {
       cutoffDate = new Date(startOfToday);
       cutoffDate.setDate(cutoffDate.getDate() - 30);
+    } else if (filterDataRange === "upcoming") {
+      cutoffDate = new Date(startOfToday);
+      cutoffDate.setDate(cutoffDate.getDate() + 1); // Começa amanhã
+      const futureDate = new Date(startOfToday);
+      futureDate.setDate(futureDate.getDate() + 7);
+      filteredVendas = filteredVendas.filter((v) => {
+        if (!v.dataVenda) return false;
+        const vendaDate = new Date(v.dataVenda);
+        return vendaDate >= cutoffDate! && vendaDate <= futureDate;
+      });
+      cutoffDate = null;
     }
 
-    if (cutoffDate && filterDataRange !== "yesterday") {
+    if (cutoffDate && filterDataRange !== "yesterday" && filterDataRange !== "upcoming") {
       filteredVendas = filteredVendas.filter((v) => {
         if (!v.dataVenda) return false;
         const vendaDate = new Date(v.dataVenda);
@@ -587,7 +598,10 @@ export function VendasLgScreen() {
       .filter((v) => v.comissao && v.comissao > 0)
       .reduce((acc, v) => acc + (totalVendaLg(v) - (v.comissao || 0)), 0);
 
-    return { comissaoMedia, totalVendas: filteredVendas.length, comissaoPaga, comissaoNaoPaga, comissaoTotal, faturamentoParceiro };
+    const faturamentoTotal = filteredVendas
+      .reduce((acc, v) => acc + totalVendaLg(v), 0);
+
+    return { comissaoMedia, totalVendas: filteredVendas.length, comissaoPaga, comissaoNaoPaga, comissaoTotal, faturamentoParceiro, faturamentoTotal };
   }, [vendas, filterParceiro, filterComissao, filterDataRange]);
 
   const listContent = useMemo(() => {
@@ -617,9 +631,20 @@ export function VendasLgScreen() {
     } else if (filterDataRange === "30d") {
       cutoffDate = new Date(startOfToday);
       cutoffDate.setDate(cutoffDate.getDate() - 30);
+    } else if (filterDataRange === "upcoming") {
+      cutoffDate = new Date(startOfToday);
+      cutoffDate.setDate(cutoffDate.getDate() + 1); // Começa amanhã
+      const futureDate = new Date(startOfToday);
+      futureDate.setDate(futureDate.getDate() + 7);
+      filteredVendas = filteredVendas.filter((v) => {
+        if (!v.dataVenda) return false;
+        const vendaDate = new Date(v.dataVenda);
+        return vendaDate >= cutoffDate! && vendaDate <= futureDate;
+      });
+      cutoffDate = null;
     }
 
-    if (cutoffDate && filterDataRange !== "yesterday") {
+    if (cutoffDate && filterDataRange !== "yesterday" && filterDataRange !== "upcoming") {
       filteredVendas = filteredVendas.filter((v) => {
         if (!v.dataVenda) return false;
         const vendaDate = new Date(v.dataVenda);
@@ -851,6 +876,15 @@ export function VendasLgScreen() {
             {formatBRL(stats.faturamentoParceiro)}
           </p>
         </div>
+
+        <div className="rounded-xl border border-zinc-200 bg-green-50 p-4 dark:border-zinc-800 dark:bg-green-950/30">
+          <p className="text-sm font-medium text-zinc-600 dark:text-zinc-400">
+            Faturamento Total
+          </p>
+          <p className="mt-2 text-2xl font-bold text-green-700 dark:text-green-400">
+            {formatBRL(stats.faturamentoTotal)}
+          </p>
+        </div>
       </div>
 
       {/* Filters */}
@@ -909,6 +943,16 @@ export function VendasLgScreen() {
               }`}
             >
               Todas
+            </button>
+            <button
+              onClick={() => setFilterDataRange("upcoming")}
+              className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                filterDataRange === "upcoming"
+                  ? "bg-sky-600 text-white dark:bg-sky-700"
+                  : "border border-zinc-300 bg-white text-zinc-900 hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-100 dark:hover:bg-zinc-900"
+              }`}
+            >
+              Próximos Dias
             </button>
           </div>
         </div>
