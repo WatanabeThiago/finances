@@ -10,6 +10,15 @@ export async function PATCH(request: Request, context: any) {
   try {
     const { id } = context.params;
 
+    if (!id) {
+      return Response.json(
+        { error: "ID não fornecido" },
+        { status: 400, headers: corsHeaders }
+      );
+    }
+
+    console.log("Marcando contact request como exibida, ID:", id);
+
     // Marcar requisição como exibida
     const result = await query(
       `UPDATE contact_requests
@@ -19,9 +28,11 @@ export async function PATCH(request: Request, context: any) {
       [id]
     );
 
+    console.log("Resultado da atualização (display):", result);
+
     if (result.length === 0) {
       return Response.json(
-        { error: "Requisição não encontrada" },
+        { error: "Requisição não encontrada", id, detail: "Nenhum registro encontrado com este ID" },
         { status: 404, headers: corsHeaders }
       );
     }
@@ -36,7 +47,7 @@ export async function PATCH(request: Request, context: any) {
   } catch (error) {
     console.error("Erro ao marcar notificação como exibida:", error);
     return Response.json(
-      { error: "Falha ao marcar notificação como exibida" },
+      { error: "Falha ao marcar notificação como exibida", detail: String(error) },
       { status: 500, headers: corsHeaders }
     );
   }

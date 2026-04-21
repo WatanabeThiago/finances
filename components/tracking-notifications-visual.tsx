@@ -38,7 +38,7 @@ export function TrackingNotificationsVisual() {
   const visibleNotifications = notifications.slice(0, 5);
 
   return (
-    <div className="fixed top-16 left-4 flex flex-col gap-2 z-50 max-w-sm">
+    <div className="fixed top-16 right-4 flex flex-col gap-2 z-50 max-w-sm">
       {visibleNotifications.map((notif, index) => {
         const emoji = getEmojiForEvent(notif.event);
         const label = getLabelForEvent(notif.event);
@@ -46,7 +46,7 @@ export function TrackingNotificationsVisual() {
         return (
           <div
             key={notif.id}
-            className="bg-white border border-green-300 rounded-lg p-3 shadow-lg hover:shadow-xl transition-shadow animate-in slide-in-from-left-2 duration-300 backdrop-blur-sm bg-white/95"
+            className="bg-white border border-green-300 rounded-lg p-3 shadow-lg hover:shadow-xl transition-shadow animate-in slide-in-from-right-2 duration-300 backdrop-blur-sm bg-white/95"
             style={{ animationDelay: `${index * 50}ms` }}
           >
             <div className="flex items-start justify-between gap-3">

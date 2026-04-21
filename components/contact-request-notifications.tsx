@@ -1,6 +1,7 @@
 'use client';
 
 import { useContactRequests } from '@/lib/use-contact-requests';
+import { trackCallbackRequest } from '@/lib/gtag-events';
 import { X, Bell } from 'lucide-react';
 
 export function ContactRequestNotifications() {
@@ -34,7 +35,10 @@ export function ContactRequestNotifications() {
               </p>
             </div>
             <button
-              onClick={() => closeRequest(request.id)}
+              onClick={() => {
+                trackCallbackRequest(request.id, request.phone);
+                closeRequest(request.id);
+              }}
               className="flex-shrink-0 p-1 hover:bg-gray-100 rounded transition-colors text-gray-400 hover:text-gray-600"
               aria-label="Fechar notificação"
             >

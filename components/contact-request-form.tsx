@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { trackSubmitCallbackRequest } from '@/lib/gtag-events';
 import { X } from 'lucide-react';
 
 interface ContactRequestFormProps {
@@ -37,6 +38,9 @@ export function ContactRequestForm({ onClose, className = '' }: ContactRequestFo
 
     try {
       setLoading(true);
+      
+      // Track evento de submissão
+      trackSubmitCallbackRequest(cleanPhone);
 
       const response = await fetch('/api/contact-requests', {
         method: 'POST',
