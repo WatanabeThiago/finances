@@ -8,7 +8,7 @@ const corsHeaders = {
 
 export async function PATCH(request: Request, context: any) {
   try {
-    const { id } = context.params;
+    const { id } = await context.params;
 
     if (!id) {
       return Response.json(
