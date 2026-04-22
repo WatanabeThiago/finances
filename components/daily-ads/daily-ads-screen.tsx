@@ -100,6 +100,9 @@ export function DailyAdsScreen() {
   const [form, setForm] = useState<FormState>(emptyForm());
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<"idle" | "loading" | "success" | "not-found" | "error">("idle");
+  const [syncedAt, setSyncedAt] = useState<string | null>(null);
+  const [scriptOpen, setScriptOpen] = useState(false);
   const titleId = useId();
 
   // Helper function to calculate derived fields
@@ -143,7 +146,40 @@ export function DailyAdsScreen() {
     setFormError(null);
     setEditingId(null);
     setModalMode("create");
+    setSyncStatus("idle");
+    setSyncedAt(null);
   }, []);
+
+  const fetchGoogleAdsSync = useCallback(async () => {
+    if (!form.data) return;
+    setSyncStatus("loading");
+    try {
+      const res = await fetch(`/api/daily-ads/google-ads-sync?date=${form.data}`);
+      if (res.status === 404) {
+        setSyncStatus("not-found");
+        return;
+      }
+      if (!res.ok) {
+        setSyncStatus("error");
+        return;
+      }
+      const data = await res.json();
+      const entrada = parseFloat(form.entradaReal) || 0;
+      const gastos = data.gastosGoogleAds;
+      const clientes = parseInt(form.clientes, 10) || 0;
+      const derived = calculateDerivedFields(entrada, gastos, clientes);
+      setForm((f) => ({
+        ...f,
+        gastosGoogleAds: gastos.toFixed(2),
+        cpc: data.cpc.toFixed(2),
+        ...derived,
+      }));
+      setSyncedAt(new Date(data.syncedAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }));
+      setSyncStatus("success");
+    } catch {
+      setSyncStatus("error");
+    }
+  }, [form.data, form.entradaReal, form.clientes, calculateDerivedFields]);
 
   // Auto-fill entrada real and clientes based on sales for the selected date (GMT-4)
   useEffect(() => {
@@ -454,15 +490,105 @@ export function DailyAdsScreen() {
 
         </div>
 
-        {/* Button */}
-        <div className="mb-6">
+        {/* Buttons */}
+        <div className="mb-6 flex flex-wrap gap-3">
           <button
             onClick={() => openModal()}
             className="rounded-xl bg-sky-600 px-6 py-3 font-semibold text-white transition-colors hover:bg-sky-700 dark:bg-sky-700 dark:hover:bg-sky-600"
           >
             + Adicionar Registro
           </button>
+          <button
+            onClick={() => setScriptOpen(true)}
+            className="rounded-xl border border-blue-300 bg-blue-50 px-6 py-3 font-semibold text-blue-700 transition-colors hover:bg-blue-100 dark:border-blue-700 dark:bg-blue-950/40 dark:text-blue-300 dark:hover:bg-blue-950/70"
+          >
+            Ver script Google Ads
+          </button>
         </div>
+
+        {/* Script dialog */}
+        {scriptOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+            <div className="flex max-h-[90dvh] w-full max-w-2xl flex-col rounded-xl bg-white dark:bg-zinc-900">
+              <div className="flex items-center justify-between border-b border-zinc-200 px-6 py-4 dark:border-zinc-800">
+                <h2 className="text-lg font-bold text-zinc-900 dark:text-white">Script para Google Ads</h2>
+                <button
+                  onClick={() => setScriptOpen(false)}
+                  className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                >
+                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto p-6 space-y-4">
+                <div className="rounded-lg bg-amber-50 p-3 text-sm text-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+                  <strong>Como usar:</strong> No Google Ads, vá em <em>Ferramentas &gt; Ações em massa &gt; Scripts</em>. Cole o código abaixo, substitua a URL e o secret, e agende para rodar diariamente.
+                </div>
+                <div className="rounded-lg bg-zinc-50 border border-zinc-200 dark:bg-zinc-950 dark:border-zinc-700">
+                  <div className="flex items-center justify-between border-b border-zinc-200 px-4 py-2 dark:border-zinc-700">
+                    <span className="text-xs font-medium text-zinc-500">JavaScript</span>
+                    <button
+                      onClick={() => {
+                        const script = document.getElementById("ads-script-content");
+                        if (script) navigator.clipboard.writeText(script.innerText);
+                      }}
+                      className="text-xs font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400"
+                    >
+                      Copiar
+                    </button>
+                  </div>
+                  <pre id="ads-script-content" className="overflow-x-auto p-4 text-xs text-zinc-800 dark:text-zinc-200 whitespace-pre">{`function main() {
+  var today = new Date();
+  var dateStr = Utilities.formatDate(
+    today, 'America/Sao_Paulo', 'yyyy-MM-dd'
+  );
+
+  var totalCost = 0;
+  var totalClicks = 0;
+
+  var campaigns = AdsApp.campaigns()
+    .withCondition('campaign.status = ENABLED')
+    .get();
+
+  while (campaigns.hasNext()) {
+    var campaign = campaigns.next();
+    var stats = campaign.getStatsFor('TODAY');
+    totalCost   += stats.getCost();
+    totalClicks += stats.getClicks();
+  }
+
+  var cpc = totalClicks > 0
+    ? (totalCost / totalClicks)
+    : 0;
+
+  var payload = JSON.stringify({
+    secret: 'SEU_SECRET_AQUI',
+    date: dateStr,
+    gastosGoogleAds: totalCost,
+    cpc: cpc
+  });
+
+  var options = {
+    method: 'post',
+    contentType: 'application/json',
+    payload: payload,
+    muteHttpExceptions: true
+  };
+
+  var url = 'https://SEU_DOMINIO/api/daily-ads/google-ads-sync';
+  var response = UrlFetchApp.fetch(url, options);
+  Logger.log('Status: ' + response.getResponseCode());
+  Logger.log('Resposta: ' + response.getContentText());
+}`}</pre>
+                </div>
+                <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                  Substitua <code className="rounded bg-zinc-100 px-1 dark:bg-zinc-800">SEU_SECRET_AQUI</code> pelo valor de <code className="rounded bg-zinc-100 px-1 dark:bg-zinc-800">GOOGLE_ADS_SYNC_SECRET</code> do seu <code className="rounded bg-zinc-100 px-1 dark:bg-zinc-800">.env.local</code>, e <code className="rounded bg-zinc-100 px-1 dark:bg-zinc-800">SEU_DOMINIO</code> pela URL do app em produção.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Table */}
         <div className="overflow-x-auto rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
@@ -606,10 +732,20 @@ export function DailyAdsScreen() {
                   />
                 </label>
 
-                <label className="block">
-                  <span className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
-                    Gasto Google Ads (R$)
-                  </span>
+                <div className="block">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
+                      Gasto Google Ads (R$)
+                    </span>
+                    <button
+                      type="button"
+                      onClick={fetchGoogleAdsSync}
+                      disabled={syncStatus === "loading"}
+                      className="flex items-center gap-1 rounded-lg bg-blue-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
+                    >
+                      {syncStatus === "loading" ? "Buscando..." : "Buscar Google Ads"}
+                    </button>
+                  </div>
                   <input
                     type="number"
                     step="0.01"
@@ -619,15 +755,24 @@ export function DailyAdsScreen() {
                       const gastos = parseFloat(e.target.value) || 0;
                       const clientes = parseInt(form.clientes, 10) || 0;
                       const derived = calculateDerivedFields(entrada, gastos, clientes);
-                      setForm((f) => ({ 
-                        ...f, 
+                      setForm((f) => ({
+                        ...f,
                         gastosGoogleAds: e.target.value,
                         ...derived,
                       }));
                     }}
                     className="mt-1.5 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2.5 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-100"
                   />
-                </label>
+                  {syncStatus === "success" && (
+                    <p className="mt-1 text-xs text-emerald-600 dark:text-emerald-400">Sincronizado às {syncedAt}</p>
+                  )}
+                  {syncStatus === "not-found" && (
+                    <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">Sem dados para esta data</p>
+                  )}
+                  {syncStatus === "error" && (
+                    <p className="mt-1 text-xs text-red-600 dark:text-red-400">Erro ao buscar dados</p>
+                  )}
+                </div>
 
                 <label className="block">
                   <span className="text-sm font-medium text-zinc-800 dark:text-zinc-200">

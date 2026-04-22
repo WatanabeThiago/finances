@@ -191,6 +191,15 @@ export async function initializeDatabase() {
     );
 
     await query(
+      `CREATE TABLE IF NOT EXISTS google_ads_cache (
+        date DATE PRIMARY KEY,
+        gastos_google_ads DECIMAL(10,2) NOT NULL,
+        cpc DECIMAL(10,2) NOT NULL,
+        synced_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )`
+    );
+
+    await query(
       `CREATE TABLE IF NOT EXISTS public."TrackingSession" (
         id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
         "visitorId" TEXT NOT NULL UNIQUE,
