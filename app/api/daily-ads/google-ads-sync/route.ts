@@ -21,15 +21,22 @@ export async function POST(request: Request) {
       return Response.json({ error: "Campos obrigatórios: date, gastosGoogleAds, cpc" }, { status: 400 });
     }
 
-    await query(
-      `INSERT INTO google_ads_cache (date, gastos_google_ads, cpc, synced_at)
-       VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
-       ON CONFLICT (date) DO UPDATE
-         SET gastos_google_ads = EXCLUDED.gastos_google_ads,
-             cpc = EXCLUDED.cpc,
-             synced_at = CURRENT_TIMESTAMP`,
-      [date, Number(gastosGoogleAds), Number(cpc)]
-    );
+    try {
+      const result = await query(
+        `INSERT INTO google_ads_cache (date, gastos_google_ads, cpc, synced_at)
+         VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
+         ON CONFLICT (date) DO UPDATE
+           SET gastos_google_ads = EXCLUDED.gastos_google_ads,
+               cpc = EXCLUDED.cpc,
+               synced_at = CURRENT_TIMESTAMP
+         RETURNING *`,
+        [date, Number(gastosGoogleAds), Number(cpc)]
+      );
+      console.log("[google-ads-sync POST] insert result:", JSON.stringify(result));
+    } catch (insertError) {
+      console.error("[google-ads-sync POST] erro na query:", insertError);
+      return Response.json({ error: "Erro ao salvar no banco", detail: String(insertError) }, { status: 500 });
+    }
 
     return Response.json({ success: true, date });
   } catch (error) {
