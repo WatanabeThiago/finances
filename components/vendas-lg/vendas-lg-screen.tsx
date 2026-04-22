@@ -21,6 +21,18 @@ import {
   useMemo,
   useState,
 } from "react";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 
 function newId(): string {
   return crypto.randomUUID();
@@ -817,15 +829,91 @@ export function VendasLgScreen() {
     );
   }, [vendas, servicoById, parceiros, filterParceiro, filterComissao, filterDataRange]);
 
+  const chartDayData = useMemo(() => {
+    let filtered = vendas;
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+    if (filterDataRange === "today") {
+      filtered = filtered.filter((v) => v.dataVenda && new Date(v.dataVenda) >= startOfToday);
+    } else if (filterDataRange === "yesterday") {
+      const start = new Date(startOfToday);
+      start.setDate(start.getDate() - 1);
+      filtered = filtered.filter((v) => {
+        if (!v.dataVenda) return false;
+        const d = new Date(v.dataVenda);
+        return d >= start && d < startOfToday;
+      });
+    } else if (filterDataRange === "7d") {
+      const cutoff = new Date(startOfToday);
+      cutoff.setDate(cutoff.getDate() - 7);
+      filtered = filtered.filter((v) => v.dataVenda && new Date(v.dataVenda) >= cutoff);
+    } else if (filterDataRange === "30d") {
+      const cutoff = new Date(startOfToday);
+      cutoff.setDate(cutoff.getDate() - 30);
+      filtered = filtered.filter((v) => v.dataVenda && new Date(v.dataVenda) >= cutoff);
+    } else if (filterDataRange === "upcoming") {
+      const start = new Date(startOfToday);
+      start.setDate(start.getDate() + 1);
+      const end = new Date(startOfToday);
+      end.setDate(end.getDate() + 7);
+      filtered = filtered.filter((v) => {
+        if (!v.dataVenda) return false;
+        const d = new Date(v.dataVenda);
+        return d >= start && d <= end;
+      });
+    }
+
+    if (filterParceiro) {
+      filtered = filtered.filter((v) => v.prestadorId === filterParceiro);
+    }
+
+    const byPeriod = new Map<string, { label: string; faturamento: number; comissao: number; ts: number }>();
+    const byHour = filterDataRange === "today" || filterDataRange === "yesterday";
+
+    for (const v of filtered) {
+      if (!v.dataVenda) continue;
+      const d = new Date(v.dataVenda);
+      let key: string;
+      let label: string;
+      if (byHour) {
+        key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}-${d.getHours()}`;
+        label = `${String(d.getHours()).padStart(2, "0")}h`;
+      } else {
+        key = `${d.getFullYear()}-${String(d.getMonth()).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+        label = d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+      }
+      const existing = byPeriod.get(key) ?? { label, faturamento: 0, comissao: 0, ts: d.getTime() };
+      byPeriod.set(key, {
+        label,
+        faturamento: existing.faturamento + totalVendaLg(v),
+        comissao: existing.comissao + (v.comissao ?? 0),
+        ts: Math.min(existing.ts, d.getTime()),
+      });
+    }
+    return Array.from(byPeriod.values()).sort((a, b) => a.ts - b.ts);
+  }, [vendas, filterDataRange, filterParceiro]);
+
   return (
-    <div className="mx-auto flex w-full max-w-lg flex-col gap-5 pb-28">
-      <p className="text-sm text-zinc-600 dark:text-zinc-400">
-        Registro local de vendas (lead generation). Cadastre serviços em
-        &quot;Serviços&quot; para poder selecioná-los aqui.
-      </p>
+    <div className="mx-auto flex w-full max-w-4xl flex-col gap-6 pb-8">
+      <div className="flex items-center justify-between gap-4">
+        <p className="text-sm text-zinc-500 dark:text-zinc-400">
+          Registro local de vendas. Cadastre serviços em &quot;Serviços&quot; para poder selecioná-los aqui.
+        </p>
+        <button
+          type="button"
+          onClick={() => openModal()}
+          className="shrink-0 flex h-10 items-center gap-2 rounded-xl bg-sky-600 px-4 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-sky-700 active:bg-sky-800"
+        >
+          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+          </svg>
+          Nova Venda
+        </button>
+      </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
         <div className="rounded-xl border border-zinc-200 bg-violet-50 p-4 dark:border-zinc-800 dark:bg-violet-950/30">
           <p className="text-sm font-medium text-zinc-600 dark:text-zinc-400">
             Comissão Média
@@ -884,6 +972,108 @@ export function VendasLgScreen() {
           <p className="mt-2 text-2xl font-bold text-green-700 dark:text-green-400">
             {formatBRL(stats.faturamentoTotal)}
           </p>
+        </div>
+      </div>
+
+      {/* Charts */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <div className="lg:col-span-2 rounded-xl border border-zinc-200 bg-white/50 p-4 dark:border-zinc-800 dark:bg-zinc-900/30">
+          <p className="text-sm font-semibold text-zinc-700 dark:text-zinc-300 mb-4">Faturamento por dia</p>
+          {chartDayData.length > 0 ? (
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={chartDayData} barGap={2} barCategoryGap="30%">
+                <CartesianGrid strokeDasharray="3 3" stroke="#3f3f46" vertical={false} />
+                <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#a1a1aa" }} axisLine={false} tickLine={false} />
+                <YAxis
+                  tick={{ fontSize: 11, fill: "#a1a1aa" }}
+                  axisLine={false}
+                  tickLine={false}
+                  tickFormatter={(v: number) => v === 0 ? "0" : v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)}
+                  width={36}
+                />
+                <Tooltip
+                  content={({ active, payload, label }: any) => {
+                    if (!active || !payload?.length) return null;
+                    return (
+                      <div className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs shadow-lg dark:border-zinc-700 dark:bg-zinc-900">
+                        <p className="mb-1.5 font-semibold text-zinc-700 dark:text-zinc-200">{label}</p>
+                        {payload.map((p: any) => (
+                          <p key={p.dataKey} style={{ color: p.fill }} className="leading-5">
+                            {p.name}: {formatBRL(p.value)}
+                          </p>
+                        ))}
+                      </div>
+                    );
+                  }}
+                />
+                <Bar dataKey="faturamento" name="Faturamento" fill="#0ea5e9" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="comissao" name="Comissão" fill="#8b5cf6" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="flex h-[220px] items-center justify-center">
+              <p className="text-sm text-zinc-400">Nenhum dado no período</p>
+            </div>
+          )}
+        </div>
+
+        <div className="rounded-xl border border-zinc-200 bg-white/50 p-4 dark:border-zinc-800 dark:bg-zinc-900/30">
+          <p className="text-sm font-semibold text-zinc-700 dark:text-zinc-300 mb-2">Comissões</p>
+          {stats.comissaoPaga > 0 || stats.comissaoNaoPaga > 0 ? (
+            <>
+              <ResponsiveContainer width="100%" height={180}>
+                <PieChart>
+                  <Pie
+                    data={[
+                      { name: "Pagas", value: stats.comissaoPaga },
+                      { name: "Pendentes", value: stats.comissaoNaoPaga },
+                    ]}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={52}
+                    outerRadius={78}
+                    paddingAngle={3}
+                    dataKey="value"
+                  >
+                    <Cell fill="#10b981" />
+                    <Cell fill="#f59e0b" />
+                  </Pie>
+                  <Tooltip
+                    content={({ active, payload }: any) => {
+                      if (!active || !payload?.length) return null;
+                      return (
+                        <div className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs shadow-lg dark:border-zinc-700 dark:bg-zinc-900">
+                          <p style={{ color: payload[0].payload.fill }} className="font-medium">
+                            {payload[0].name}: {formatBRL(payload[0].value)}
+                          </p>
+                        </div>
+                      );
+                    }}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="mt-1 flex flex-col gap-1.5 text-xs">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5">
+                    <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-emerald-500" />
+                    <span className="text-zinc-600 dark:text-zinc-400">Pagas</span>
+                  </div>
+                  <span className="font-medium tabular-nums text-zinc-700 dark:text-zinc-300">{formatBRL(stats.comissaoPaga)}</span>
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5">
+                    <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-amber-400" />
+                    <span className="text-zinc-600 dark:text-zinc-400">Pendentes</span>
+                  </div>
+                  <span className="font-medium tabular-nums text-zinc-700 dark:text-zinc-300">{formatBRL(stats.comissaoNaoPaga)}</span>
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className="flex h-[220px] items-center justify-center">
+              <p className="text-sm text-zinc-400">Sem comissões no período</p>
+            </div>
+          )}
         </div>
       </div>
 
@@ -1015,18 +1205,6 @@ export function VendasLgScreen() {
       </div>
 
       {listContent}
-
-      <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-zinc-200 bg-background/95 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur-md dark:border-zinc-800">
-        <div className="mx-auto w-full max-w-lg">
-          <button
-            type="button"
-            onClick={() => openModal()}
-            className="flex h-12 w-full items-center justify-center rounded-xl bg-sky-600 text-base font-semibold text-white shadow-sm transition-colors hover:bg-sky-700 active:bg-sky-800 dark:bg-sky-600 dark:hover:bg-sky-500"
-          >
-            Nova Venda
-          </button>
-        </div>
-      </div>
 
       {modalOpen ? (
         <div
