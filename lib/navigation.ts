@@ -37,6 +37,11 @@ export const NAV_ITEMS: NavItem[] = [
     description: "Análise do funil de vendas",
   },
   {
+    href: "/search-terms",
+    label: "Termos de Pesquisa",
+    description: "Revisão de termos do Google Ads",
+  },
+  {
     href: "/contact-requests",
     label: "Requisições de Contato",
     description: "Pessoas que querem ser contatadas",

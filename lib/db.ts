@@ -200,6 +200,22 @@ export async function initializeDatabase() {
     );
 
     await query(
+      `CREATE TABLE IF NOT EXISTS search_terms (
+        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        term TEXT NOT NULL,
+        campaign_id TEXT,
+        impressions INTEGER DEFAULT 0,
+        clicks INTEGER DEFAULT 0,
+        cost DECIMAL(10,2) DEFAULT 0,
+        conversions DECIMAL(10,2) DEFAULT 0,
+        status TEXT DEFAULT 'pending',
+        synced_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        reviewed_at TIMESTAMP,
+        UNIQUE(term, campaign_id)
+      )`
+    );
+
+    await query(
       `CREATE TABLE IF NOT EXISTS public."TrackingSession" (
         id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
         "visitorId" TEXT NOT NULL UNIQUE,
