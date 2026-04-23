@@ -280,6 +280,31 @@ export function ParceirosScreen() {
     return () => window.removeEventListener("keydown", onKey);
   }, [modalOpen, closeModal]);
 
+  useEffect(() => {
+    if (!modalOpen) return;
+    const onPaste = (ev: ClipboardEvent) => {
+      const items = ev.clipboardData?.items;
+      if (!items) return;
+      for (const item of Array.from(items)) {
+        if (!item.type.startsWith("image/")) continue;
+        const file = item.getAsFile();
+        if (!file) continue;
+        const reader = new FileReader();
+        reader.onload = () => {
+          if (typeof reader.result === "string") {
+            setForm((f) => ({ ...f, fotoDataUrl: reader.result as string }));
+            setFormError(null);
+          }
+        };
+        reader.readAsDataURL(file);
+        ev.preventDefault();
+        break;
+      }
+    };
+    document.addEventListener("paste", onPaste);
+    return () => document.removeEventListener("paste", onPaste);
+  }, [modalOpen]);
+
   const deletePartner = useCallback(
     async (id: string) => {
       if (!confirm("Tem certeza que deseja deletar este parceiro?")) return;
@@ -523,7 +548,7 @@ export function ParceirosScreen() {
                           </span>
                         )}
                       </div>
-                      <div className="flex flex-col gap-1">
+                      <div className="flex flex-col gap-1.5">
                         <input
                           ref={fileInputRef}
                           type="file"
@@ -538,6 +563,9 @@ export function ParceirosScreen() {
                         >
                           Escolher foto
                         </button>
+                        <p className="text-xs text-zinc-400 dark:text-zinc-500">
+                          ou <kbd className="rounded bg-zinc-100 px-1 py-0.5 font-mono text-[11px] dark:bg-zinc-800">Ctrl+V</kbd> para colar
+                        </p>
                         {form.fotoDataUrl ? (
                           <button
                             type="button"

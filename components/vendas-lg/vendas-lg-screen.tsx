@@ -273,10 +273,10 @@ export function VendasLgScreen() {
   const descId = useId();
 
   const openModal = useCallback((vendaToEdit?: VendaLg) => {
-    // Always reset to create mode first
     setModalMode("create");
     setEditingVendaId(null);
     setFormError(null);
+
 
     if (vendaToEdit) {
       setModalMode("edit");
@@ -828,6 +828,31 @@ export function VendasLgScreen() {
       </ul>
     );
   }, [vendas, servicoById, parceiros, filterParceiro, filterComissao, filterDataRange]);
+
+  const sortedParceiros = useMemo(() => {
+    const refLat = form.latitude ? parseFloat(form.latitude) : undefined;
+    const refLng = form.longitude ? parseFloat(form.longitude) : undefined;
+
+    if (!refLat || !refLng) return parceiros;
+
+    const withDist = parceiros.map((p) => {
+      if (p.latitude == null || p.longitude == null) return { p, dist: null };
+      const dLat = (p.latitude - refLat) * Math.PI / 180;
+      const dLng = (p.longitude - refLng) * Math.PI / 180;
+      const a = Math.sin(dLat / 2) ** 2 + Math.cos(refLat * Math.PI / 180) * Math.cos(p.latitude * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+      const dist = 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      return { p, dist };
+    });
+
+    return withDist
+      .sort((a, b) => {
+        if (a.dist === null && b.dist === null) return 0;
+        if (a.dist === null) return 1;
+        if (b.dist === null) return -1;
+        return a.dist - b.dist;
+      })
+      .map(({ p, dist }) => ({ ...p, _dist: dist }));
+  }, [parceiros, form.latitude, form.longitude]);
 
   const chartDayData = useMemo(() => {
     let filtered = vendas;
@@ -1400,9 +1425,9 @@ export function VendasLgScreen() {
                         className="mt-1.5 w-full rounded-xl border border-zinc-300 bg-white px-3 py-2.5 text-[15px] text-zinc-900 outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500/30 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-100"
                       >
                         <option value="">Sem prestador</option>
-                        {parceiros.map((p) => (
+                        {sortedParceiros.map((p) => (
                           <option key={p.id} value={p.id}>
-                            {p.nome}
+                            {p.nome}{(p as any)._dist != null ? ` — ${((p as any)._dist as number).toFixed(1)} km` : ""}
                           </option>
                         ))}
                       </select>
