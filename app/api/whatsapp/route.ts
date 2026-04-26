@@ -1,58 +1,30 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { initializeWhatsAppClient, getClientStatus } from '@/lib/whatsapp-client';
-
-let qrCodeData: string | null = null;
+import { NextRequest, NextResponse } from "next/server";
+import { getSessionStatus, startSession } from "@/lib/waha-client";
 
 export async function GET(request: NextRequest) {
   try {
-    const searchParams = request.nextUrl.searchParams;
-    const action = searchParams.get('action');
+    const action = request.nextUrl.searchParams.get("action");
 
-    if (action === 'status') {
-      const status = getClientStatus();
-      return NextResponse.json({
-        success: true,
-        status,
-        qrCode: qrCodeData,
-      });
-    }
-
-    if (action === 'init') {
-      try {
-        const client = await initializeWhatsAppClient();
-        const status = getClientStatus();
-        
-        return NextResponse.json({
-          success: true,
-          message: 'Cliente WhatsApp inicializando...',
-          status,
-          qrCode: qrCodeData,
-        });
-      } catch (error: any) {
+    if (action === "init") {
+      const session = await startSession();
+      if (!session) {
         return NextResponse.json(
-          {
-            success: false,
-            error: error.message || 'Erro ao inicializar cliente',
-          },
-          { status: 500 }
+          { success: false, error: "WAHA não disponível" },
+          { status: 503 }
         );
       }
+      return NextResponse.json({ success: true, session });
     }
 
-    // Retornar status por padrão
-    const status = getClientStatus();
+    const session = await getSessionStatus();
     return NextResponse.json({
       success: true,
-      status,
-      qrCode: qrCodeData,
+      isReady: session?.status === "WORKING",
+      status: session?.status ?? "STOPPED",
+      me: session?.me ?? null,
     });
-  } catch (error: any) {
-    return NextResponse.json(
-      {
-        success: false,
-        error: error.message || 'Erro interno',
-      },
-      { status: 500 }
-    );
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Erro interno";
+    return NextResponse.json({ success: false, error: message }, { status: 500 });
   }
 }

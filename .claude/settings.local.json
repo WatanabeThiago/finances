@@ -4,7 +4,13 @@
       "Bash(npm install *)",
       "Bash(npm ls *)",
       "Bash(npx tsc *)",
-      "Bash(xargs grep *)"
+      "Bash(xargs grep *)",
+      "Bash(xargs -I {} find {} -maxdepth 1 -type d)",
+      "Bash(docker stop *)",
+      "Bash(docker run *)",
+      "Bash(curl -s http://localhost:3001/api/server/version)",
+      "Bash(curl -s -u \"admin:bd97a58c2f2d471a8a79f932a349bb96\" http://localhost:3001/dashboard)",
+      "Bash(curl -s -H \"X-Api-Key: 7ae9c4ed34104f9c91380458130ff092\" \"http://localhost:3001/api/default/chats?limit=5\")"
     ]
   }
 }

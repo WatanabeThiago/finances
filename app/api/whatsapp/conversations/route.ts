@@ -1,81 +1,51 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { getWhatsAppClient, getClientStatus } from '@/lib/whatsapp-client';
+import { NextResponse } from "next/server";
+import { getChats, getChatMessages, extractPhone } from "@/lib/waha-client";
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
-    const status = getClientStatus();
+    const chats = await getChats();
 
-    if (!status.isReady) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'Cliente WhatsApp não está pronto',
-          status,
-        },
-        { status: 503 }
-      );
+    if (!chats.length) {
+      return NextResponse.json({ success: true, count: 0, conversations: [] });
     }
 
-    const client = await getWhatsAppClient();
-    const chats = await client.getChats();
-
-    // Filtrar apenas chats com mensagens e ordenar por última mensagem
-    const chatsWithMessages = await Promise.all(
-      chats.map(async (chat) => {
-        const messages = await chat.fetchMessages({ limit: 100 });
-        return {
-          chat,
-          messages: messages.sort((a, b) => a.timestamp - b.timestamp),
-        };
+    const withMessages = await Promise.all(
+      chats.slice(0, 20).map(async (chat) => {
+        const messages = await getChatMessages(chat.id, 50);
+        return { chat, messages };
       })
     );
 
-    // Pegar os últimos 5 chats (mais recentes)
-    const lastChats = chatsWithMessages
+    const conversations = withMessages
       .filter((item) => item.messages.length > 0)
       .sort((a, b) => {
-        const lastMsgA = a.messages[a.messages.length - 1]?.timestamp || 0;
-        const lastMsgB = b.messages[b.messages.length - 1]?.timestamp || 0;
-        return lastMsgB - lastMsgA;
+        const lastA = a.messages[a.messages.length - 1]?.timestamp ?? 0;
+        const lastB = b.messages[b.messages.length - 1]?.timestamp ?? 0;
+        return lastB - lastA;
       })
-      .slice(0, 5);
-
-    const conversations = lastChats.map((item) => {
-      const { chat, messages } = item;
-      const firstMsg = messages[0];
-      const lastMsg = messages[messages.length - 1];
-
-      // Extrair phone do chat ID (formato: "5511999999999@c.us" ou "5511999999999@g.us")
-      const phoneMatch = chat.id.user
-        ? String(chat.id.user).match(/^(\d+)/)
-        : null;
-      const phone = phoneMatch ? phoneMatch[1] : chat.id.user || chat.name;
-
-      return {
-        id: chat.id._serialized,
-        phone,
-        name: chat.name,
-        isGroup: chat.isGroup,
-        messageCount: messages.length,
-        firstMessageAt: new Date(firstMsg.timestamp * 1000).toISOString(),
-        lastMessageAt: new Date(lastMsg.timestamp * 1000).toISOString(),
-        lastMessage: lastMsg.body.substring(0, 100),
-      };
-    });
+      .slice(0, 10)
+      .map(({ chat, messages }) => {
+        const first = messages[0];
+        const last = messages[messages.length - 1];
+        return {
+          id: chat.id,
+          phone: extractPhone(chat.id),
+          name: chat.name,
+          isGroup: chat.isGroup,
+          messageCount: messages.length,
+          firstMessageAt: new Date(first.timestamp * 1000).toISOString(),
+          lastMessageAt: new Date(last.timestamp * 1000).toISOString(),
+          lastMessage: last.body.substring(0, 100),
+        };
+      });
 
     return NextResponse.json({
       success: true,
       count: conversations.length,
       conversations,
     });
-  } catch (error: any) {
-    console.error('Erro ao buscar conversas:', error);
-    return NextResponse.json(
-      {
-        success: false,
-        error: error.message || 'Erro ao buscar conversas',
-      },
-      { status: 500 }
-    );
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Erro ao buscar conversas";
+    return NextResponse.json({ success: false, error: message }, { status: 500 });
   }
 }

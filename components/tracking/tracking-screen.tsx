@@ -30,6 +30,8 @@ export function TrackingScreen() {
   const [savingId, setSavingId] = useState<string | null>(null);
   const [togglingVendaId, setTogglingVendaId] = useState<string | null>(null);
   const [expandedVisitors, setExpandedVisitors] = useState<Set<string>>(new Set());
+  const [syncing, setSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState<{ matched: number; details: { visitor_id: string; phone: string; diff_seconds: number }[] } | null>(null);
 
   useEffect(() => {
     const fetchEvents = async () => {
@@ -61,6 +63,27 @@ export function TrackingScreen() {
       alert("Erro ao recarregar eventos");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSyncPhones = async () => {
+    setSyncing(true);
+    setSyncResult(null);
+    try {
+      const response = await fetch("/api/tracking/sync-phones", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Falha ao sincronizar");
+      setSyncResult(data);
+      if (data.matched > 0) {
+        // Recarregar eventos para mostrar os phones preenchidos
+        const res = await fetch("/api/tracking");
+        if (res.ok) setEvents(await res.json());
+      }
+    } catch (err) {
+      console.error("Erro ao sincronizar:", err);
+      alert("Erro ao sincronizar com WhatsApp");
+    } finally {
+      setSyncing(false);
     }
   };
 
@@ -257,26 +280,32 @@ export function TrackingScreen() {
         </p>
       </div>
 
-      {/* Refresh Button */}
-      <div className="flex justify-end">
+      {/* Action Buttons */}
+      <div className="flex flex-wrap items-center justify-end gap-3">
+        {syncResult && (
+          <span className={`text-sm px-3 py-1 rounded-lg ${syncResult.matched > 0 ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300" : "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400"}`}>
+            {syncResult.matched > 0 ? `✅ ${syncResult.matched} telefone(s) preenchido(s)` : "Nenhum match encontrado"}
+          </span>
+        )}
+        <button
+          onClick={handleSyncPhones}
+          disabled={syncing || loading}
+          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-green-700 text-white hover:bg-green-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          title="Correlacionar conversas do WhatsApp com visitantes"
+        >
+          <svg className={`w-4 h-4 ${syncing ? "animate-spin" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+          </svg>
+          {syncing ? "Sincronizando..." : "Sincronizar WhatsApp"}
+        </button>
         <button
           onClick={handleRefresh}
           disabled={loading}
           className="flex items-center gap-2 px-4 py-2 rounded-lg bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           title="Recarregar dados"
         >
-          <svg
-            className={`w-4 h-4 ${loading ? "animate-spin" : ""}`}
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-            />
+          <svg className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
           </svg>
           Atualizar
         </button>
