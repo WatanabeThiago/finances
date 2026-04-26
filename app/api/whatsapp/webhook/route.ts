@@ -13,7 +13,26 @@ interface WahaWebhookPayload {
   };
 }
 
-async function correlatePhone(phone: string, messageTimestamp: Date): Promise<string | null> {
+async function getActiveTemplates(): Promise<string[]> {
+  const rows = await query(
+    `SELECT text FROM public.whatsapp_templates WHERE active = true`
+  );
+  return rows.map((r) => r.text as string);
+}
+
+function matchesTemplate(body: string, templates: string[]): boolean {
+  const normalized = body.trim().toLowerCase();
+  return templates.some((t) => normalized.includes(t.toLowerCase()));
+}
+
+async function correlatePhone(
+  phone: string,
+  messageTime: Date,
+  isTemplateMatch: boolean
+): Promise<string | null> {
+  // Com template: janela de 5 min. Sem template: janela de 1 min.
+  const windowSeconds = isTemplateMatch ? 300 : 60;
+
   const rows = await query(
     `SELECT ts."visitorId"
      FROM public."TrackingSession" ts
@@ -21,21 +40,20 @@ async function correlatePhone(phone: string, messageTimestamp: Date): Promise<st
      WHERE ts.phone IS NULL
        AND t.event = 'click'
        AND t."isBot" = false
-       AND t."createdAt" BETWEEN ($1::timestamptz - INTERVAL '30 minutes')
-                              AND ($1::timestamptz + INTERVAL '2 minutes')
+       AND t."createdAt" BETWEEN ($1::timestamptz - INTERVAL '2 seconds')
+                              AND ($1::timestamptz + make_interval(secs => $2))
      ORDER BY ABS(EXTRACT(EPOCH FROM (t."createdAt" - $1::timestamptz))) ASC
      LIMIT 1`,
-    [messageTimestamp.toISOString()]
+    [messageTime.toISOString(), windowSeconds]
   );
 
   if (!rows.length) return null;
 
   const visitorId = rows[0].visitorId;
-
   await query(
     `UPDATE public."TrackingSession"
      SET phone = $1, "updatedAt" = CURRENT_TIMESTAMP
-     WHERE "visitorId" = $2`,
+     WHERE "visitorId" = $2 AND phone IS NULL`,
     [phone, visitorId]
   );
 
@@ -44,7 +62,6 @@ async function correlatePhone(phone: string, messageTimestamp: Date): Promise<st
 
 export async function POST(request: NextRequest) {
   try {
-    // Verificar autenticação
     const apiKey = request.headers.get("x-api-key");
     const expectedKey = process.env.WAHA_API_KEY;
     if (expectedKey && apiKey !== expectedKey) {
@@ -53,22 +70,27 @@ export async function POST(request: NextRequest) {
 
     const body: WahaWebhookPayload = await request.json();
 
-    // Só processar eventos de mensagem recebida (não enviada)
     if (body.event !== "message" || body.payload?.fromMe) {
       return NextResponse.json({ ok: true, skipped: true });
     }
 
     const phone = extractPhone(body.payload.from);
     const messageTime = new Date(body.payload.timestamp * 1000);
+    const msgBody = body.payload.body ?? "";
 
-    const visitorId = await correlatePhone(phone, messageTime);
+    const templates = await getActiveTemplates();
+    const isTemplateMatch = templates.length > 0 && matchesTemplate(msgBody, templates);
+
+    console.log(`[webhook] ${phone} | template=${isTemplateMatch} | "${msgBody.slice(0, 50)}"`);
+
+    const visitorId = await correlatePhone(phone, messageTime, isTemplateMatch);
 
     if (visitorId) {
-      console.log(`[webhook] Correlacionado: ${phone} → ${visitorId}`);
-      return NextResponse.json({ ok: true, matched: true, visitor_id: visitorId, phone });
+      console.log(`[webhook] ✅ Correlacionado: ${phone} → ${visitorId} (via ${isTemplateMatch ? "template" : "timestamp"})`);
+      return NextResponse.json({ ok: true, matched: true, visitor_id: visitorId, phone, via: isTemplateMatch ? "template" : "timestamp" });
     }
 
-    console.log(`[webhook] Sem match para ${phone} em ${messageTime.toISOString()}`);
+    console.log(`[webhook] ✗ Sem match para ${phone}`);
     return NextResponse.json({ ok: true, matched: false });
   } catch (error: unknown) {
     console.error("[webhook] Erro:", error);

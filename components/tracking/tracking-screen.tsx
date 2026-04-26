@@ -32,6 +32,10 @@ export function TrackingScreen() {
   const [expandedVisitors, setExpandedVisitors] = useState<Set<string>>(new Set());
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<{ matched: number; details: { visitor_id: string; phone: string; diff_seconds: number }[] } | null>(null);
+  const [templates, setTemplates] = useState<{ id: string; text: string; active: boolean }[]>([]);
+  const [showTemplates, setShowTemplates] = useState(false);
+  const [newTemplate, setNewTemplate] = useState("");
+  const [savingTemplate, setSavingTemplate] = useState(false);
 
   useEffect(() => {
     const fetchEvents = async () => {
@@ -64,6 +68,47 @@ export function TrackingScreen() {
     } finally {
       setLoading(false);
     }
+  };
+
+  useEffect(() => {
+    fetch("/api/whatsapp/templates")
+      .then((r) => r.json())
+      .then(setTemplates)
+      .catch(() => {});
+  }, []);
+
+  const handleAddTemplate = async () => {
+    if (!newTemplate.trim()) return;
+    setSavingTemplate(true);
+    try {
+      const res = await fetch("/api/whatsapp/templates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: newTemplate.trim() }),
+      });
+      if (!res.ok) throw new Error("Falha");
+      const created = await res.json();
+      setTemplates((prev) => [...prev, created]);
+      setNewTemplate("");
+    } catch {
+      alert("Erro ao salvar template");
+    } finally {
+      setSavingTemplate(false);
+    }
+  };
+
+  const handleDeleteTemplate = async (id: string) => {
+    await fetch(`/api/whatsapp/templates/${id}`, { method: "DELETE" });
+    setTemplates((prev) => prev.filter((t) => t.id !== id));
+  };
+
+  const handleToggleTemplate = async (id: string, active: boolean) => {
+    await fetch(`/api/whatsapp/templates/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ active: !active }),
+    });
+    setTemplates((prev) => prev.map((t) => t.id === id ? { ...t, active: !active } : t));
   };
 
   const handleSyncPhones = async () => {
@@ -309,6 +354,54 @@ export function TrackingScreen() {
           </svg>
           Atualizar
         </button>
+      </div>
+
+      {/* Templates WhatsApp */}
+      <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950">
+        <button
+          onClick={() => setShowTemplates((v) => !v)}
+          className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-900/30 transition-colors rounded-xl"
+        >
+          <span>💬 Templates de Correlação WhatsApp ({templates.filter((t) => t.active).length} ativos)</span>
+          <svg className={`w-4 h-4 transition-transform ${showTemplates ? "rotate-90" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          </svg>
+        </button>
+        {showTemplates && (
+          <div className="px-4 pb-4 space-y-3 border-t border-zinc-100 dark:border-zinc-800 pt-3">
+            <p className="text-xs text-zinc-500 dark:text-zinc-400">Mensagens que indicam que o contato veio da landing page. Usadas para correlacionar visitantes com conversas do WhatsApp.</p>
+            <div className="space-y-2">
+              {templates.map((t) => (
+                <div key={t.id} className="flex items-center gap-2 text-sm">
+                  <button onClick={() => handleToggleTemplate(t.id, t.active)} className={`shrink-0 w-5 h-5 rounded border flex items-center justify-center transition-colors ${t.active ? "bg-green-500 border-green-500 text-white" : "border-zinc-300 dark:border-zinc-600"}`}>
+                    {t.active && <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
+                  </button>
+                  <span className={`flex-1 font-mono text-xs ${t.active ? "text-zinc-900 dark:text-zinc-100" : "text-zinc-400 line-through"}`}>{t.text}</span>
+                  <button onClick={() => handleDeleteTemplate(t.id)} className="shrink-0 text-zinc-400 hover:text-red-500 transition-colors">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                  </button>
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-2 pt-1">
+              <input
+                type="text"
+                value={newTemplate}
+                onChange={(e) => setNewTemplate(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleAddTemplate()}
+                placeholder="Novo template..."
+                className="flex-1 px-3 py-1.5 text-sm rounded-lg border border-zinc-300 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-green-500"
+              />
+              <button
+                onClick={handleAddTemplate}
+                disabled={savingTemplate || !newTemplate.trim()}
+                className="px-3 py-1.5 text-sm rounded-lg bg-green-700 text-white hover:bg-green-600 disabled:opacity-50 transition-colors"
+              >
+                Adicionar
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Stats Cards */}

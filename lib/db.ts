@@ -275,6 +275,25 @@ export async function initializeDatabase() {
        ADD COLUMN IF NOT EXISTS "group" TEXT`
     );
 
+    await query(
+      `CREATE TABLE IF NOT EXISTS public.whatsapp_templates (
+        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        text TEXT NOT NULL UNIQUE,
+        active BOOLEAN DEFAULT true,
+        "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )`
+    );
+
+    // Seeds iniciais
+    await query(
+      `INSERT INTO public.whatsapp_templates (text) VALUES
+        ('Oi, estou precisando de um chaveiro 24h. Você está disponivel?'),
+        ('Olá, preciso de um chaveiro 24H. Vocês estão disponiveis?'),
+        ('Preciso de um chaveiro 24h. Voce está disponivel?'),
+        ('Preciso de chaveiro 24h. Voce está disponivel agora?')
+       ON CONFLICT (text) DO NOTHING`
+    );
+
     console.log("Database initialized successfully!");
   } catch (error) {
     console.error("Error initializing database:", error);
