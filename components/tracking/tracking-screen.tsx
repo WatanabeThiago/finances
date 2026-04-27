@@ -31,11 +31,22 @@ export function TrackingScreen() {
   const [togglingVendaId, setTogglingVendaId] = useState<string | null>(null);
   const [expandedVisitors, setExpandedVisitors] = useState<Set<string>>(new Set());
   const [syncing, setSyncing] = useState(false);
+  const [dateFilter, setDateFilter] = useState<"today" | "yesterday" | "7days" | "30days" | "all">("all");
   const [syncResult, setSyncResult] = useState<{ matched: number; details: { visitor_id: string; phone: string; diff_seconds: number }[] } | null>(null);
   const [templates, setTemplates] = useState<{ id: string; text: string; active: boolean }[]>([]);
   const [showTemplates, setShowTemplates] = useState(false);
   const [newTemplate, setNewTemplate] = useState("");
   const [savingTemplate, setSavingTemplate] = useState(false);
+
+  type AnalysisResult = {
+    resumo: string;
+    servico: string;
+    converteu: boolean | null;
+    confianca: number;
+    dicas: string[];
+    resposta_sugerida: string;
+  };
+  const [analysisCache, setAnalysisCache] = useState<Record<string, AnalysisResult | "loading" | "error">>({});
 
   useEffect(() => {
     const fetchEvents = async () => {
@@ -109,6 +120,22 @@ export function TrackingScreen() {
       body: JSON.stringify({ active: !active }),
     });
     setTemplates((prev) => prev.map((t) => t.id === id ? { ...t, active: !active } : t));
+  };
+
+  const handleAnalyze = async (phone: string, visitorId: string) => {
+    setAnalysisCache((prev) => ({ ...prev, [visitorId]: "loading" }));
+    try {
+      const res = await fetch("/api/ai/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Erro na análise");
+      setAnalysisCache((prev) => ({ ...prev, [visitorId]: data }));
+    } catch {
+      setAnalysisCache((prev) => ({ ...prev, [visitorId]: "error" }));
+    }
   };
 
   const handleSyncPhones = async () => {
@@ -237,8 +264,23 @@ export function TrackingScreen() {
 
   // Filtrar apenas pessoas reais (sem bots)
   const realVisitors = useMemo(() => {
-    return events.filter((e) => !e.is_bot);
-  }, [events]);
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const startOfYesterday = new Date(startOfToday);
+    startOfYesterday.setDate(startOfYesterday.getDate() - 1);
+    const endOfYesterday = new Date(startOfToday);
+
+    return events.filter((e) => {
+      if (e.is_bot) return false;
+      if (dateFilter === "all") return true;
+      const eventDate = new Date(e.created_at);
+      if (dateFilter === "today") return eventDate >= startOfToday;
+      if (dateFilter === "yesterday") return eventDate >= startOfYesterday && eventDate < endOfYesterday;
+      if (dateFilter === "7days") return eventDate >= new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      if (dateFilter === "30days") return eventDate >= new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      return true;
+    });
+  }, [events, dateFilter]);
 
   // Agrupar por visitor_id e manter ordenação por data
   const groupedVisitors = useMemo(() => {
@@ -323,6 +365,26 @@ export function TrackingScreen() {
         <p className="mt-2 text-zinc-600 dark:text-zinc-400">
           Análise de dados da landing page (apenas visitantes reais, bots excluídos)
         </p>
+      </div>
+
+      {/* Date Filters */}
+      <div className="flex flex-wrap items-center gap-2">
+        {(["today", "yesterday", "7days", "30days", "all"] as const).map((filter) => {
+          const labels = { today: "Hoje", yesterday: "Ontem", "7days": "7 dias", "30days": "30 dias", all: "Todos" };
+          return (
+            <button
+              key={filter}
+              onClick={() => setDateFilter(filter)}
+              className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors border ${
+                dateFilter === filter
+                  ? "bg-zinc-900 text-white border-zinc-900 dark:bg-white dark:text-zinc-900 dark:border-white"
+                  : "bg-white text-zinc-600 border-zinc-300 hover:border-zinc-400 dark:bg-zinc-900 dark:text-zinc-400 dark:border-zinc-700 dark:hover:border-zinc-500"
+              }`}
+            >
+              {labels[filter]}
+            </button>
+          );
+        })}
       </div>
 
       {/* Action Buttons */}
@@ -592,6 +654,22 @@ export function TrackingScreen() {
                                 </svg>
                               </button>
                             )}
+                            {firstEvent?.phone && (
+                              <button
+                                onClick={() => handleAnalyze(firstEvent.phone!, visitorId)}
+                                disabled={analysisCache[visitorId] === "loading"}
+                                className="opacity-0 group-hover:opacity-100 transition-opacity text-violet-500 hover:text-violet-700 disabled:opacity-50"
+                                title="Analisar conversa com IA"
+                              >
+                                {analysisCache[visitorId] === "loading" ? (
+                                  <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                  </svg>
+                                ) : (
+                                  <span className="text-sm">🤖</span>
+                                )}
+                              </button>
+                            )}
                           </div>
                         )}
                       </td>
@@ -689,6 +767,59 @@ export function TrackingScreen() {
                         {visitorId.slice(0, 8)}...{visitorId.slice(-4)}
                       </td>
                     </tr>
+                    {analysisCache[visitorId] && analysisCache[visitorId] !== "loading" && (
+                      <tr className="bg-violet-50/50 dark:bg-violet-950/20 border-b border-violet-100 dark:border-violet-900">
+                        <td colSpan={21} className="px-6 py-4">
+                          {analysisCache[visitorId] === "error" ? (
+                            <p className="text-sm text-red-500">Erro ao analisar conversa. Verifique se o WAHA está rodando.</p>
+                          ) : (() => {
+                            const a = analysisCache[visitorId] as AnalysisResult;
+                            return (
+                              <div className="flex flex-wrap gap-6">
+                                <div className="flex-1 min-w-60 space-y-2">
+                                  <div className="flex items-center gap-3 flex-wrap">
+                                    <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">🤖 {a.resumo}</span>
+                                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${a.converteu === true ? "bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300" : a.converteu === false ? "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300" : "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"}`}>
+                                      {a.converteu === true ? "✅ Converteu" : a.converteu === false ? "❌ Não converteu" : "⏳ Pendente"}
+                                    </span>
+                                    <span className="text-xs text-zinc-500">{a.servico}</span>
+                                    <span className="text-xs text-zinc-400">{a.confianca}% confiança</span>
+                                  </div>
+                                  <ul className="space-y-1">
+                                    {a.dicas.map((d, i) => (
+                                      <li key={i} className="text-xs text-zinc-600 dark:text-zinc-400">💡 {d}</li>
+                                    ))}
+                                  </ul>
+                                </div>
+                                {a.resposta_sugerida && (
+                                  <div className="flex-1 min-w-60 space-y-1">
+                                    <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">Resposta sugerida:</p>
+                                    <div className="flex items-start gap-2">
+                                      <p className="text-sm text-zinc-800 dark:text-zinc-200 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg px-3 py-2 flex-1">{a.resposta_sugerida}</p>
+                                      <button
+                                        onClick={() => navigator.clipboard.writeText(a.resposta_sugerida)}
+                                        className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 mt-2 shrink-0"
+                                        title="Copiar"
+                                      >
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+                                      </button>
+                                    </div>
+                                  </div>
+                                )}
+                                {a.converteu === true && !(firstEvent?.venda) && (
+                                  <button
+                                    onClick={() => handleToggleVenda(visitorId, false)}
+                                    className="self-start text-xs px-3 py-1.5 rounded-lg bg-green-600 text-white hover:bg-green-500 transition-colors"
+                                  >
+                                    ✅ Marcar como venda
+                                  </button>
+                                )}
+                              </div>
+                            );
+                          })()}
+                        </td>
+                      </tr>
+                    )}
                     {isExpanded && (
                       <tr className="bg-zinc-50 dark:bg-zinc-900/50">
                         <td colSpan={21} className="p-4">
