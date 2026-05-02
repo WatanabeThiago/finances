@@ -14,7 +14,7 @@ export async function GET() {
     const events = await query(
       `SELECT 
         t.id,
-        to_char(t."createdAt" AT TIME ZONE 'America/Sao_Paulo', 'YYYY-MM-DD HH24:MI:SS') as created_at,
+        to_char(t."createdAt" AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as created_at,
         t.event,
         t."visitorId" as visitor_id,
         t."userAgent" as user_agent,

@@ -264,20 +264,22 @@ export function TrackingScreen() {
 
   // Filtrar apenas pessoas reais (sem bots)
   const realVisitors = useMemo(() => {
+    const spDate = (d: Date) =>
+      new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(d);
     const now = new Date();
-    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const startOfYesterday = new Date(startOfToday);
-    startOfYesterday.setDate(startOfYesterday.getDate() - 1);
-    const endOfYesterday = new Date(startOfToday);
+    const todaySp = spDate(now);
+    const yesterdaySp = spDate(new Date(now.getTime() - 86400000));
+    const sevenDaysAgoSp = spDate(new Date(now.getTime() - 7 * 86400000));
+    const thirtyDaysAgoSp = spDate(new Date(now.getTime() - 30 * 86400000));
 
     return events.filter((e) => {
       if (e.is_bot) return false;
       if (dateFilter === "all") return true;
-      const eventDate = new Date(e.created_at);
-      if (dateFilter === "today") return eventDate >= startOfToday;
-      if (dateFilter === "yesterday") return eventDate >= startOfYesterday && eventDate < endOfYesterday;
-      if (dateFilter === "7days") return eventDate >= new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-      if (dateFilter === "30days") return eventDate >= new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      const eventDateSp = spDate(new Date(e.created_at));
+      if (dateFilter === "today") return eventDateSp === todaySp;
+      if (dateFilter === "yesterday") return eventDateSp === yesterdaySp;
+      if (dateFilter === "7days") return eventDateSp >= sevenDaysAgoSp;
+      if (dateFilter === "30days") return eventDateSp >= thirtyDaysAgoSp;
       return true;
     });
   }, [events, dateFilter]);
@@ -605,7 +607,7 @@ export function TrackingScreen() {
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                             </svg>
                           </button>
-                          <span>{new Date(firstEvent?.created_at || '').toLocaleString("pt-BR")}</span>
+                          <span>{new Date(firstEvent?.created_at || '').toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}</span>
                         </td>
                       <td className="px-4 py-3 text-zinc-900 dark:text-zinc-100 whitespace-nowrap">
                         <span className="inline-block bg-sky-100 dark:bg-sky-900/30 text-sky-900 dark:text-sky-200 px-2 py-1 rounded text-xs font-medium">
@@ -874,7 +876,7 @@ export function TrackingScreen() {
                                           )}
                                         </div>
                                         <div className="text-zinc-600 dark:text-zinc-400 font-mono text-xs">
-                                          {new Date(event.created_at).toLocaleString("pt-BR")}
+                                          {new Date(event.created_at).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}
                                         </div>
                                         <div className="text-zinc-600 dark:text-zinc-400 mt-1 break-words">
                                           <span className="text-xs">🔗 User-Agent: </span>

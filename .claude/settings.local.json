@@ -12,7 +12,8 @@
       "Bash(curl -s -u \"admin:bd97a58c2f2d471a8a79f932a349bb96\" http://localhost:3001/dashboard)",
       "Bash(curl -s -H \"X-Api-Key: 7ae9c4ed34104f9c91380458130ff092\" \"http://localhost:3001/api/default/chats?limit=5\")",
       "Skill(claude-api)",
-      "Skill(claude-api:*)"
+      "Skill(claude-api:*)",
+      "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\watan\\\\Desktop\\\\Chaveiro\\\\finances\" -Recurse -Name)"
     ]
   }
 }
