@@ -337,6 +337,10 @@ export function TrackingScreen() {
     const topSource = Object.entries(utmSources).sort((a, b) => b[1] - a[1])[0];
     const topMedium = Object.entries(utmMediums).sort((a, b) => b[1] - a[1])[0];
 
+    const callVisitors = new Set(
+      realVisitors.filter((e) => e.event === "call").map((e) => e.visitor_id)
+    ).size;
+
     return {
       totalEvents: realVisitors.length,
       uniqueVisitors,
@@ -345,6 +349,7 @@ export function TrackingScreen() {
       topMediumLabel: topMedium ? topMedium[0] : "N/A",
       totalBots,
       botPercentage: events.length > 0 ? ((totalBots / events.length) * 100).toFixed(1) : "0",
+      callVisitors,
     };
   }, [realVisitors, events]);
 
@@ -497,6 +502,12 @@ export function TrackingScreen() {
           value={stats.topMediumLabel}
           change="utm_medium"
           color="amber"
+        />
+        <StatCard
+          label="Conversas Iniciadas"
+          value={stats.callVisitors.toString()}
+          change={stats.uniqueVisitors > 0 ? `${((stats.callVisitors / stats.uniqueVisitors) * 100).toFixed(0)}% dos visitantes` : "0% dos visitantes"}
+          color="green"
         />
       </div>
 
