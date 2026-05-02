@@ -338,7 +338,7 @@ export function TrackingScreen() {
     const topMedium = Object.entries(utmMediums).sort((a, b) => b[1] - a[1])[0];
 
     const callVisitors = new Set(
-      realVisitors.filter((e) => e.event === "call").map((e) => e.visitor_id)
+      realVisitors.filter((e) => e.event === "call" || e.event === "click").map((e) => e.visitor_id)
     ).size;
 
     return {
