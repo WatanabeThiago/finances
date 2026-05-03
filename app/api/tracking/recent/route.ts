@@ -23,6 +23,7 @@ export async function GET() {
        FROM public."Tracking" t
        LEFT JOIN public."TrackingSession" s ON t."visitorId" = s."visitorId"
        WHERE t."createdAt" >= $1 AND t."isBot" = false
+         AND (s.gclid IS NOT NULL OR s.fbclid IS NOT NULL OR s.msclkid IS NOT NULL)
        ORDER BY t."createdAt" DESC`,
       [twoMinutesAgo.toISOString()]
     );
