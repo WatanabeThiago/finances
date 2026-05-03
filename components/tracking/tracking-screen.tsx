@@ -275,6 +275,7 @@ export function TrackingScreen() {
 
     return events.filter((e) => {
       if (e.is_bot && !e.gclid && !e.fbclid && !e.msclkid) return false;
+      if (ignoreBots && !e.gclid && !e.fbclid && !e.msclkid) return false;
       if (dateFilter === "all") return true;
       const eventDateSp = spDate(new Date(e.created_at));
       if (dateFilter === "today") return eventDateSp === todaySp;
@@ -283,7 +284,7 @@ export function TrackingScreen() {
       if (dateFilter === "30days") return eventDateSp >= thirtyDaysAgoSp;
       return true;
     });
-  }, [events, dateFilter]);
+  }, [events, dateFilter, ignoreBots]);
 
   // Agrupar por visitor_id e manter ordenação por data
   const groupedVisitors = useMemo(() => {
@@ -310,13 +311,8 @@ export function TrackingScreen() {
       return dateB - dateA;
     });
 
-    if (!ignoreBots) return sortedGroups;
-
-    return sortedGroups.filter(([, eventList]) => {
-      const first = eventList[0];
-      return !!(first.gclid || first.fbclid || first.msclkid);
-    });
-  }, [realVisitors, ignoreBots]);
+    return sortedGroups;
+  }, [realVisitors]);
 
   // Calcular estatísticas
   const stats = useMemo(() => {
