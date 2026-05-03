@@ -31,7 +31,7 @@ export function TrackingScreen() {
   const [togglingVendaId, setTogglingVendaId] = useState<string | null>(null);
   const [expandedVisitors, setExpandedVisitors] = useState<Set<string>>(new Set());
   const [syncing, setSyncing] = useState(false);
-  const [dateFilter, setDateFilter] = useState<"today" | "yesterday" | "7days" | "30days" | "all">("all");
+  const [dateFilter, setDateFilter] = useState<"today" | "yesterday" | "7days" | "30days" | "all">("today");
   const [ignoreBots, setIgnoreBots] = useState(true);
   const [syncResult, setSyncResult] = useState<{ matched: number; details: { visitor_id: string; phone: string; diff_seconds: number }[] } | null>(null);
   const [templates, setTemplates] = useState<{ id: string; text: string; active: boolean }[]>([]);
