@@ -89,8 +89,8 @@ export async function POST(request: Request) {
       );
     }
 
-    // Detectar se é bot
-    const is_bot = isBot(user_agent);
+    // Quem tem gclid/fbclid/msclkid clicou num anúncio — nunca é bot
+    const is_bot = isBot(user_agent) && !gclid && !fbclid && !msclkid;
 
     // UPSERT na sessão do visitante
     await query(
