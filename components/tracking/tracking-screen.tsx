@@ -32,7 +32,7 @@ export function TrackingScreen() {
   const [expandedVisitors, setExpandedVisitors] = useState<Set<string>>(new Set());
   const [syncing, setSyncing] = useState(false);
   const [dateFilter, setDateFilter] = useState<"today" | "yesterday" | "7days" | "30days" | "all">("all");
-  const [fieldFilters, setFieldFilters] = useState<Set<string>>(new Set());
+  const [ignoreBots, setIgnoreBots] = useState(true);
   const [syncResult, setSyncResult] = useState<{ matched: number; details: { visitor_id: string; phone: string; diff_seconds: number }[] } | null>(null);
   const [templates, setTemplates] = useState<{ id: string; text: string; active: boolean }[]>([]);
   const [showTemplates, setShowTemplates] = useState(false);
@@ -310,24 +310,13 @@ export function TrackingScreen() {
       return dateB - dateA;
     });
 
-    if (fieldFilters.size === 0) return sortedGroups;
-
-    const fieldChecks: Record<string, (e: TrackingEvent) => boolean> = {
-      group: (e) => !!e.group,
-      campaignid: (e) => !!e.gad_campaignid,
-      keyword: (e) => !!e.keyword,
-      gclid: (e) => !!e.gclid,
-      fbclid: (e) => !!e.fbclid,
-      phone: (e) => !!e.phone,
-      venda: (e) => !!e.venda,
-      utm_source: (e) => !!e.utm_source,
-    };
+    if (!ignoreBots) return sortedGroups;
 
     return sortedGroups.filter(([, eventList]) => {
       const first = eventList[0];
-      return [...fieldFilters].every((f) => fieldChecks[f]?.(first));
+      return !!(first.gclid || first.fbclid || first.msclkid);
     });
-  }, [realVisitors, fieldFilters]);
+  }, [realVisitors, ignoreBots]);
 
   // Calcular estatísticas
   const stats = useMemo(() => {
@@ -411,48 +400,22 @@ export function TrackingScreen() {
         })}
       </div>
 
-      {/* Field Filters */}
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-xs text-zinc-500 dark:text-zinc-400 mr-1">Filtrar por:</span>
-        {([
-          { key: "group", label: "📍 Grupo" },
-          { key: "campaignid", label: "🔢 Campaign ID" },
-          { key: "keyword", label: "🔑 Keyword" },
-          { key: "gclid", label: "🔗 GCLID" },
-          { key: "fbclid", label: "📘 FBCLID" },
-          { key: "utm_source", label: "🎯 UTM Source" },
-          { key: "phone", label: "📞 Com telefone" },
-          { key: "venda", label: "✅ Venda" },
-        ] as const).map(({ key, label }) => {
-          const active = fieldFilters.has(key);
-          return (
-            <button
-              key={key}
-              onClick={() => {
-                setFieldFilters((prev) => {
-                  const next = new Set(prev);
-                  if (next.has(key)) next.delete(key);
-                  else next.add(key);
-                  return next;
-                });
-              }}
-              className={`px-3 py-1 rounded-full text-xs font-medium transition-colors border ${
-                active
-                  ? "bg-indigo-600 text-white border-indigo-600"
-                  : "bg-white text-zinc-500 border-zinc-300 hover:border-zinc-400 dark:bg-zinc-900 dark:text-zinc-400 dark:border-zinc-700"
-              }`}
-            >
-              {label}
-            </button>
-          );
-        })}
-        {fieldFilters.size > 0 && (
-          <button
-            onClick={() => setFieldFilters(new Set())}
-            className="px-3 py-1 rounded-full text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 border border-transparent hover:border-zinc-300 transition-colors"
-          >
-            Limpar filtros
-          </button>
+      {/* Ignore Bots Toggle */}
+      <div className="flex items-center gap-2">
+        <button
+          onClick={() => setIgnoreBots((v) => !v)}
+          className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors border ${
+            ignoreBots
+              ? "bg-indigo-600 text-white border-indigo-600"
+              : "bg-white text-zinc-500 border-zinc-300 hover:border-zinc-400 dark:bg-zinc-900 dark:text-zinc-400 dark:border-zinc-700"
+          }`}
+        >
+          🤖 Ignorar Bots
+        </button>
+        {ignoreBots && (
+          <span className="text-xs text-zinc-500 dark:text-zinc-400">
+            Mostrando apenas sessões com GCLID / FBCLID / MSCLKID
+          </span>
         )}
       </div>
 
