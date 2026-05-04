@@ -23,6 +23,8 @@ export function useTrackingNotifications() {
           visitor_id: string;
           created_at: string;
           phone?: string;
+          keyword?: string;
+          matchtype?: string;
         }>;
 
         // Identificar eventos novos (não notificados antes)
@@ -44,9 +46,16 @@ export function useTrackingNotifications() {
             const emoji = getEmojiForEvent(eventType);
             const count = eventList.length;
             const title = `${emoji} Novo ${getEventLabel(eventType)}`;
-            const body = count === 1
-              ? `${eventList[0].phone || 'Visitante anônimo'}`
-              : `${count} novos ${getEventLabel(eventType).toLowerCase()}`;
+            let body: string;
+            if (count === 1) {
+              const e = eventList[0];
+              const parts = [e.phone || 'Visitante anônimo'];
+              if (e.keyword) parts.push(`🔑 ${e.keyword}`);
+              if (e.matchtype) parts.push(e.matchtype === 'e' ? 'Exata' : e.matchtype === 'p' ? 'Frase' : e.matchtype === 'b' ? 'Ampla' : e.matchtype);
+              body = parts.join(' · ');
+            } else {
+              body = `${count} novos ${getEventLabel(eventType).toLowerCase()}`;
+            }
 
             if ('Notification' in window && Notification.permission === 'granted') {
               try {

@@ -19,7 +19,9 @@ export async function GET() {
         t.event,
         t."visitorId" as visitor_id,
         s."visitorId" as session_id,
-        s.phone
+        s.phone,
+        s.keyword,
+        s.matchtype
        FROM public."Tracking" t
        LEFT JOIN public."TrackingSession" s ON t."visitorId" = s."visitorId"
        WHERE t."createdAt" >= $1 AND t."isBot" = false

@@ -559,19 +559,7 @@ export function TrackingScreen() {
                   📞 Telefone
                 </th>
                 <th className="px-4 py-3 text-left font-semibold text-white whitespace-nowrap">
-                  🎯 Fonte (UTM)
-                </th>
-                <th className="px-4 py-3 text-left font-semibold text-white whitespace-nowrap">
-                  📊 Meio (UTM)
-                </th>
-                <th className="px-4 py-3 text-left font-semibold text-white whitespace-nowrap">
-                  🎪 Campanha (UTM)
-                </th>
-                <th className="px-4 py-3 text-left font-semibold text-white whitespace-nowrap">
-                  📝 Conteúdo (UTM)
-                </th>
-                <th className="px-4 py-3 text-left font-semibold text-white whitespace-nowrap">
-                  🔗 GCLID
+                  🎯 Match Type
                 </th>
                 <th className="px-4 py-3 text-left font-semibold text-white whitespace-nowrap">
                   📘 FBCLID
@@ -595,7 +583,7 @@ export function TrackingScreen() {
                   📱 Device
                 </th>
                 <th className="px-4 py-3 text-left font-semibold text-white whitespace-nowrap">
-                  🎯 Match Type
+                  🔗 GCLID
                 </th>
                 <th className="px-4 py-3 text-left font-semibold text-white whitespace-nowrap">
                   🌍 Network
@@ -723,31 +711,11 @@ export function TrackingScreen() {
                         )}
                       </td>
                       <td className="px-4 py-3 text-zinc-900 dark:text-zinc-100 whitespace-nowrap text-xs">
-                        {firstEvent?.utm_source ? (
-                          <span className="inline-block bg-violet-100 dark:bg-violet-900/30 text-violet-900 dark:text-violet-200 px-2 py-1 rounded">
-                            {firstEvent.utm_source}
+                        {firstEvent?.matchtype ? (
+                          <span className="inline-block bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 px-2 py-1 rounded">
+                            {firstEvent.matchtype === 'e' ? '🎯 Exata' : firstEvent.matchtype === 'p' ? '💬 Frase' : firstEvent.matchtype === 'b' ? '🌐 Ampla' : firstEvent.matchtype}
                           </span>
-                        ) : (
-                          <span className="text-zinc-400">—</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-zinc-900 dark:text-zinc-100 whitespace-nowrap text-xs">
-                        {firstEvent?.utm_medium ? (
-                          <span className="inline-block bg-amber-100 dark:bg-amber-900/30 text-amber-900 dark:text-amber-200 px-2 py-1 rounded">
-                            {firstEvent.utm_medium}
-                          </span>
-                        ) : (
-                          <span className="text-zinc-400">—</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-zinc-900 dark:text-zinc-100 whitespace-nowrap text-xs">
-                        {firstEvent?.utm_campaign || "—"}
-                      </td>
-                      <td className="px-4 py-3 text-zinc-900 dark:text-zinc-100 whitespace-nowrap text-xs">
-                        {firstEvent?.utm_content || "—"}
-                      </td>
-                      <td className="px-4 py-3 text-zinc-900 dark:text-zinc-100 whitespace-nowrap text-xs font-mono">
-                        {firstEvent?.gclid ? firstEvent.gclid.slice(0, 12) + "..." : "—"}
+                        ) : "—"}
                       </td>
                       <td className="px-4 py-3 text-zinc-900 dark:text-zinc-100 whitespace-nowrap text-xs font-mono">
                         {firstEvent?.fbclid ? firstEvent.fbclid.slice(0, 12) + "..." : "—"}
@@ -782,8 +750,8 @@ export function TrackingScreen() {
                           <span className="text-zinc-400">—</span>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-zinc-900 dark:text-zinc-100 whitespace-nowrap text-xs">
-                        {firstEvent?.matchtype || "—"}
+                      <td className="px-4 py-3 text-zinc-900 dark:text-zinc-100 whitespace-nowrap text-xs font-mono">
+                        {firstEvent?.gclid ? firstEvent.gclid.slice(0, 12) + "..." : "—"}
                       </td>
                       <td className="px-4 py-3 text-zinc-900 dark:text-zinc-100 whitespace-nowrap text-xs">
                         {firstEvent?.network ? (
@@ -809,7 +777,7 @@ export function TrackingScreen() {
                     </tr>
                     {analysisCache[visitorId] && analysisCache[visitorId] !== "loading" && (
                       <tr className="bg-violet-50/50 dark:bg-violet-950/20 border-b border-violet-100 dark:border-violet-900">
-                        <td colSpan={22} className="px-6 py-4">
+                        <td colSpan={18} className="px-6 py-4">
                           {analysisCache[visitorId] === "error" ? (
                             <p className="text-sm text-red-500">Erro ao analisar conversa. Verifique se o WAHA está rodando.</p>
                           ) : (() => {
@@ -862,7 +830,7 @@ export function TrackingScreen() {
                     )}
                     {isExpanded && (
                       <tr className="bg-zinc-50 dark:bg-zinc-900/50">
-                        <td colSpan={22} className="p-4">
+                        <td colSpan={18} className="p-4">
                           <div className="space-y-2">
                             <h4 className="text-sm font-semibold text-zinc-900 dark:text-white mb-3">
                               Eventos ({eventList.length})
@@ -924,7 +892,7 @@ export function TrackingScreen() {
                 })
               ) : (
                 <tr>
-                  <td colSpan={22} className="px-4 py-8 text-center text-zinc-500 dark:text-zinc-400">
+                  <td colSpan={18} className="px-4 py-8 text-center text-zinc-500 dark:text-zinc-400">
                     Nenhuma sessão registrada ainda
                   </td>
                 </tr>
