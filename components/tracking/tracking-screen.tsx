@@ -546,14 +546,17 @@ export function TrackingScreen() {
                 <th className="px-4 py-3 text-left font-semibold text-white whitespace-nowrap">
                   Eventos
                 </th>
+                <th className="px-4 py-3 text-left font-semibold text-white whitespace-nowrap">
+                  🔍 Keyword
+                </th>
+                <th className="px-4 py-3 text-center font-semibold text-white whitespace-nowrap">
+                  Iniciou Conversa
+                </th>
                 <th className="px-4 py-3 text-center font-semibold text-white whitespace-nowrap">
                   Venda
                 </th>
                 <th className="px-4 py-3 text-left font-semibold text-white whitespace-nowrap">
                   📞 Telefone
-                </th>
-                <th className="px-4 py-3 text-left font-semibold text-white whitespace-nowrap">
-                  🔑 Palavra-Chave (UTM)
                 </th>
                 <th className="px-4 py-3 text-left font-semibold text-white whitespace-nowrap">
                   🎯 Fonte (UTM)
@@ -586,7 +589,7 @@ export function TrackingScreen() {
                   📱 GBRAID
                 </th>
                 <th className="px-4 py-3 text-left font-semibold text-white whitespace-nowrap">
-                  🔍 Keyword
+                  🔑 Palavra-Chave (UTM)
                 </th>
                 <th className="px-4 py-3 text-left font-semibold text-white whitespace-nowrap">
                   📱 Device
@@ -634,6 +637,18 @@ export function TrackingScreen() {
                         <span className="inline-block bg-sky-100 dark:bg-sky-900/30 text-sky-900 dark:text-sky-200 px-2 py-1 rounded text-xs font-medium">
                           {eventList.length}
                         </span>
+                      </td>
+                      <td className="px-4 py-3 text-zinc-900 dark:text-zinc-100 whitespace-nowrap text-xs font-semibold">
+                        {firstEvent?.keyword ? (
+                          <span className="inline-block bg-pink-100 dark:bg-pink-900/30 text-pink-900 dark:text-pink-200 px-2 py-1 rounded">
+                            {firstEvent.keyword}
+                          </span>
+                        ) : (
+                          <span className="text-zinc-400">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-center whitespace-nowrap">
+                        {eventList.some((e) => e.event === "click" || e.event === "call") ? "✅" : ""}
                       </td>
                       <td className="px-4 py-3 text-center whitespace-nowrap">
                         <button
@@ -708,15 +723,6 @@ export function TrackingScreen() {
                         )}
                       </td>
                       <td className="px-4 py-3 text-zinc-900 dark:text-zinc-100 whitespace-nowrap text-xs">
-                        {firstEvent?.utm_term ? (
-                          <span className="inline-block bg-red-100 dark:bg-red-900/30 text-red-900 dark:text-red-200 px-2 py-1 rounded">
-                            {firstEvent.utm_term}
-                          </span>
-                        ) : (
-                          <span className="text-zinc-400">—</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-zinc-900 dark:text-zinc-100 whitespace-nowrap text-xs">
                         {firstEvent?.utm_source ? (
                           <span className="inline-block bg-violet-100 dark:bg-violet-900/30 text-violet-900 dark:text-violet-200 px-2 py-1 rounded">
                             {firstEvent.utm_source}
@@ -758,10 +764,10 @@ export function TrackingScreen() {
                       <td className="px-4 py-3 text-zinc-900 dark:text-zinc-100 whitespace-nowrap text-xs font-mono">
                         {firstEvent?.gbraid ? firstEvent.gbraid.slice(0, 12) + "..." : "—"}
                       </td>
-                      <td className="px-4 py-3 text-zinc-900 dark:text-zinc-100 whitespace-nowrap text-xs font-semibold">
-                        {firstEvent?.keyword ? (
-                          <span className="inline-block bg-pink-100 dark:bg-pink-900/30 text-pink-900 dark:text-pink-200 px-2 py-1 rounded">
-                            {firstEvent.keyword}
+                      <td className="px-4 py-3 text-zinc-900 dark:text-zinc-100 whitespace-nowrap text-xs">
+                        {firstEvent?.utm_term ? (
+                          <span className="inline-block bg-red-100 dark:bg-red-900/30 text-red-900 dark:text-red-200 px-2 py-1 rounded">
+                            {firstEvent.utm_term}
                           </span>
                         ) : (
                           <span className="text-zinc-400">—</span>
@@ -803,7 +809,7 @@ export function TrackingScreen() {
                     </tr>
                     {analysisCache[visitorId] && analysisCache[visitorId] !== "loading" && (
                       <tr className="bg-violet-50/50 dark:bg-violet-950/20 border-b border-violet-100 dark:border-violet-900">
-                        <td colSpan={21} className="px-6 py-4">
+                        <td colSpan={22} className="px-6 py-4">
                           {analysisCache[visitorId] === "error" ? (
                             <p className="text-sm text-red-500">Erro ao analisar conversa. Verifique se o WAHA está rodando.</p>
                           ) : (() => {
@@ -856,7 +862,7 @@ export function TrackingScreen() {
                     )}
                     {isExpanded && (
                       <tr className="bg-zinc-50 dark:bg-zinc-900/50">
-                        <td colSpan={21} className="p-4">
+                        <td colSpan={22} className="p-4">
                           <div className="space-y-2">
                             <h4 className="text-sm font-semibold text-zinc-900 dark:text-white mb-3">
                               Eventos ({eventList.length})
@@ -918,7 +924,7 @@ export function TrackingScreen() {
                 })
               ) : (
                 <tr>
-                  <td colSpan={21} className="px-4 py-8 text-center text-zinc-500 dark:text-zinc-400">
+                  <td colSpan={22} className="px-4 py-8 text-center text-zinc-500 dark:text-zinc-400">
                     Nenhuma sessão registrada ainda
                   </td>
                 </tr>

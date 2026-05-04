@@ -38,6 +38,78 @@ function newId(): string {
   return crypto.randomUUID();
 }
 
+// Function to download PDF quote
+async function downloadQuotePDF(
+  venda: VendaLg,
+  servicoById: Map<string, Service>
+): Promise<void> {
+  const html2pdf = (await import("html2pdf.js")).default;
+
+  const items = venda.linhas.map((l) => {
+    const nome = servicoById.get(l.servicoId)?.nome ?? "Serviço";
+    const total = l.preco * l.quantidade;
+    return `<tr>
+      <td style="padding:8px 12px;border-bottom:1px solid #e4e4e7">${nome}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #e4e4e7;text-align:center">${l.quantidade}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #e4e4e7;text-align:right">${total.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</td>
+    </tr>`;
+  }).join("");
+
+  const totalFormatted = venda.linhas.reduce((acc, l) => acc + l.preco * l.quantidade, 0)
+    .toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+  const date = new Date().toLocaleDateString("pt-BR");
+
+  const html = `
+    <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:32px;color:#18181b">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:32px">
+        <div>
+          <h1 style="margin:0;font-size:24px;font-weight:700;color:#0284c7">Orçamento</h1>
+          <p style="margin:4px 0 0;font-size:13px;color:#71717a">Data: ${date}</p>
+        </div>
+      </div>
+      <div style="margin-bottom:24px">
+        <p style="margin:0;font-size:13px;color:#71717a;text-transform:uppercase;letter-spacing:.05em;font-weight:600">Cliente</p>
+        <p style="margin:4px 0 0;font-size:16px;font-weight:600">${venda.clienteNome}</p>
+        <p style="margin:2px 0 0;font-size:14px;color:#52525b">${venda.clienteTelefone}</p>
+        ${venda.endereco ? `<p style="margin:2px 0 0;font-size:13px;color:#71717a">${venda.endereco}</p>` : ""}
+      </div>
+      <table style="width:100%;border-collapse:collapse;margin-bottom:24px">
+        <thead>
+          <tr style="background:#f4f4f5">
+            <th style="padding:10px 12px;text-align:left;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:#71717a">Serviço</th>
+            <th style="padding:10px 12px;text-align:center;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:#71717a">Qtd</th>
+            <th style="padding:10px 12px;text-align:right;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:#71717a">Total</th>
+          </tr>
+        </thead>
+        <tbody>${items}</tbody>
+      </table>
+      <div style="display:flex;justify-content:flex-end">
+        <div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:16px 24px;min-width:200px">
+          <p style="margin:0;font-size:13px;color:#0284c7;font-weight:600;text-transform:uppercase">Total</p>
+          <p style="margin:4px 0 0;font-size:24px;font-weight:700;color:#0284c7">${totalFormatted}</p>
+        </div>
+      </div>
+      <p style="margin-top:48px;font-size:11px;color:#a1a1aa;text-align:center">Este orçamento tem validade de 24 horas.</p>
+    </div>`;
+
+  const element = document.createElement("div");
+  element.innerHTML = html;
+  document.body.appendChild(element);
+
+  try {
+    await html2pdf().set({
+      margin: 10,
+      filename: `orcamento_${venda.clienteNome.replace(/\s+/g, "_")}_${Date.now()}.pdf`,
+      image: { type: "jpeg", quality: 0.98 },
+      html2canvas: { scale: 2 },
+      jsPDF: { orientation: "portrait", unit: "mm", format: "a4" },
+    }).from(element).save();
+  } finally {
+    document.body.removeChild(element);
+  }
+}
+
 // Function to download PDF receipt
 async function downloadReceiptPDF(
   venda: VendaLg,
@@ -770,6 +842,17 @@ export function VendasLgScreen() {
                         strokeWidth={2}
                         d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
                       />
+                    </svg>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => downloadQuotePDF(v, servicoById)}
+                    className="rounded-lg p-2 text-zinc-400 transition-colors hover:bg-amber-100 hover:text-amber-600 dark:hover:bg-amber-950 dark:hover:text-amber-400"
+                    aria-label="Baixar orçamento em PDF"
+                    title="Orçamento PDF"
+                  >
+                    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                     </svg>
                   </button>
                   <button
