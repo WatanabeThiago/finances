@@ -38,6 +38,7 @@ export function TrackingScreen() {
   const [showTemplates, setShowTemplates] = useState(false);
   const [newTemplate, setNewTemplate] = useState("");
   const [savingTemplate, setSavingTemplate] = useState(false);
+  const [kwSort, setKwSort] = useState<{ col: "total" | "converted" | "rate"; dir: "desc" | "asc" }>({ col: "rate", dir: "desc" });
 
   type AnalysisResult = {
     resumo: string;
@@ -366,9 +367,12 @@ export function TrackingScreen() {
     };
 
     const getTime = (eventList: TrackingEvent[]) => {
-      const first = eventList[0];
-      if (!first?.session_created_at || !first?.session_updated_at) return null;
-      return Math.floor((new Date(first.session_updated_at).getTime() - new Date(first.session_created_at).getTime()) / 1000);
+      const updated = eventList[0]?.session_updated_at;
+      const start = eventList[eventList.length - 1]?.created_at;
+      if (!start || !updated) return null;
+      const secs = Math.floor((new Date(updated).getTime() - new Date(start).getTime()) / 1000);
+      if (secs < 0 || secs > 3600) return null;
+      return secs;
     };
 
     const getMaxScroll = (eventList: TrackingEvent[]) => {
@@ -669,13 +673,27 @@ export function TrackingScreen() {
                 <thead>
                   <tr className="bg-zinc-50 dark:bg-zinc-900 text-left text-xs text-zinc-500 dark:text-zinc-400">
                     <th className="px-4 py-2 font-medium">Keyword</th>
-                    <th className="px-4 py-2 font-medium text-center">Visitantes</th>
-                    <th className="px-4 py-2 font-medium text-center">Conversões</th>
-                    <th className="px-4 py-2 font-medium text-center">Taxa</th>
+                    {(["total", "converted", "rate"] as const).map((col) => {
+                      const labels = { total: "Visitantes", converted: "Conversões", rate: "Taxa" };
+                      const active = kwSort.col === col;
+                      return (
+                        <th
+                          key={col}
+                          className="px-4 py-2 font-medium text-center cursor-pointer select-none hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors"
+                          onClick={() => setKwSort((s) => s.col === col ? { col, dir: s.dir === "desc" ? "asc" : "desc" } : { col, dir: "desc" })}
+                        >
+                          <span className={active ? "text-zinc-900 dark:text-zinc-100" : ""}>{labels[col]}</span>
+                          <span className="ml-1">{active ? (kwSort.dir === "desc" ? "↓" : "↑") : "↕"}</span>
+                        </th>
+                      );
+                    })}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
-                  {reports.keywords.map(({ kw, total, converted, rate }) => (
+                  {[...reports.keywords].sort((a, b) => {
+                    const mul = kwSort.dir === "desc" ? -1 : 1;
+                    return (a[kwSort.col] - b[kwSort.col]) * mul;
+                  }).map(({ kw, total, converted, rate }) => (
                     <tr key={kw} className="hover:bg-zinc-50 dark:hover:bg-zinc-900/30">
                       <td className="px-4 py-2 font-mono text-xs text-zinc-900 dark:text-zinc-100">
                         {kw === "(sem keyword)" ? <span className="text-zinc-400">{kw}</span> : (
@@ -839,10 +857,12 @@ export function TrackingScreen() {
                         </td>
                       <td className="px-4 py-3 text-zinc-900 dark:text-zinc-100 whitespace-nowrap text-xs">
                         {(() => {
-                          const created = firstEvent?.session_created_at;
                           const updated = firstEvent?.session_updated_at;
-                          if (!created || !updated) return <span className="text-zinc-400">—</span>;
-                          const secs = Math.floor((new Date(updated).getTime() - new Date(created).getTime()) / 1000);
+                          const oldestEvent = eventList[eventList.length - 1];
+                          const start = oldestEvent?.created_at;
+                          if (!start || !updated) return <span className="text-zinc-400">—</span>;
+                          const secs = Math.floor((new Date(updated).getTime() - new Date(start).getTime()) / 1000);
+                          if (secs < 0 || secs > 3600) return <span className="text-zinc-400">—</span>;
                           if (secs < 60) return <span>{secs}s</span>;
                           const m = Math.floor(secs / 60), s = secs % 60;
                           if (m < 60) return <span className="font-medium">{m}m {s}s</span>;
