@@ -359,6 +359,24 @@ export function TrackingScreen() {
   }, [realVisitors, events]);
 
   const reports = useMemo(() => {
+    const spDate = (d: Date) =>
+      new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(d);
+    const now = new Date();
+    const todaySp = spDate(now);
+    const yesterdaySp = spDate(new Date(now.getTime() - 86400000));
+    const sevenDaysAgoSp = spDate(new Date(now.getTime() - 7 * 86400000));
+    const thirtyDaysAgoSp = spDate(new Date(now.getTime() - 30 * 86400000));
+
+    const inDateRange = (sessionCreatedAt: string | undefined) => {
+      if (!sessionCreatedAt || dateFilter === "all") return true;
+      const d = spDate(new Date(sessionCreatedAt));
+      if (dateFilter === "today") return d === todaySp;
+      if (dateFilter === "yesterday") return d === yesterdaySp;
+      if (dateFilter === "7days") return d >= sevenDaysAgoSp;
+      if (dateFilter === "30days") return d >= thirtyDaysAgoSp;
+      return true;
+    };
+
     const fmtTime = (secs: number) => {
       if (secs < 60) return `${secs}s`;
       const m = Math.floor(secs / 60), s = secs % 60;
@@ -392,6 +410,7 @@ export function TrackingScreen() {
 
     for (const [, eventList] of groupedVisitors) {
       const first = eventList[0];
+      if (!inDateRange(first?.session_created_at)) continue;
       const isConverted = eventList.some((e) => e.event === "click" || e.event === "call");
       const time = getTime(eventList);
       const scroll = getMaxScroll(eventList);
@@ -442,7 +461,7 @@ export function TrackingScreen() {
       networkMap,
       fmtTime,
     };
-  }, [groupedVisitors]);
+  }, [groupedVisitors, dateFilter]);
 
   if (loading) {
     return (
