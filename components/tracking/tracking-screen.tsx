@@ -357,6 +357,89 @@ export function TrackingScreen() {
     };
   }, [realVisitors, events]);
 
+  const reports = useMemo(() => {
+    const fmtTime = (secs: number) => {
+      if (secs < 60) return `${secs}s`;
+      const m = Math.floor(secs / 60), s = secs % 60;
+      if (m < 60) return `${m}m ${s}s`;
+      return `${Math.floor(m / 60)}h ${m % 60}m`;
+    };
+
+    const getTime = (eventList: TrackingEvent[]) => {
+      const first = eventList[0];
+      if (!first?.session_created_at || !first?.session_updated_at) return null;
+      return Math.floor((new Date(first.session_updated_at).getTime() - new Date(first.session_created_at).getTime()) / 1000);
+    };
+
+    const getMaxScroll = (eventList: TrackingEvent[]) => {
+      for (const d of [100, 75, 50, 25]) {
+        if (eventList.some((e) => e.event === `scroll_${d}`)) return d;
+      }
+      return 0;
+    };
+
+    const converted: number[] = [];
+    const notConverted: number[] = [];
+    const scrollDepths: number[] = [];
+    const keywordMap: Record<string, { total: number; converted: number }> = {};
+    const deviceMap: Record<string, { total: number; converted: number }> = {};
+    const matchMap: Record<string, { total: number; converted: number }> = {};
+    const networkMap: Record<string, { total: number; converted: number }> = {};
+
+    for (const [, eventList] of groupedVisitors) {
+      const first = eventList[0];
+      const isConverted = eventList.some((e) => e.event === "click" || e.event === "call");
+      const time = getTime(eventList);
+      const scroll = getMaxScroll(eventList);
+
+      if (time !== null) {
+        if (isConverted) converted.push(time);
+        else notConverted.push(time);
+      }
+      scrollDepths.push(scroll);
+
+      const keyword = first?.keyword || "(sem keyword)";
+      if (!keywordMap[keyword]) keywordMap[keyword] = { total: 0, converted: 0 };
+      keywordMap[keyword].total++;
+      if (isConverted) keywordMap[keyword].converted++;
+
+      const device = first?.device === 'm' ? 'Mobile' : first?.device === 't' ? 'Desktop' : first?.device === 'c' ? 'Tablet' : first?.device || '(desconhecido)';
+      if (!deviceMap[device]) deviceMap[device] = { total: 0, converted: 0 };
+      deviceMap[device].total++;
+      if (isConverted) deviceMap[device].converted++;
+
+      const match = first?.matchtype === 'e' ? 'Exata' : first?.matchtype === 'p' ? 'Frase' : first?.matchtype === 'b' ? 'Ampla' : first?.matchtype || '(desconhecido)';
+      if (!matchMap[match]) matchMap[match] = { total: 0, converted: 0 };
+      matchMap[match].total++;
+      if (isConverted) matchMap[match].converted++;
+
+      const network = first?.network === 'g' ? 'Search' : first?.network === 's' ? 'Partners' : first?.network === 'd' ? 'Display' : first?.network || '(desconhecido)';
+      if (!networkMap[network]) networkMap[network] = { total: 0, converted: 0 };
+      networkMap[network].total++;
+      if (isConverted) networkMap[network].converted++;
+    }
+
+    const avg = (arr: number[]) => arr.length ? Math.floor(arr.reduce((a, b) => a + b, 0) / arr.length) : null;
+    const avgScroll = scrollDepths.length ? Math.round(scrollDepths.reduce((a, b) => a + b, 0) / scrollDepths.length) : 0;
+    const scrollDist = [0, 25, 50, 75, 100].map((d) => ({ label: d === 0 ? "0%" : `${d}%`, count: scrollDepths.filter((s) => s === d).length }));
+
+    const keywords = Object.entries(keywordMap)
+      .map(([kw, v]) => ({ kw, ...v, rate: v.total > 0 ? Math.round((v.converted / v.total) * 100) : 0 }))
+      .sort((a, b) => b.rate - a.rate || b.total - a.total);
+
+    return {
+      avgConverted: avg(converted),
+      avgNotConverted: avg(notConverted),
+      avgScroll,
+      scrollDist,
+      keywords,
+      deviceMap,
+      matchMap,
+      networkMap,
+      fmtTime,
+    };
+  }, [groupedVisitors]);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -533,6 +616,133 @@ export function TrackingScreen() {
           color="green"
         />
       </div>
+
+      {/* Reports */}
+      {groupedVisitors.length > 0 && (
+        <div className="space-y-4">
+          <h2 className="text-lg font-semibold text-zinc-900 dark:text-white">📈 Relatórios</h2>
+
+          {/* Time cards */}
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            <div className="rounded-xl border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/30 p-4">
+              <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">⏱️ Tempo médio — converteu</p>
+              <p className="mt-2 text-2xl font-bold text-green-700 dark:text-green-300">
+                {reports.avgConverted !== null ? reports.fmtTime(reports.avgConverted) : "—"}
+              </p>
+            </div>
+            <div className="rounded-xl border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/30 p-4">
+              <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">⏱️ Tempo médio — não converteu</p>
+              <p className="mt-2 text-2xl font-bold text-red-700 dark:text-red-300">
+                {reports.avgNotConverted !== null ? reports.fmtTime(reports.avgNotConverted) : "—"}
+              </p>
+            </div>
+            <div className="rounded-xl border border-sky-200 dark:border-sky-800 bg-sky-50 dark:bg-sky-950/30 p-4">
+              <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">📜 Scroll médio</p>
+              <p className="mt-2 text-2xl font-bold text-sky-700 dark:text-sky-300">{reports.avgScroll}%</p>
+            </div>
+            <div className="rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900 p-4">
+              <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400 mb-2">Distribuição de scroll</p>
+              <div className="flex flex-col gap-1">
+                {reports.scrollDist.map(({ label, count }) => (
+                  <div key={label} className="flex items-center gap-2 text-xs">
+                    <span className="w-8 text-right text-zinc-500">{label}</span>
+                    <div className="flex-1 bg-zinc-200 dark:bg-zinc-700 rounded-full h-2 overflow-hidden">
+                      <div
+                        className="h-full bg-sky-500 rounded-full"
+                        style={{ width: groupedVisitors.length > 0 ? `${(count / groupedVisitors.length) * 100}%` : '0%' }}
+                      />
+                    </div>
+                    <span className="w-5 text-zinc-600 dark:text-zinc-400">{count}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Keywords table */}
+          {reports.keywords.length > 0 && (
+            <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 overflow-hidden">
+              <div className="px-4 py-3 border-b border-zinc-100 dark:border-zinc-800">
+                <h3 className="text-sm font-semibold text-zinc-900 dark:text-white">🔍 Keywords</h3>
+              </div>
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-zinc-50 dark:bg-zinc-900 text-left text-xs text-zinc-500 dark:text-zinc-400">
+                    <th className="px-4 py-2 font-medium">Keyword</th>
+                    <th className="px-4 py-2 font-medium text-center">Visitantes</th>
+                    <th className="px-4 py-2 font-medium text-center">Conversões</th>
+                    <th className="px-4 py-2 font-medium text-center">Taxa</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                  {reports.keywords.map(({ kw, total, converted, rate }) => (
+                    <tr key={kw} className="hover:bg-zinc-50 dark:hover:bg-zinc-900/30">
+                      <td className="px-4 py-2 font-mono text-xs text-zinc-900 dark:text-zinc-100">
+                        {kw === "(sem keyword)" ? <span className="text-zinc-400">{kw}</span> : (
+                          <span className="inline-block bg-pink-100 dark:bg-pink-900/30 text-pink-900 dark:text-pink-200 px-2 py-0.5 rounded">{kw}</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-2 text-center text-zinc-600 dark:text-zinc-400">{total}</td>
+                      <td className="px-4 py-2 text-center text-zinc-600 dark:text-zinc-400">{converted}</td>
+                      <td className="px-4 py-2 text-center">
+                        <span className={`font-semibold ${rate >= 30 ? "text-green-600 dark:text-green-400" : rate >= 15 ? "text-amber-600 dark:text-amber-400" : "text-zinc-500"}`}>
+                          {rate}%
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* Breakdowns */}
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            {[
+              { title: "📱 Device", map: reports.deviceMap },
+              { title: "🎯 Match Type", map: reports.matchMap },
+              { title: "🌍 Network", map: reports.networkMap },
+            ].map(({ title, map }) => {
+              const entries = Object.entries(map).sort((a, b) => b[1].total - a[1].total);
+              if (entries.length === 0) return null;
+              return (
+                <div key={title} className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 overflow-hidden">
+                  <div className="px-4 py-3 border-b border-zinc-100 dark:border-zinc-800">
+                    <h3 className="text-sm font-semibold text-zinc-900 dark:text-white">{title}</h3>
+                  </div>
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-zinc-50 dark:bg-zinc-900 text-left text-xs text-zinc-500 dark:text-zinc-400">
+                        <th className="px-4 py-2 font-medium">Tipo</th>
+                        <th className="px-4 py-2 font-medium text-center">Total</th>
+                        <th className="px-4 py-2 font-medium text-center">Conv.</th>
+                        <th className="px-4 py-2 font-medium text-center">Taxa</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                      {entries.map(([label, { total, converted }]) => {
+                        const rate = total > 0 ? Math.round((converted / total) * 100) : 0;
+                        return (
+                          <tr key={label} className="hover:bg-zinc-50 dark:hover:bg-zinc-900/30">
+                            <td className="px-4 py-2 text-xs text-zinc-900 dark:text-zinc-100">{label}</td>
+                            <td className="px-4 py-2 text-center text-zinc-600 dark:text-zinc-400">{total}</td>
+                            <td className="px-4 py-2 text-center text-zinc-600 dark:text-zinc-400">{converted}</td>
+                            <td className="px-4 py-2 text-center">
+                              <span className={`font-semibold ${rate >= 30 ? "text-green-600 dark:text-green-400" : rate >= 15 ? "text-amber-600 dark:text-amber-400" : "text-zinc-500"}`}>
+                                {rate}%
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Sessions Table */}
       <div className="rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950">
