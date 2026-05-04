@@ -36,7 +36,9 @@ export async function GET() {
         s.device,
         s.matchtype,
         s.network,
-        s."group"
+        s."group",
+        to_char(s."createdAt" AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as session_created_at,
+        to_char(s."updatedAt" AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as session_updated_at
        FROM public."Tracking" t
        LEFT JOIN public."TrackingSession" s ON t."visitorId" = s."visitorId"
        ORDER BY t."createdAt" DESC`

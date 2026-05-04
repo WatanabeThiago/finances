@@ -544,10 +544,16 @@ export function TrackingScreen() {
                   📅 Data/Hora
                 </th>
                 <th className="px-4 py-3 text-left font-semibold text-white whitespace-nowrap">
+                  ⏱️ Tempo
+                </th>
+                <th className="px-4 py-3 text-left font-semibold text-white whitespace-nowrap">
                   Eventos
                 </th>
                 <th className="px-4 py-3 text-left font-semibold text-white whitespace-nowrap">
                   🔍 Keyword
+                </th>
+                <th className="px-4 py-3 text-center font-semibold text-white whitespace-nowrap">
+                  📜 Scroll
                 </th>
                 <th className="px-4 py-3 text-center font-semibold text-white whitespace-nowrap">
                   Iniciou Conversa
@@ -621,6 +627,19 @@ export function TrackingScreen() {
                           </button>
                           <span>{new Date(firstEvent?.created_at || '').toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}</span>
                         </td>
+                      <td className="px-4 py-3 text-zinc-900 dark:text-zinc-100 whitespace-nowrap text-xs">
+                        {(() => {
+                          const created = firstEvent?.session_created_at;
+                          const updated = firstEvent?.session_updated_at;
+                          if (!created || !updated) return <span className="text-zinc-400">—</span>;
+                          const secs = Math.floor((new Date(updated).getTime() - new Date(created).getTime()) / 1000);
+                          if (secs < 60) return <span>{secs}s</span>;
+                          const m = Math.floor(secs / 60), s = secs % 60;
+                          if (m < 60) return <span className="font-medium">{m}m {s}s</span>;
+                          const h = Math.floor(m / 60);
+                          return <span className="font-medium">{h}h {m % 60}m</span>;
+                        })()}
+                      </td>
                       <td className="px-4 py-3 text-zinc-900 dark:text-zinc-100 whitespace-nowrap">
                         <span className="inline-block bg-sky-100 dark:bg-sky-900/30 text-sky-900 dark:text-sky-200 px-2 py-1 rounded text-xs font-medium">
                           {eventList.length}
@@ -634,6 +653,15 @@ export function TrackingScreen() {
                         ) : (
                           <span className="text-zinc-400">—</span>
                         )}
+                      </td>
+                      <td className="px-4 py-3 text-center whitespace-nowrap text-xs font-medium">
+                        {(() => {
+                          const depths = [100, 75, 50, 25];
+                          const max = depths.find((d) => eventList.some((e) => e.event === `scroll_${d}`));
+                          if (!max) return <span className="text-zinc-400">—</span>;
+                          const color = max === 100 ? "text-green-600 dark:text-green-400" : max >= 75 ? "text-lime-600 dark:text-lime-400" : max >= 50 ? "text-yellow-600 dark:text-yellow-400" : "text-orange-500 dark:text-orange-400";
+                          return <span className={color}>{max}%</span>;
+                        })()}
                       </td>
                       <td className="px-4 py-3 text-center whitespace-nowrap">
                         {eventList.some((e) => e.event === "click" || e.event === "call") ? "✅" : ""}
@@ -777,7 +805,7 @@ export function TrackingScreen() {
                     </tr>
                     {analysisCache[visitorId] && analysisCache[visitorId] !== "loading" && (
                       <tr className="bg-violet-50/50 dark:bg-violet-950/20 border-b border-violet-100 dark:border-violet-900">
-                        <td colSpan={18} className="px-6 py-4">
+                        <td colSpan={20} className="px-6 py-4">
                           {analysisCache[visitorId] === "error" ? (
                             <p className="text-sm text-red-500">Erro ao analisar conversa. Verifique se o WAHA está rodando.</p>
                           ) : (() => {
@@ -830,7 +858,7 @@ export function TrackingScreen() {
                     )}
                     {isExpanded && (
                       <tr className="bg-zinc-50 dark:bg-zinc-900/50">
-                        <td colSpan={18} className="p-4">
+                        <td colSpan={20} className="p-4">
                           <div className="space-y-2">
                             <h4 className="text-sm font-semibold text-zinc-900 dark:text-white mb-3">
                               Eventos ({eventList.length})
@@ -892,7 +920,7 @@ export function TrackingScreen() {
                 })
               ) : (
                 <tr>
-                  <td colSpan={18} className="px-4 py-8 text-center text-zinc-500 dark:text-zinc-400">
+                  <td colSpan={20} className="px-4 py-8 text-center text-zinc-500 dark:text-zinc-400">
                     Nenhuma sessão registrada ainda
                   </td>
                 </tr>

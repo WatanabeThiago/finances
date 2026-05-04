@@ -82,6 +82,8 @@ export type TrackingEvent = {
   visitor_id: string;
   user_agent: string;
   is_bot: boolean;
+  session_created_at?: string;
+  session_updated_at?: string;
 };
 
 export type TrackingSession = {
