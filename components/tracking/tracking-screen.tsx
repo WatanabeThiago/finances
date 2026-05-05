@@ -384,7 +384,17 @@ export function TrackingScreen() {
       return `${Math.floor(m / 60)}h ${m % 60}m`;
     };
 
-    const getTime = (eventList: TrackingEvent[]) => {
+    const getTimeToConvert = (eventList: TrackingEvent[]) => {
+      const asc = [...eventList].reverse();
+      const firstPageView = asc.find((e) => e.event === "page_view");
+      const firstClick = asc.find((e) => e.event === "click" || e.event === "call");
+      if (!firstPageView || !firstClick) return null;
+      const secs = Math.floor((new Date(firstClick.created_at).getTime() - new Date(firstPageView.created_at).getTime()) / 1000);
+      if (secs < 0 || secs > 3600) return null;
+      return secs;
+    };
+
+    const getTimeOnPage = (eventList: TrackingEvent[]) => {
       const updated = eventList[0]?.session_updated_at;
       const start = eventList[eventList.length - 1]?.created_at;
       if (!start || !updated) return null;
@@ -394,7 +404,7 @@ export function TrackingScreen() {
     };
 
     const getMaxScroll = (eventList: TrackingEvent[]) => {
-      for (const d of [100, 75, 50, 25]) {
+      for (const d of [100, 75, 50, 35, 25, 10]) {
         if (eventList.some((e) => e.event === `scroll_${d}`)) return d;
       }
       return 0;
@@ -412,12 +422,14 @@ export function TrackingScreen() {
       const first = eventList[0];
       if (!inDateRange(first?.session_created_at)) continue;
       const isConverted = eventList.some((e) => e.event === "click" || e.event === "call");
-      const time = getTime(eventList);
       const scroll = getMaxScroll(eventList);
 
-      if (time !== null) {
-        if (isConverted) converted.push(time);
-        else notConverted.push(time);
+      if (isConverted) {
+        const t = getTimeToConvert(eventList);
+        if (t !== null) converted.push(t);
+      } else {
+        const t = getTimeOnPage(eventList);
+        if (t !== null) notConverted.push(t);
       }
       scrollDepths.push(scroll);
 
@@ -444,7 +456,7 @@ export function TrackingScreen() {
 
     const avg = (arr: number[]) => arr.length ? Math.floor(arr.reduce((a, b) => a + b, 0) / arr.length) : null;
     const avgScroll = scrollDepths.length ? Math.round(scrollDepths.reduce((a, b) => a + b, 0) / scrollDepths.length) : 0;
-    const scrollDist = [0, 25, 50, 75, 100].map((d) => ({ label: d === 0 ? "0%" : `${d}%`, count: scrollDepths.filter((s) => s === d).length }));
+    const scrollDist = [0, 10, 25, 35, 50, 75, 100].map((d) => ({ label: d === 0 ? "0%" : `${d}%`, count: scrollDepths.filter((s) => s === d).length }));
 
     const keywords = Object.entries(keywordMap)
       .map(([kw, v]) => ({ kw, ...v, rate: v.total > 0 ? Math.round((v.converted / v.total) * 100) : 0 }))
@@ -905,7 +917,7 @@ export function TrackingScreen() {
                       </td>
                       <td className="px-4 py-3 text-center whitespace-nowrap text-xs font-medium">
                         {(() => {
-                          const depths = [100, 75, 50, 25];
+                          const depths = [100, 75, 50, 35, 25, 10];
                           const max = depths.find((d) => eventList.some((e) => e.event === `scroll_${d}`));
                           if (!max) return <span className="text-zinc-400">—</span>;
                           const color = max === 100 ? "text-green-600 dark:text-green-400" : max >= 75 ? "text-lime-600 dark:text-lime-400" : max >= 50 ? "text-yellow-600 dark:text-yellow-400" : "text-orange-500 dark:text-orange-400";
