@@ -22,6 +22,11 @@ const StatCard = ({ label, value, change, color = "sky" }: { label: string; valu
   );
 };
 
+const CAMPAIGN_NAMES: Record<string, string> = {
+  "23799903003": "Campo Grande",
+  "23740263027": "Lead Gen SC",
+};
+
 export function TrackingScreen() {
   const [events, setEvents] = useState<TrackingEvent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -39,6 +44,7 @@ export function TrackingScreen() {
   const [newTemplate, setNewTemplate] = useState("");
   const [savingTemplate, setSavingTemplate] = useState(false);
   const [kwSort, setKwSort] = useState<{ col: "total" | "converted" | "rate"; dir: "desc" | "asc" }>({ col: "rate", dir: "desc" });
+  const [copied, setCopied] = useState(false);
 
   type AnalysisResult = {
     resumo: string;
@@ -138,6 +144,62 @@ export function TrackingScreen() {
     } catch {
       setAnalysisCache((prev) => ({ ...prev, [visitorId]: "error" }));
     }
+  };
+
+  const [copiedJson, setCopiedJson] = useState(false);
+
+  const handleCopyJson = () => {
+    const sessions = groupedVisitors.map(([visitorId, eventList]) => {
+      const first = eventList[0];
+      const scroll = [100, 75, 50, 35, 25, 10].find((d) => eventList.some((e) => e.event === `scroll_${d}`)) ?? 0;
+      return {
+        visitor_id: visitorId,
+        session_created_at: first?.session_created_at ?? null,
+        session_updated_at: first?.session_updated_at ?? null,
+        phone: first?.phone ?? null,
+        venda: first?.venda ?? false,
+        keyword: first?.keyword ?? null,
+        matchtype: first?.matchtype ?? null,
+        device: first?.device ?? null,
+        network: first?.network ?? null,
+        group: first?.group ?? null,
+        gclid: first?.gclid ?? null,
+        fbclid: first?.fbclid ?? null,
+        msclkid: first?.msclkid ?? null,
+        gad_source: first?.gad_source ?? null,
+        gad_campaignid: first?.gad_campaignid ?? null,
+        converteu: eventList.some((e) => e.event === "click" || e.event === "call"),
+        max_scroll: scroll,
+        total_events: eventList.length,
+        events: eventList.map((e) => ({ id: e.id, event: e.event, created_at: e.created_at })),
+      };
+    });
+    navigator.clipboard.writeText(JSON.stringify(sessions, null, 2)).then(() => {
+      setCopiedJson(true);
+      setTimeout(() => setCopiedJson(false), 2000);
+    });
+  };
+
+  const handleCopyCSV = () => {
+    const headers = ["Data/Hora", "Tempo(s)", "Keyword", "Scroll%", "Converteu", "Venda", "Telefone", "MatchType", "Device", "Network", "Grupo", "VisitorID"];
+    const rows = groupedVisitors.map(([visitorId, eventList]) => {
+      const first = eventList[0];
+      const updated = first?.session_updated_at;
+      const start = eventList[eventList.length - 1]?.created_at;
+      const secs = start && updated ? Math.floor((new Date(updated).getTime() - new Date(start).getTime()) / 1000) : "";
+      const scroll = [100, 75, 50, 35, 25, 10].find((d) => eventList.some((e) => e.event === `scroll_${d}`)) ?? 0;
+      const converteu = eventList.some((e) => e.event === "click" || e.event === "call") ? "Sim" : "Não";
+      const matchLabel = first?.matchtype === "e" ? "Exata" : first?.matchtype === "p" ? "Frase" : first?.matchtype === "b" ? "Ampla" : first?.matchtype ?? "";
+      const deviceLabel = first?.device === "m" ? "Mobile" : first?.device === "t" ? "Desktop" : first?.device === "c" ? "Tablet" : first?.device ?? "";
+      const networkLabel = first?.network === "g" ? "Search" : first?.network === "s" ? "Partners" : first?.network === "d" ? "Display" : first?.network ?? "";
+      const dt = new Date(first?.created_at || "").toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
+      return [dt, secs, first?.keyword ?? "", scroll, converteu, first?.venda ? "Sim" : "Não", first?.phone ?? "", matchLabel, deviceLabel, networkLabel, first?.group ?? "", visitorId];
+    });
+    const csv = [headers, ...rows].map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join("\t")).join("\n");
+    navigator.clipboard.writeText(csv).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
   };
 
   const handleSyncPhones = async () => {
@@ -550,6 +612,28 @@ export function TrackingScreen() {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
           </svg>
           {syncing ? "Sincronizando..." : "Sincronizar WhatsApp"}
+        </button>
+        <button
+          onClick={handleCopyJson}
+          disabled={groupedVisitors.length === 0}
+          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-violet-600 text-white hover:bg-violet-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          title="Copiar sessões como JSON"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+          </svg>
+          {copiedJson ? "Copiado!" : "Copiar JSON"}
+        </button>
+        <button
+          onClick={handleCopyCSV}
+          disabled={groupedVisitors.length === 0}
+          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          title="Copiar tabela como TSV (colar no Excel/Sheets)"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+          </svg>
+          {copied ? "Copiado!" : "Copiar CSV"}
         </button>
         <button
           onClick={handleRefresh}
@@ -1016,7 +1100,7 @@ export function TrackingScreen() {
                         {firstEvent?.gad_source || "—"}
                       </td>
                       <td className="px-4 py-3 text-zinc-900 dark:text-zinc-100 whitespace-nowrap text-xs">
-                        {firstEvent?.gad_campaignid || "—"}
+                        {firstEvent?.gad_campaignid ? (CAMPAIGN_NAMES[firstEvent.gad_campaignid] ?? firstEvent.gad_campaignid) : "—"}
                       </td>
                       <td className="px-4 py-3 text-zinc-900 dark:text-zinc-100 whitespace-nowrap text-xs font-mono">
                         {firstEvent?.gbraid ? firstEvent.gbraid.slice(0, 12) + "..." : "—"}
