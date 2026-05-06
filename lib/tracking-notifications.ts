@@ -101,22 +101,34 @@ export function useTrackingNotifications() {
 
 function getEmojiForEvent(eventType: string): string {
   switch (eventType.toLowerCase()) {
-    case 'page_view':
-      return '📄';
-    case 'click':
-      return '🫵';
-    default:
-      return '📍';
+    case 'page_view':        return '📄';
+    case 'click':            return '🫵';
+    case 'call':             return '📞';
+    case 'scroll_100':       return '✅';
+    case 'scroll_75':
+    case 'scroll_50':
+    case 'scroll_35':
+    case 'scroll_25':
+    case 'scroll_10':        return '📜';
+    case 'copy_phone_click': return '📋';
+    case 'address_click':    return '📍';
+    default:                 return '📍';
   }
 }
 
 function getEventLabel(eventType: string): string {
   switch (eventType.toLowerCase()) {
-    case 'page_view':
-      return 'Visualização';
-    case 'click':
-      return 'Clique';
-    default:
-      return 'Evento';
+    case 'page_view':        return 'Visualização';
+    case 'click':            return 'Clique';
+    case 'call':             return 'Ligação';
+    case 'scroll_100':       return 'Scroll 100%';
+    case 'scroll_75':        return 'Scroll 75%';
+    case 'scroll_50':        return 'Scroll 50%';
+    case 'scroll_35':        return 'Scroll 35%';
+    case 'scroll_25':        return 'Scroll 25%';
+    case 'scroll_10':        return 'Scroll 10%';
+    case 'copy_phone_click': return 'Copiou telefone';
+    case 'address_click':    return 'Clicou no endereço';
+    default:                 return 'Evento';
   }
 }
