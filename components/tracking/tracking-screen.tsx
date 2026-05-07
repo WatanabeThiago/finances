@@ -37,6 +37,7 @@ export function TrackingScreen() {
   const [expandedVisitors, setExpandedVisitors] = useState<Set<string>>(new Set());
   const [syncing, setSyncing] = useState(false);
   const [dateFilter, setDateFilter] = useState<"today" | "yesterday" | "7days" | "30days" | "all">("today");
+  const [campaignFilter, setCampaignFilter] = useState<string>("all");
   const [ignoreBots, setIgnoreBots] = useState(true);
   const [syncResult, setSyncResult] = useState<{ matched: number; details: { visitor_id: string; phone: string; diff_seconds: number }[] } | null>(null);
   const [templates, setTemplates] = useState<{ id: string; text: string; active: boolean }[]>([]);
@@ -339,6 +340,7 @@ export function TrackingScreen() {
     return events.filter((e) => {
       if (e.is_bot && !e.gclid && !e.fbclid && !e.msclkid) return false;
       if (ignoreBots && !e.gclid && !e.fbclid && !e.msclkid) return false;
+      if (campaignFilter !== "all" && e.gad_campaignid !== campaignFilter) return false;
       if (dateFilter === "all") return true;
       const eventDateSp = spDate(new Date(e.created_at));
       if (dateFilter === "today") return eventDateSp === todaySp;
@@ -347,7 +349,7 @@ export function TrackingScreen() {
       if (dateFilter === "30days") return eventDateSp >= thirtyDaysAgoSp;
       return true;
     });
-  }, [events, dateFilter, ignoreBots]);
+  }, [events, dateFilter, ignoreBots, campaignFilter]);
 
   // Agrupar por visitor_id e manter ordenação por data
   const groupedVisitors = useMemo(() => {
@@ -574,6 +576,34 @@ export function TrackingScreen() {
             </button>
           );
         })}
+      </div>
+
+      {/* Campaign Filters */}
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-xs text-zinc-500 dark:text-zinc-400 font-medium">Campanha:</span>
+        <button
+          onClick={() => setCampaignFilter("all")}
+          className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors border ${
+            campaignFilter === "all"
+              ? "bg-zinc-900 text-white border-zinc-900 dark:bg-white dark:text-zinc-900 dark:border-white"
+              : "bg-white text-zinc-600 border-zinc-300 hover:border-zinc-400 dark:bg-zinc-900 dark:text-zinc-400 dark:border-zinc-700 dark:hover:border-zinc-500"
+          }`}
+        >
+          Todas
+        </button>
+        {Object.entries(CAMPAIGN_NAMES).map(([id, name]) => (
+          <button
+            key={id}
+            onClick={() => setCampaignFilter(id)}
+            className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors border ${
+              campaignFilter === id
+                ? "bg-zinc-900 text-white border-zinc-900 dark:bg-white dark:text-zinc-900 dark:border-white"
+                : "bg-white text-zinc-600 border-zinc-300 hover:border-zinc-400 dark:bg-zinc-900 dark:text-zinc-400 dark:border-zinc-700 dark:hover:border-zinc-500"
+            }`}
+          >
+            {name}
+          </button>
+        ))}
       </div>
 
       {/* Ignore Bots Toggle */}
