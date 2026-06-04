@@ -406,8 +406,12 @@ export function TrackingScreen() {
     const topSource = Object.entries(utmSources).sort((a, b) => b[1] - a[1])[0];
     const topMedium = Object.entries(utmMediums).sort((a, b) => b[1] - a[1])[0];
 
+    const conversationVisitors = new Set(
+      realVisitors.filter((e) => e.event === "click").map((e) => e.visitor_id)
+    ).size;
+
     const callVisitors = new Set(
-      realVisitors.filter((e) => e.event === "call" || e.event === "click").map((e) => e.visitor_id)
+      realVisitors.filter((e) => e.event === "call").map((e) => e.visitor_id)
     ).size;
 
     return {
@@ -418,6 +422,7 @@ export function TrackingScreen() {
       topMediumLabel: topMedium ? topMedium[0] : "N/A",
       totalBots,
       botPercentage: events.length > 0 ? ((totalBots / events.length) * 100).toFixed(1) : "0",
+      conversationVisitors,
       callVisitors,
     };
   }, [realVisitors, events]);
@@ -760,9 +765,15 @@ export function TrackingScreen() {
         />
         <StatCard
           label="Conversas Iniciadas"
+          value={stats.conversationVisitors.toString()}
+          change={stats.uniqueVisitors > 0 ? `${((stats.conversationVisitors / stats.uniqueVisitors) * 100).toFixed(0)}% dos visitantes` : "0% dos visitantes"}
+          color="green"
+        />
+        <StatCard
+          label="Ligações"
           value={stats.callVisitors.toString()}
           change={stats.uniqueVisitors > 0 ? `${((stats.callVisitors / stats.uniqueVisitors) * 100).toFixed(0)}% dos visitantes` : "0% dos visitantes"}
-          color="green"
+          color="blue"
         />
       </div>
 
