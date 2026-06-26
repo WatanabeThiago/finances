@@ -23,7 +23,7 @@ type FormState = {
 };
 
 const emptyForm = (): FormState => ({
-  data: new Date().toISOString().split("T")[0],
+  data: getDateOnlyValue(new Date()),
   entradaReal: "",
   gastosGoogleAds: "",
   clientes: "",
@@ -34,6 +34,25 @@ const emptyForm = (): FormState => ({
 });
 
 type ModalMode = "create" | "edit";
+
+const getDateOnlyValue = (date: Date) => {
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, "0");
+  const day = `${date.getDate()}`.padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
+const formatDateOnly = (value?: string | null) => {
+  if (!value) return "";
+
+  const [year, month, day] = value.split("-").map(Number);
+  if (!year || !month || !day) return "";
+
+  const parsed = new Date(year, month - 1, day);
+  return parsed.toLocaleDateString("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+  });
+};
 
 export function DailyAdsScreen() {
   const [dailyAds, setDailyAds] = useState<DailyAds[]>([]);
@@ -631,7 +650,7 @@ export function DailyAdsScreen() {
                   className="border-b border-zinc-100 transition-colors hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-800/50"
                 >
                   <td className="px-6 py-4 text-sm text-zinc-900 dark:text-zinc-100">
-                    {new Date(d.data).toLocaleDateString("pt-BR")}
+                    {formatDateOnly(d.data)}
                   </td>
                   <td className="px-6 py-4 text-right text-sm font-semibold text-green-600 dark:text-green-400">
                     {formatBRL(d.entradaReal)}
