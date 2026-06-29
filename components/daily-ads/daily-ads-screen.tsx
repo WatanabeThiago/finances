@@ -42,14 +42,25 @@ const getDateOnlyValue = (date: Date) => {
   return `${year}-${month}-${day}`;
 };
 
-const formatDateOnly = (value?: string | null) => {
+const formatDateOnly = (value?: string | Date | null) => {
   if (!value) return "";
 
-  const [year, month, day] = value.split("-").map(Number);
-  if (!year || !month || !day) return "";
+  let parsedDate: Date | null = null;
 
-  const parsed = new Date(year, month - 1, day);
-  return parsed.toLocaleDateString("pt-BR", {
+  if (typeof value === "string") {
+    const normalized = value.replace(" ", "T").split("T")[0];
+    const candidate = new Date(normalized);
+    if (!candidate || Number.isNaN(candidate.getTime())) return "";
+    parsedDate = candidate;
+  } else if (value instanceof Date) {
+    parsedDate = value;
+  }
+
+  if (!parsedDate || Number.isNaN(parsedDate.getTime())) {
+    return "";
+  }
+
+  return parsedDate.toLocaleDateString("pt-BR", {
     timeZone: "America/Sao_Paulo",
   });
 };
@@ -220,10 +231,8 @@ export function DailyAdsScreen() {
       const saleDateString = adjustedDate.toISOString().split("T")[0];
 
       if (saleDateString === selectedDate) {
-        // Sum up line item totals
-        v.linhas.forEach((l) => {
-          totalEntrada += l.preco * l.quantidade;
-        });
+        // Use only the commission as entradaReal
+        totalEntrada += v.comissao ?? 0;
         numClientes++;
       }
     });
