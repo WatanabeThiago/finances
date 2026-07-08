@@ -166,40 +166,6 @@ export async function initializeDatabase() {
     );
 
     await query(
-      `CREATE TABLE IF NOT EXISTS public."DailyAds" (
-        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-        data DATE NOT NULL UNIQUE,
-        "entradaReal" DECIMAL(10, 2) NOT NULL,
-        "gastosGoogleAds" DECIMAL(10, 2) NOT NULL,
-        clientes INTEGER NOT NULL,
-        cac DECIMAL(10, 2) NOT NULL,
-        "ticketMedio" DECIMAL(10, 2) NOT NULL,
-        cpc DECIMAL(10, 2) NOT NULL,
-        resultado DECIMAL(10, 2) NOT NULL,
-        comissao DECIMAL(10, 2) DEFAULT 0,
-        "resultadoComissao" DECIMAL(10, 2) DEFAULT 0,
-        "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        "updatedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )`
-    );
-
-    // Add missing columns if they don't exist
-    await query(
-      `ALTER TABLE public."DailyAds"
-       ADD COLUMN IF NOT EXISTS comissao DECIMAL(10, 2) DEFAULT 0,
-       ADD COLUMN IF NOT EXISTS "resultadoComissao" DECIMAL(10, 2) DEFAULT 0`
-    );
-
-    await query(
-      `CREATE TABLE IF NOT EXISTS google_ads_cache (
-        date DATE PRIMARY KEY,
-        gastos_google_ads DECIMAL(10,2) NOT NULL,
-        cpc DECIMAL(10,2) NOT NULL,
-        synced_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )`
-    );
-
-    await query(
       `CREATE TABLE IF NOT EXISTS search_terms (
         id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
         term TEXT NOT NULL,
@@ -212,6 +178,17 @@ export async function initializeDatabase() {
         synced_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         reviewed_at TIMESTAMP,
         UNIQUE(term, campaign_id)
+      )`
+    );
+
+    await query(
+      `CREATE TABLE IF NOT EXISTS public."DailyAdsManual" (
+        id TEXT PRIMARY KEY,
+        date TEXT NOT NULL UNIQUE CHECK (date ~ '^\\d{2}/\\d{2}/\\d{4}$'),
+        spend NUMERIC(12, 2) NOT NULL CHECK (spend >= 0),
+        cpc NUMERIC(12, 2) NOT NULL CHECK (cpc >= 0),
+        impressions INTEGER NOT NULL CHECK (impressions >= 0),
+        "createdAt" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
       )`
     );
 

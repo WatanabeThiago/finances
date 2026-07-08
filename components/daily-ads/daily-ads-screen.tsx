@@ -1,910 +1,634 @@
 "use client";
 
-import { formatBRL } from "@/lib/money";
-import type { DailyAds } from "@/lib/daily-ads";
-import type { VendaLg } from "@/lib/venda-lg";
 import {
-  useCallback,
-  useEffect,
-  useId,
-  useMemo,
-  useState,
-} from "react";
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
+  Pencil,
+  Plus,
+  Trash2,
+  X,
+} from "lucide-react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
+import {
+  isValidBrazilianDate,
+  type DailyAdsRecord,
+} from "@/lib/daily-ads";
+import type { VendaLg } from "@/lib/venda-lg";
 
-type FormState = {
-  data: string;
-  entradaReal: string;
-  gastosGoogleAds: string;
-  clientes: string;
-  cac: string;
-  ticketMedio: string;
-  cpc: string;
-  resultado: string;
-};
-
-const emptyForm = (): FormState => ({
-  data: getDateOnlyValue(new Date()),
-  entradaReal: "",
-  gastosGoogleAds: "",
-  clientes: "",
-  cac: "",
-  ticketMedio: "",
-  cpc: "",
-  resultado: "",
+const currencyFormatter = new Intl.NumberFormat("pt-BR", {
+  style: "currency",
+  currency: "BRL",
 });
 
-type ModalMode = "create" | "edit";
+const numberFormatter = new Intl.NumberFormat("pt-BR");
+const ratioFormatter = new Intl.NumberFormat("pt-BR", {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+const campoGrandeDateFormatter = new Intl.DateTimeFormat("pt-BR", {
+  day: "2-digit",
+  month: "2-digit",
+  year: "numeric",
+  timeZone: "America/Campo_Grande",
+});
 
-const getDateOnlyValue = (date: Date) => {
-  const year = date.getFullYear();
-  const month = `${date.getMonth() + 1}`.padStart(2, "0");
-  const day = `${date.getDate()}`.padStart(2, "0");
-  return `${year}-${month}-${day}`;
+type SortKey =
+  | "date"
+  | "result"
+  | "commission"
+  | "spend"
+  | "cpc"
+  | "clicks"
+  | "impressions"
+  | "revenue"
+  | "cpa"
+  | "roas"
+  | "clients"
+  | "averageCommission";
+type SortDirection = "asc" | "desc";
+
+type DailyMetrics = {
+  clicks: number;
+  revenue: number;
+  result: number;
+  commission: number;
+  cpa: number;
+  roas: number;
+  clients: number;
+  averageCommission: number;
 };
 
-const formatDateOnly = (value?: string | Date | null) => {
-  if (!value) return "";
+type DailyAdsDisplayRecord = DailyAdsRecord & DailyMetrics;
 
-  let parsedDate: Date | null = null;
-
-  if (typeof value === "string") {
-    const normalized = value.replace(" ", "T").split("T")[0];
-    const candidate = new Date(normalized);
-    if (!candidate || Number.isNaN(candidate.getTime())) return "";
-    parsedDate = candidate;
-  } else if (value instanceof Date) {
-    parsedDate = value;
-  }
-
-  if (!parsedDate || Number.isNaN(parsedDate.getTime())) {
-    return "";
-  }
-
-  return parsedDate.toLocaleDateString("pt-BR", {
-    timeZone: "America/Sao_Paulo",
-  });
+type SortButtonProps = {
+  label: string;
+  sortKey: SortKey;
+  activeKey: SortKey;
+  direction: SortDirection;
+  align?: "left" | "right";
+  onSort: (key: SortKey) => void;
 };
+
+function SortButton({
+  label,
+  sortKey,
+  activeKey,
+  direction,
+  align = "right",
+  onSort,
+}: SortButtonProps) {
+  const active = sortKey === activeKey;
+  const Icon = active
+    ? direction === "asc"
+      ? ArrowUp
+      : ArrowDown
+    : ArrowUpDown;
+
+  return (
+    <button
+      type="button"
+      onClick={() => onSort(sortKey)}
+      className={`flex min-h-9 items-center gap-1.5 rounded-lg px-1.5 transition-colors hover:bg-zinc-100 hover:text-zinc-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 dark:hover:bg-zinc-900 dark:hover:text-zinc-200 ${
+        align === "right" ? "justify-self-end" : "justify-self-start"
+      } ${active ? "text-blue-600 dark:text-blue-400" : ""}`}
+      aria-label={`Ordenar por ${label} em ordem ${
+        active && direction === "asc" ? "decrescente" : "crescente"
+      }`}
+    >
+      {label}
+      <Icon aria-hidden="true" size={13} strokeWidth={2.2} />
+    </button>
+  );
+}
+
+function maskDate(value: string) {
+  const digits = value.replace(/\D/g, "").slice(0, 8);
+  if (digits.length <= 2) return digits;
+  if (digits.length <= 4) return `${digits.slice(0, 2)}/${digits.slice(2)}`;
+  return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
+}
+
+function parseDecimal(value: string) {
+  return Number(value.replace(",", "."));
+}
+
+function calculateClicks(spend: number, cpc: number) {
+  return cpc > 0 ? Math.round(spend / cpc) : 0;
+}
+
+function dateToTimestamp(value: string) {
+  const [day, month, year] = value.split("/").map(Number);
+  return Date.UTC(year, month - 1, day);
+}
 
 export function DailyAdsScreen() {
-  const [dailyAds, setDailyAds] = useState<DailyAds[]>([]);
-  const [vendas, setVendas] = useState<VendaLg[]>([]);
+  const [records, setRecords] = useState<DailyAdsRecord[]>([]);
+  const [sales, setSales] = useState<VendaLg[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState("");
+  const [formOpen, setFormOpen] = useState(false);
+  const [date, setDate] = useState("");
+  const [spend, setSpend] = useState("");
+  const [cpc, setCpc] = useState("");
+  const [impressions, setImpressions] = useState("");
+  const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [editingRecord, setEditingRecord] = useState<DailyAdsRecord | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState("");
+  const [sortKey, setSortKey] = useState<SortKey>("date");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+
+  const salesMetricsByDate = useMemo(() => {
+    const metrics = new Map<
+      string,
+      { clients: number; revenue: number; commission: number }
+    >();
+
+    for (const sale of sales) {
+      if (!sale.dataVenda) continue;
+      const saleDate = new Date(sale.dataVenda);
+      if (Number.isNaN(saleDate.getTime())) continue;
+
+      const dateKey = campoGrandeDateFormatter.format(saleDate);
+      const current = metrics.get(dateKey) ?? {
+        clients: 0,
+        revenue: 0,
+        commission: 0,
+      };
+      const revenue = Array.isArray(sale.linhas)
+        ? sale.linhas.reduce(
+            (total, line) =>
+              total + Number(line.preco) * Number(line.quantidade),
+            0,
+          )
+        : 0;
+
+      current.clients += 1;
+      current.revenue += revenue;
+      current.commission += Number(sale.comissao) || 0;
+      metrics.set(dateKey, current);
+    }
+
+    return metrics;
+  }, [sales]);
+
+  const displayRecords = useMemo<DailyAdsDisplayRecord[]>(
+    () =>
+      records.map((record) => {
+        const salesMetrics = salesMetricsByDate.get(record.date);
+        const clients = salesMetrics?.clients ?? 0;
+        const revenue = salesMetrics?.revenue ?? 0;
+        const commission = salesMetrics?.commission ?? 0;
+
+        return {
+          ...record,
+          clicks: calculateClicks(record.spend, record.cpc),
+          revenue,
+          result: commission - record.spend,
+          commission,
+          clients,
+          cpa: clients > 0 ? record.spend / clients : 0,
+          roas: record.spend > 0 ? commission / record.spend : 0,
+          averageCommission: clients > 0 ? commission / clients : 0,
+        };
+      }),
+    [records, salesMetricsByDate],
+  );
+
+  const sortedRecords = useMemo(() => {
+    const direction = sortDirection === "asc" ? 1 : -1;
+
+    return [...displayRecords].sort((first, second) => {
+      const firstValue =
+        sortKey === "date"
+          ? dateToTimestamp(first.date)
+          : first[sortKey];
+      const secondValue =
+        sortKey === "date"
+          ? dateToTimestamp(second.date)
+          : second[sortKey];
+
+      return (firstValue - secondValue) * direction;
+    });
+  }, [displayRecords, sortDirection, sortKey]);
 
   useEffect(() => {
-    const fetchData = async () => {
+    let active = true;
+
+    async function loadRecords() {
       try {
-        setLoading(true);
-        const [adsRes, vendasRes] = await Promise.all([
+        const [adsResponse, salesResponse] = await Promise.all([
           fetch("/api/daily-ads"),
           fetch("/api/vendas-lg"),
         ]);
-        if (!adsRes.ok) throw new Error("Falha ao carregar dados de ads");
-        if (!vendasRes.ok) throw new Error("Falha ao carregar dados de vendas");
-        
-        const adsData = await adsRes.json();
-        const vendasData = await vendasRes.json();
-        
-        // Normalize numeric values for daily ads
-        const normalized = adsData.map((d: any) => ({
-          ...d,
-          entradaReal: typeof d.entradaReal === "string" ? parseFloat(d.entradaReal) : d.entradaReal,
-          gastosGoogleAds: typeof d.gastosGoogleAds === "string" ? parseFloat(d.gastosGoogleAds) : d.gastosGoogleAds,
-          clientes: typeof d.clientes === "string" ? parseInt(d.clientes, 10) : d.clientes,
-          cac: typeof d.cac === "string" ? parseFloat(d.cac) : d.cac,
-          ticketMedio: typeof d.ticketMedio === "string" ? parseFloat(d.ticketMedio) : d.ticketMedio,
-          cpc: typeof d.cpc === "string" ? parseFloat(d.cpc) : d.cpc,
-          resultado: typeof d.resultado === "string" ? parseFloat(d.resultado) : d.resultado,
-          comissao: typeof d.comissao === "string" ? parseFloat(d.comissao) : d.comissao,
-          resultadoComissao: typeof d.resultadoComissao === "string" ? parseFloat(d.resultadoComissao) : d.resultadoComissao,
-        }));
-        
-        // Normalize numeric values for vendas
-        const normalizedVendas = vendasData.map((v: any) => ({
-          ...v,
-          comissao: typeof v.comissao === "string" ? parseFloat(v.comissao) : v.comissao,
-          linhas: Array.isArray(v.linhas) ? v.linhas.map((l: any) => ({
-            ...l,
-            preco: typeof l.preco === "string" ? parseFloat(l.preco) : l.preco,
-            quantidade: typeof l.quantidade === "string" ? parseInt(l.quantidade, 10) : l.quantidade,
-          })) : [],
-        }));
-        
-        setDailyAds(normalized);
-        setVendas(normalizedVendas);
-        setError(null);
-      } catch (err) {
-        console.error("Error fetching data:", err);
-        setError("Erro ao carregar dados");
+        if (!adsResponse.ok || !salesResponse.ok) {
+          throw new Error("Failed to load daily ads metrics");
+        }
+        const [adsData, salesData] = (await Promise.all([
+          adsResponse.json(),
+          salesResponse.json(),
+        ])) as [DailyAdsRecord[], VendaLg[]];
+        if (active) {
+          setRecords(adsData);
+          setSales(salesData);
+        }
+      } catch {
+        if (active) setLoadError("Não foi possível carregar os registros.");
       } finally {
-        setLoading(false);
+        if (active) setLoading(false);
       }
-    };
+    }
 
-    fetchData();
-  }, []);
-
-  const [modalOpen, setModalOpen] = useState(false);
-  const [modalMode, setModalMode] = useState<ModalMode>("create");
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [form, setForm] = useState<FormState>(emptyForm());
-  const [formError, setFormError] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
-  const [syncStatus, setSyncStatus] = useState<"idle" | "loading" | "success" | "not-found" | "error">("idle");
-  const [syncedAt, setSyncedAt] = useState<string | null>(null);
-  const [scriptOpen, setScriptOpen] = useState(false);
-  const titleId = useId();
-
-  // Helper function to calculate derived fields
-  const calculateDerivedFields = useCallback((entrada: number, gastos: number, clientes: number) => {
-    const cac = clientes > 0 ? gastos / clientes : 0;
-    const ticketMedio = clientes > 0 ? entrada / clientes : 0;
-    const resultado = entrada - gastos;
-    
-    return { 
-      cac: cac.toFixed(2), 
-      ticketMedio: ticketMedio.toFixed(2),
-      resultado: resultado.toFixed(2)
+    loadRecords();
+    return () => {
+      active = false;
     };
   }, []);
 
-  const openModal = useCallback((recordToEdit?: DailyAds) => {
-    setModalMode("create");
-    setEditingId(null);
-    setFormError(null);
-    if (recordToEdit) {
-      setModalMode("edit");
-      setEditingId(recordToEdit.id);
-      setForm({
-        data: recordToEdit.data,
-        entradaReal: recordToEdit.entradaReal.toString(),
-        gastosGoogleAds: recordToEdit.gastosGoogleAds.toString(),
-        clientes: recordToEdit.clientes.toString(),
-        cac: recordToEdit.cac.toString(),
-        ticketMedio: recordToEdit.ticketMedio.toString(),
-        cpc: recordToEdit.cpc.toString(),
-        resultado: recordToEdit.resultado.toString(),
-      });
-    } else {
-      setForm(emptyForm());
-    }
-    setModalOpen(true);
-  }, []);
+  function closeForm() {
+    setFormOpen(false);
+    setError("");
+    setEditingRecord(null);
+  }
 
-  const closeModal = useCallback(() => {
-    setModalOpen(false);
-    setFormError(null);
-    setEditingId(null);
-    setModalMode("create");
-    setSyncStatus("idle");
-    setSyncedAt(null);
-  }, []);
+  function openCreateForm() {
+    setEditingRecord(null);
+    setDate("");
+    setSpend("");
+    setCpc("");
+    setImpressions("");
+    setError("");
+    setFormOpen(true);
+  }
 
-  const fetchGoogleAdsSync = useCallback(async () => {
-    if (!form.data) return;
-    setSyncStatus("loading");
-    try {
-      const res = await fetch(`/api/daily-ads/google-ads-sync?date=${form.data}`);
-      if (res.status === 404) {
-        setSyncStatus("not-found");
-        return;
-      }
-      if (!res.ok) {
-        setSyncStatus("error");
-        return;
-      }
-      const data = await res.json();
-      const entrada = parseFloat(form.entradaReal) || 0;
-      const gastos = data.gastosGoogleAds;
-      const clientes = parseInt(form.clientes, 10) || 0;
-      const derived = calculateDerivedFields(entrada, gastos, clientes);
-      setForm((f) => ({
-        ...f,
-        gastosGoogleAds: gastos.toFixed(2),
-        cpc: data.cpc.toFixed(2),
-        ...derived,
-      }));
-      setSyncedAt(new Date(data.syncedAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }));
-      setSyncStatus("success");
-    } catch {
-      setSyncStatus("error");
-    }
-  }, [form.data, form.entradaReal, form.clientes, calculateDerivedFields]);
+  function openEditForm(record: DailyAdsRecord) {
+    setEditingRecord(record);
+    setDate(record.date);
+    setSpend(String(record.spend).replace(".", ","));
+    setCpc(String(record.cpc).replace(".", ","));
+    setImpressions(String(record.impressions));
+    setError("");
+    setFormOpen(true);
+  }
 
-  // Auto-fill entrada real and clientes based on sales for the selected date (GMT-4)
-  useEffect(() => {
-    if (!modalOpen || !form.data || vendas.length === 0 || modalMode === "edit") return;
-
-    const selectedDate = form.data; // Format: YYYY-MM-DD
-    let totalEntrada = 0;
-    let numClientes = 0;
-
-    vendas.forEach((v) => {
-      if (!v.dataVenda) return;
-
-      // Convert sale date to GMT-4
-      const saleDateTime = new Date(v.dataVenda);
-      // Adjust to GMT-4 by subtracting 4 hours from current timezone offset
-      const offsetMs = saleDateTime.getTimezoneOffset() * 60 * 1000;
-      const gmt4AdjustedTime = saleDateTime.getTime() + offsetMs - (4 * 60 * 60 * 1000);
-      const adjustedDate = new Date(gmt4AdjustedTime);
-      const saleDateString = adjustedDate.toISOString().split("T")[0];
-
-      if (saleDateString === selectedDate) {
-        // Use only the commission as entradaReal
-        totalEntrada += v.comissao ?? 0;
-        numClientes++;
-      }
-    });
-
-    // Update form with calculated values
-    const gastos = parseFloat(form.gastosGoogleAds) || 0;
-    const derived = calculateDerivedFields(totalEntrada, gastos, numClientes);
-    
-    setForm((f) => ({
-      ...f,
-      entradaReal: totalEntrada.toFixed(2),
-      clientes: numClientes.toString(),
-      ...derived,
-    }));
-  }, [form.data, vendas, modalOpen, modalMode, calculateDerivedFields]);
-
-  const submit = useCallback(async () => {
-    setFormError(null);
-
-    if (!form.data.trim()) {
-      setFormError("Data é obrigatória");
+  function handleSort(key: SortKey) {
+    if (key === sortKey) {
+      setSortDirection((current) => (current === "asc" ? "desc" : "asc"));
       return;
     }
 
-    const url = modalMode === "edit" ? `/api/daily-ads/${editingId}` : "/api/daily-ads";
-    const method = modalMode === "edit" ? "PUT" : "POST";
+    setSortKey(key);
+    setSortDirection("asc");
+  }
 
-    setSubmitting(true);
+  async function handleDelete(record: DailyAdsRecord) {
+    const confirmed = window.confirm(
+      `Excluir o registro de ${record.date}? Esta ação não pode ser desfeita.`,
+    );
+    if (!confirmed) return;
+
+    setDeletingId(record.id);
+    setActionError("");
+
     try {
-      const response = await fetch(url, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          data: form.data,
-          entradaReal: parseFloat(form.entradaReal) || 0,
-          gastosGoogleAds: parseFloat(form.gastosGoogleAds) || 0,
-          clientes: parseInt(form.clientes, 10) || 0,
-          cac: parseFloat(form.cac) || 0,
-          ticketMedio: parseFloat(form.ticketMedio) || 0,
-          cpc: parseFloat(form.cpc) || 0,
-          resultado: parseFloat(form.resultado) || 0,
-        }),
+      const response = await fetch(`/api/daily-ads/${record.id}`, {
+        method: "DELETE",
       });
 
       if (!response.ok) {
-        throw new Error("Falha ao salvar");
+        const data = (await response.json().catch(() => null)) as
+          | { error?: string }
+          | null;
+        setActionError(data?.error ?? "Não foi possível excluir o registro.");
+        return;
       }
 
-      // Refresh data
-      const refreshResponse = await fetch("/api/daily-ads");
-      if (refreshResponse.ok) {
-        const data = await refreshResponse.json();
-        const normalized = data.map((d: any) => ({
-          ...d,
-          entradaReal: typeof d.entradaReal === "string" ? parseFloat(d.entradaReal) : d.entradaReal,
-          gastosGoogleAds: typeof d.gastosGoogleAds === "string" ? parseFloat(d.gastosGoogleAds) : d.gastosGoogleAds,
-          clientes: typeof d.clientes === "string" ? parseInt(d.clientes, 10) : d.clientes,
-          cac: typeof d.cac === "string" ? parseFloat(d.cac) : d.cac,
-          ticketMedio: typeof d.ticketMedio === "string" ? parseFloat(d.ticketMedio) : d.ticketMedio,
-          cpc: typeof d.cpc === "string" ? parseFloat(d.cpc) : d.cpc,
-          resultado: typeof d.resultado === "string" ? parseFloat(d.resultado) : d.resultado,
-          comissao: typeof d.comissao === "string" ? parseFloat(d.comissao) : d.comissao,
-          resultadoComissao: typeof d.resultadoComissao === "string" ? parseFloat(d.resultadoComissao) : d.resultadoComissao,
-        }));
-        setDailyAds(normalized);
+      setRecords((current) => current.filter((item) => item.id !== record.id));
+    } catch {
+      setActionError("Não foi possível conectar ao servidor.");
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const parsedSpend = parseDecimal(spend);
+    const parsedCpc = parseDecimal(cpc);
+    const parsedImpressions = Number(impressions);
+
+    if (!isValidBrazilianDate(date)) {
+      setError("Informe uma data válida no formato DD/MM/AAAA.");
+      return;
+    }
+
+    if (
+      !Number.isFinite(parsedSpend) ||
+      parsedSpend < 0 ||
+      !Number.isFinite(parsedCpc) ||
+      parsedCpc < 0 ||
+      !Number.isInteger(parsedImpressions) ||
+      parsedImpressions < 0
+    ) {
+      setError("Preencha gasto, CPC e impressões com valores válidos.");
+      return;
+    }
+
+    setSubmitting(true);
+    setError("");
+
+    try {
+      const endpoint = editingRecord
+        ? `/api/daily-ads/${editingRecord.id}`
+        : "/api/daily-ads";
+      const response = await fetch(endpoint, {
+        method: editingRecord ? "PATCH" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          date,
+          spend: parsedSpend,
+          cpc: parsedCpc,
+          impressions: parsedImpressions,
+        }),
+      });
+      const data = (await response.json()) as DailyAdsRecord | { error?: string };
+
+      if (!response.ok) {
+        setError("error" in data && data.error ? data.error : "Não foi possível salvar o registro.");
+        return;
       }
 
-      closeModal();
-    } catch (err) {
-      console.error("Error submitting:", err);
-      setFormError("Erro ao salvar registro");
+      const savedRecord = data as DailyAdsRecord;
+      setRecords((current) =>
+        editingRecord
+          ? current.map((item) =>
+              item.id === savedRecord.id ? savedRecord : item,
+            )
+          : [savedRecord, ...current],
+      );
+      setDate("");
+      setSpend("");
+      setCpc("");
+      setImpressions("");
+      closeForm();
+    } catch {
+      setError("Não foi possível conectar ao servidor.");
     } finally {
       setSubmitting(false);
     }
-  }, [form, modalMode, editingId, closeModal]);
-
-  const deleteRecord = useCallback(
-    async (id: string) => {
-      if (!confirm("Tem certeza que quer deletar este registro?")) return;
-
-      try {
-        const response = await fetch(`/api/daily-ads/${id}`, {
-          method: "DELETE",
-        });
-
-        if (!response.ok) {
-          throw new Error("Falha ao deletar");
-        }
-
-        setDailyAds((prev) => prev.filter((d) => d.id !== id));
-      } catch (err) {
-        console.error("Error deleting:", err);
-        setError("Erro ao deletar registro");
-      }
-    },
-    []
-  );
-
-  const stats = useMemo(() => {
-    if (dailyAds.length === 0) {
-      return {
-        totalGastos: 0,
-        totalEntrada: 0,
-        totalClientes: 0,
-        avgROI: 0,
-        avgCAC: 0,
-        totalComissao: 0,
-        comissaoMedia: 0,
-        lucroLiquido: 0,
-        avgTicketMedio: 0,
-        avgCpc: 0,
-      };
-    }
-
-    const totalGastos = dailyAds.reduce((acc, d) => acc + d.gastosGoogleAds, 0);
-    const totalEntrada = dailyAds.reduce((acc, d) => acc + d.entradaReal, 0);
-    const totalClientes = dailyAds.reduce((acc, d) => acc + d.clientes, 0);
-    const roi = ((totalEntrada - totalGastos) / totalGastos) * 100;
-    const avgCAC = dailyAds.reduce((acc, d) => acc + d.cac, 0) / dailyAds.length;
-    const totalComissao = vendas.reduce((acc, v) => acc + (v.comissao || 0), 0);
-    
-    // New metrics
-    const vendasComComissao = vendas.filter((v) => v.comissao && v.comissao > 0);
-    const comissaoMedia = vendasComComissao.length > 0 
-      ? totalComissao / vendasComComissao.length 
-      : 0;
-    const lucroLiquido = totalEntrada - totalGastos;
-    const avgTicketMedio = dailyAds.reduce((acc, d) => acc + d.ticketMedio, 0) / dailyAds.length;
-    const avgCpc = dailyAds.reduce((acc, d) => acc + d.cpc, 0) / dailyAds.length;
-
-    return {
-      totalGastos,
-      totalEntrada,
-      totalClientes,
-      avgROI: isFinite(roi) ? roi : 0,
-      avgCAC,
-      totalComissao,
-      comissaoMedia,
-      lucroLiquido,
-      avgTicketMedio,
-      avgCpc: isFinite(avgCpc) ? avgCpc : 0,
-    };
-  }, [dailyAds, vendas]);
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <p className="text-zinc-500">Carregando dados...</p>
-      </div>
-    );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-white to-zinc-50 p-4 dark:from-zinc-950 dark:to-zinc-900">
-      <div className="mx-auto max-w-7xl">
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold text-zinc-900 dark:text-white">
-            Controle de Google Ads
-          </h1>
-          <p className="mt-2 text-zinc-600 dark:text-zinc-400">
-            Acompanhe seus gastos diários e ROI
-          </p>
-        </div>
-
-        {/* Stats Cards */}
-        <div className="mb-8 grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {/* Entrada Total */}
-          <div className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
-            <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400">
-              Entrada Total
+    <section className="mx-auto w-full max-w-[1500px]">
+      <div className="overflow-hidden rounded-3xl border border-zinc-200 bg-white shadow-[0_20px_60px_-36px_rgba(24,24,27,0.4)] dark:border-zinc-800 dark:bg-zinc-950">
+        <header className="flex flex-col gap-5 border-b border-zinc-200 bg-[radial-gradient(circle_at_top_right,_rgba(59,130,246,0.14),_transparent_45%)] p-6 sm:flex-row sm:items-center sm:justify-between dark:border-zinc-800">
+          <div>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-blue-600 dark:text-blue-400">
+              Google Ads
             </p>
-            <p className="mt-2 text-2xl font-bold text-green-600 dark:text-green-400">
-              {formatBRL(stats.totalEntrada)}
-            </p>
-            <p className="mt-1 text-xs text-zinc-500">
-              {stats.totalClientes} cliente{stats.totalClientes !== 1 ? "s" : ""}
+            <h2 className="text-2xl font-semibold tracking-tight text-zinc-950 dark:text-zinc-50">
+              Gastos diários
+            </h2>
+            <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+              Registre manualmente o desempenho de cada dia.
             </p>
           </div>
 
-          {/* Gasto Total */}
-          <div className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
-            <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400">
-              Gasto Google Ads
-            </p>
-            <p className="mt-2 text-2xl font-bold text-red-600 dark:text-red-400">
-              {formatBRL(stats.totalGastos)}
-            </p>
-            <p className="mt-1 text-xs text-zinc-500">
-              Gastos totais
-            </p>
-          </div>
-
-          {/* Lucro Líquido */}
-          <div className={`rounded-xl border border-zinc-200 p-4 dark:border-zinc-800 ${stats.lucroLiquido >= 0 ? 'bg-emerald-50 dark:bg-emerald-950/30' : 'bg-red-50 dark:bg-red-950/30'}`}>
-            <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400">
-              Lucro Líquido
-            </p>
-            <p className={`mt-2 text-2xl font-bold ${stats.lucroLiquido >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
-              {formatBRL(stats.lucroLiquido)}
-            </p>
-            <p className="mt-1 text-xs text-zinc-500">
-              Entrada - Gasto
-            </p>
-          </div>
-
-          {/* ROI Médio */}
-          <div className={`rounded-xl border border-zinc-200 p-4 dark:border-zinc-800 ${stats.avgROI >= 0 ? 'bg-blue-50 dark:bg-blue-950/30' : 'bg-red-50 dark:bg-red-950/30'}`}>
-            <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400">
-              ROI Médio
-            </p>
-            <p className={`mt-2 text-2xl font-bold ${stats.avgROI >= 0 ? 'text-blue-600 dark:text-blue-400' : 'text-red-600 dark:text-red-400'}`}>
-              {stats.avgROI.toFixed(1)}%
-            </p>
-            <p className="mt-1 text-xs text-zinc-500">
-              Retorno sobre investimento
-            </p>
-          </div>
-
-          {/* Ticket Médio */}
-          <div className="rounded-xl border border-zinc-200 bg-sky-50 p-4 dark:border-zinc-800 dark:bg-sky-950/30">
-            <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400">
-              Ticket Médio
-            </p>
-            <p className="mt-2 text-2xl font-bold text-sky-600 dark:text-sky-400">
-              {formatBRL(stats.avgTicketMedio)}
-            </p>
-            <p className="mt-1 text-xs text-zinc-500">
-              Por cliente
-            </p>
-          </div>
-
-          {/* CAC Médio */}
-          <div className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
-            <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400">
-              CAC Médio
-            </p>
-            <p className="mt-2 text-2xl font-bold text-zinc-900 dark:text-white">
-              {formatBRL(stats.avgCAC)}
-            </p>
-            <p className="mt-1 text-xs text-zinc-500">
-              Custo por cliente
-            </p>
-          </div>
-
-          {/* CPC Médio */}
-          <div className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
-            <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400">
-              CPC Médio
-            </p>
-            <p className="mt-2 text-2xl font-bold text-zinc-900 dark:text-white">
-              {formatBRL(stats.avgCpc)}
-            </p>
-            <p className="mt-1 text-xs text-zinc-500">
-              Custo por clique
-            </p>
-          </div>
-
-          {/* Comissão Total */}
-          <div className="rounded-xl border border-zinc-200 bg-violet-50 p-4 dark:border-zinc-800 dark:bg-violet-950/30">
-            <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400">
-              Comissão Total
-            </p>
-            <p className="mt-2 text-2xl font-bold text-violet-600 dark:text-violet-400">
-              {formatBRL(stats.totalComissao)}
-            </p>
-            <p className="mt-1 text-xs text-zinc-500">
-              Total a pagar
-            </p>
-          </div>
-
-          {/* Comissão Média */}
-          <div className="rounded-xl border border-zinc-200 bg-indigo-50 p-4 dark:border-zinc-800 dark:bg-indigo-950/30">
-            <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400">
-              Comissão Média
-            </p>
-            <p className="mt-2 text-2xl font-bold text-indigo-600 dark:text-indigo-400">
-              {formatBRL(stats.comissaoMedia)}
-            </p>
-            <p className="mt-1 text-xs text-zinc-500">
-              Por venda
-            </p>
-          </div>
-
-        </div>
-
-        {/* Buttons */}
-        <div className="mb-6 flex flex-wrap gap-3">
           <button
-            onClick={() => openModal()}
-            className="rounded-xl bg-sky-600 px-6 py-3 font-semibold text-white transition-colors hover:bg-sky-700 dark:bg-sky-700 dark:hover:bg-sky-600"
+            type="button"
+            onClick={openCreateForm}
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
           >
-            + Adicionar Registro
+            <Plus aria-hidden="true" size={18} strokeWidth={2.5} />
+            Adicionar registro
           </button>
-          <button
-            onClick={() => setScriptOpen(true)}
-            className="rounded-xl border border-blue-300 bg-blue-50 px-6 py-3 font-semibold text-blue-700 transition-colors hover:bg-blue-100 dark:border-blue-700 dark:bg-blue-950/40 dark:text-blue-300 dark:hover:bg-blue-950/70"
-          >
-            Ver script Google Ads
-          </button>
-        </div>
+        </header>
 
-        {/* Script dialog */}
-        {scriptOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-            <div className="flex max-h-[90dvh] w-full max-w-2xl flex-col rounded-xl bg-white dark:bg-zinc-900">
-              <div className="flex items-center justify-between border-b border-zinc-200 px-6 py-4 dark:border-zinc-800">
-                <h2 className="text-lg font-bold text-zinc-900 dark:text-white">Script para Google Ads</h2>
-                <button
-                  onClick={() => setScriptOpen(false)}
-                  className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800"
-                >
-                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-              <div className="flex-1 overflow-y-auto p-6 space-y-4">
-                <div className="rounded-lg bg-amber-50 p-3 text-sm text-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
-                  <strong>Como usar:</strong> No Google Ads, vá em <em>Ferramentas &gt; Ações em massa &gt; Scripts</em>. Cole o código abaixo, substitua a URL e o secret, e agende para rodar diariamente.
-                </div>
-                <div className="rounded-lg bg-zinc-50 border border-zinc-200 dark:bg-zinc-950 dark:border-zinc-700">
-                  <div className="flex items-center justify-between border-b border-zinc-200 px-4 py-2 dark:border-zinc-700">
-                    <span className="text-xs font-medium text-zinc-500">JavaScript</span>
-                    <button
-                      onClick={() => {
-                        const script = document.getElementById("ads-script-content");
-                        if (script) navigator.clipboard.writeText(script.innerText);
-                      }}
-                      className="text-xs font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400"
+        <div className="overflow-x-auto p-3 sm:p-5">
+          <div className="min-w-[1660px]">
+            <div className="grid grid-cols-[1.2fr_1.1fr_1fr_1fr_1fr_1fr_1fr_1.2fr_1fr_1fr_1fr_1.2fr_96px] px-3 pb-2 text-xs font-semibold uppercase tracking-wider text-zinc-400">
+              <SortButton label="Data" sortKey="date" activeKey={sortKey} direction={sortDirection} align="left" onSort={handleSort} />
+              <SortButton label="Resultado" sortKey="result" activeKey={sortKey} direction={sortDirection} onSort={handleSort} />
+              <SortButton label="Comissão" sortKey="commission" activeKey={sortKey} direction={sortDirection} onSort={handleSort} />
+              <SortButton label="Gasto" sortKey="spend" activeKey={sortKey} direction={sortDirection} onSort={handleSort} />
+              <SortButton label="CPC" sortKey="cpc" activeKey={sortKey} direction={sortDirection} onSort={handleSort} />
+              <SortButton label="Cliques" sortKey="clicks" activeKey={sortKey} direction={sortDirection} onSort={handleSort} />
+              <SortButton label="Impressões" sortKey="impressions" activeKey={sortKey} direction={sortDirection} onSort={handleSort} />
+              <SortButton label="Faturamento" sortKey="revenue" activeKey={sortKey} direction={sortDirection} onSort={handleSort} />
+              <SortButton label="CPA" sortKey="cpa" activeKey={sortKey} direction={sortDirection} onSort={handleSort} />
+              <SortButton label="ROAS" sortKey="roas" activeKey={sortKey} direction={sortDirection} onSort={handleSort} />
+              <SortButton label="Clientes" sortKey="clients" activeKey={sortKey} direction={sortDirection} onSort={handleSort} />
+              <SortButton label="Comissão média" sortKey="averageCommission" activeKey={sortKey} direction={sortDirection} onSort={handleSort} />
+              <span className="self-center text-right">Ações</span>
+            </div>
+
+            {actionError ? (
+              <p className="mb-2 rounded-lg bg-red-50 px-3 py-2 text-sm font-medium text-red-600 dark:bg-red-950/30 dark:text-red-400">
+                {actionError}
+              </p>
+            ) : null}
+
+            {loading ? (
+              <p className="py-12 text-center text-sm text-zinc-500">Carregando registros...</p>
+            ) : loadError ? (
+              <p className="py-12 text-center text-sm font-medium text-red-600 dark:text-red-400">{loadError}</p>
+            ) : records.length === 0 ? (
+              <p className="py-12 text-center text-sm text-zinc-500">Nenhum registro adicionado ainda.</p>
+            ) : (
+              <ul className="divide-y divide-zinc-100 dark:divide-zinc-800/80">
+                {sortedRecords.map((item) => (
+                  <li
+                    key={item.id}
+                    className="grid grid-cols-[1.2fr_1.1fr_1fr_1fr_1fr_1fr_1fr_1.2fr_1fr_1fr_1fr_1.2fr_96px] items-center rounded-xl px-3 py-4 transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-900"
+                  >
+                    <span className="text-sm font-medium text-zinc-700 dark:text-zinc-200">
+                      {item.date}
+                    </span>
+                    <span
+                      className={`text-right text-sm font-semibold tabular-nums ${
+                        item.result > 0
+                          ? "text-emerald-600 dark:text-emerald-400"
+                          : item.result < 0
+                            ? "text-red-600 dark:text-red-400"
+                            : "text-zinc-500 dark:text-zinc-400"
+                      }`}
                     >
-                      Copiar
-                    </button>
-                  </div>
-                  <pre id="ads-script-content" className="overflow-x-auto p-4 text-xs text-zinc-800 dark:text-zinc-200 whitespace-pre">{`function main() {
-  var today = new Date();
-  var dateStr = Utilities.formatDate(
-    today, 'America/Sao_Paulo', 'yyyy-MM-dd'
-  );
+                      {currencyFormatter.format(item.result)}
+                    </span>
+                    <span className="text-right text-sm font-semibold tabular-nums text-blue-600 dark:text-blue-400">
+                      {currencyFormatter.format(item.commission)}
+                    </span>
+                    <span className="text-right text-sm font-semibold tabular-nums text-zinc-950 dark:text-zinc-50">
+                      {currencyFormatter.format(item.spend)}
+                    </span>
+                    <span className="text-right text-sm tabular-nums text-zinc-500 dark:text-zinc-400">
+                      {currencyFormatter.format(item.cpc)}
+                    </span>
+                    <span className="text-right text-sm font-medium tabular-nums text-zinc-700 dark:text-zinc-300">
+                      {numberFormatter.format(item.clicks)}
+                    </span>
+                    <span className="text-right text-sm tabular-nums text-zinc-500 dark:text-zinc-400">
+                      {numberFormatter.format(item.impressions)}
+                    </span>
+                    <span className="text-right text-sm font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">
+                      {currencyFormatter.format(item.revenue)}
+                    </span>
+                    <span className="text-right text-sm tabular-nums text-zinc-500 dark:text-zinc-400">
+                      {item.clients > 0 ? currencyFormatter.format(item.cpa) : "—"}
+                    </span>
+                    <span className="text-right text-sm font-medium tabular-nums text-zinc-700 dark:text-zinc-300">
+                      {item.spend > 0 ? `${ratioFormatter.format(item.roas)}x` : "—"}
+                    </span>
+                    <span className="text-right text-sm font-medium tabular-nums text-zinc-700 dark:text-zinc-300">
+                      {numberFormatter.format(item.clients)}
+                    </span>
+                    <span className="text-right text-sm tabular-nums text-zinc-500 dark:text-zinc-400">
+                      {item.clients > 0
+                        ? currencyFormatter.format(item.averageCommission)
+                        : "—"}
+                    </span>
+                    <span className="flex justify-end gap-1">
+                      <button
+                        type="button"
+                        onClick={() => openEditForm(item)}
+                        className="grid size-9 place-items-center rounded-lg text-zinc-500 transition hover:bg-blue-50 hover:text-blue-600 focus-visible:outline-2 focus-visible:outline-blue-600 dark:hover:bg-blue-950/40 dark:hover:text-blue-400"
+                        aria-label={`Editar registro de ${item.date}`}
+                      >
+                        <Pencil aria-hidden="true" size={16} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDelete(item)}
+                        disabled={deletingId === item.id}
+                        className="grid size-9 place-items-center rounded-lg text-zinc-500 transition hover:bg-red-50 hover:text-red-600 focus-visible:outline-2 focus-visible:outline-red-600 disabled:cursor-wait disabled:opacity-50 dark:hover:bg-red-950/40 dark:hover:text-red-400"
+                        aria-label={`Excluir registro de ${item.date}`}
+                      >
+                        <Trash2 aria-hidden="true" size={16} />
+                      </button>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      </div>
 
-  var totalCost = 0;
-  var totalClicks = 0;
-
-  var campaigns = AdsApp.campaigns()
-    .withCondition('campaign.status = ENABLED')
-    .get();
-
-  while (campaigns.hasNext()) {
-    var campaign = campaigns.next();
-    var stats = campaign.getStatsFor('TODAY');
-    totalCost   += stats.getCost();
-    totalClicks += stats.getClicks();
-  }
-
-  var cpc = totalClicks > 0
-    ? (totalCost / totalClicks)
-    : 0;
-
-  var payload = JSON.stringify({
-    secret: 'SEU_SECRET_AQUI',
-    date: dateStr,
-    gastosGoogleAds: totalCost,
-    cpc: cpc
-  });
-
-  var options = {
-    method: 'post',
-    contentType: 'application/json',
-    payload: payload,
-    muteHttpExceptions: true
-  };
-
-  var url = 'https://SEU_DOMINIO/api/daily-ads/google-ads-sync';
-  var response = UrlFetchApp.fetch(url, options);
-  Logger.log('Status: ' + response.getResponseCode());
-  Logger.log('Resposta: ' + response.getContentText());
-}`}</pre>
-                </div>
-                <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                  Substitua <code className="rounded bg-zinc-100 px-1 dark:bg-zinc-800">SEU_SECRET_AQUI</code> pelo valor de <code className="rounded bg-zinc-100 px-1 dark:bg-zinc-800">GOOGLE_ADS_SYNC_SECRET</code> do seu <code className="rounded bg-zinc-100 px-1 dark:bg-zinc-800">.env.local</code>, e <code className="rounded bg-zinc-100 px-1 dark:bg-zinc-800">SEU_DOMINIO</code> pela URL do app em produção.
+      {formOpen ? (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-zinc-950/50 p-4 backdrop-blur-sm">
+          <button
+            type="button"
+            className="absolute inset-0 cursor-default"
+            onClick={closeForm}
+            aria-label="Fechar formulário"
+          />
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="daily-ads-form-title"
+            className="relative w-full max-w-lg rounded-3xl border border-zinc-200 bg-white p-6 shadow-2xl dark:border-zinc-800 dark:bg-zinc-950"
+          >
+            <div className="mb-6 flex items-start justify-between gap-4">
+              <div>
+                <h3 id="daily-ads-form-title" className="text-xl font-semibold text-zinc-950 dark:text-zinc-50">
+                  {editingRecord ? "Editar registro" : "Novo registro"}
+                </h3>
+                <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+                  {editingRecord
+                    ? "Atualize os números deste dia."
+                    : "Informe os números exibidos no Google Ads."}
                 </p>
               </div>
+              <button
+                type="button"
+                onClick={closeForm}
+                className="grid size-10 place-items-center rounded-xl text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-900 dark:hover:text-zinc-100"
+                aria-label="Fechar"
+              >
+                <X aria-hidden="true" size={20} />
+              </button>
             </div>
-          </div>
-        )}
 
-        {/* Table */}
-        <div className="overflow-x-auto rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-zinc-200 dark:border-zinc-800">
-                <th className="px-6 py-4 text-left text-sm font-semibold text-zinc-900 dark:text-white">
-                  Data
-                </th>
-                <th className="px-6 py-4 text-right text-sm font-semibold text-zinc-900 dark:text-white">
-                  Entrada Real
-                </th>
-                <th className="px-6 py-4 text-right text-sm font-semibold text-zinc-900 dark:text-white">
-                  Gasto G Ads
-                </th>
-                <th className="px-6 py-4 text-center text-sm font-semibold text-zinc-900 dark:text-white">
-                  Clientes
-                </th>
-                <th className="px-6 py-4 text-right text-sm font-semibold text-zinc-900 dark:text-white">
-                  CAC
-                </th>
-                <th className="px-6 py-4 text-right text-sm font-semibold text-zinc-900 dark:text-white">
-                  Ticket Médio
-                </th>
-                <th className="px-6 py-4 text-right text-sm font-semibold text-zinc-900 dark:text-white">
-                  CPC
-                </th>
-                <th className="px-6 py-4 text-right text-sm font-semibold text-zinc-900 dark:text-white">
-                  Resultado
-                </th>
-                <th className="px-6 py-4 text-center text-sm font-semibold text-zinc-900 dark:text-white">
-                  Ações
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {dailyAds.map((d) => (
-                <tr
-                  key={d.id}
-                  className="border-b border-zinc-100 transition-colors hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-800/50"
-                >
-                  <td className="px-6 py-4 text-sm text-zinc-900 dark:text-zinc-100">
-                    {formatDateOnly(d.data)}
-                  </td>
-                  <td className="px-6 py-4 text-right text-sm font-semibold text-green-600 dark:text-green-400">
-                    {formatBRL(d.entradaReal)}
-                  </td>
-                  <td className="px-6 py-4 text-right text-sm font-semibold text-red-600 dark:text-red-400">
-                    {formatBRL(d.gastosGoogleAds)}
-                  </td>
-                  <td className="px-6 py-4 text-center text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                    {d.clientes}
-                  </td>
-                  <td className="px-6 py-4 text-right text-sm text-zinc-600 dark:text-zinc-400">
-                    {formatBRL(d.cac)}
-                  </td>
-                  <td className="px-6 py-4 text-right text-sm text-zinc-600 dark:text-zinc-400">
-                    {formatBRL(d.ticketMedio)}
-                  </td>
-                  <td className="px-6 py-4 text-right text-sm text-zinc-600 dark:text-zinc-400">
-                    {formatBRL(d.cpc)}
-                  </td>
-                  <td className={`px-6 py-4 text-right text-sm font-semibold ${d.resultado >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-                    {formatBRL(d.resultado)}
-                  </td>
-                  <td className="px-6 py-4 text-center">
-                    <button
-                      onClick={() => openModal(d)}
-                      className="mr-2 rounded p-1 text-zinc-400 hover:bg-sky-100 hover:text-sky-600 dark:hover:bg-sky-950 dark:hover:text-sky-400"
-                    >
-                      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                      </svg>
-                    </button>
-                    <button
-                      onClick={() => deleteRecord(d.id)}
-                      className="rounded p-1 text-zinc-400 hover:bg-red-100 hover:text-red-600 dark:hover:bg-red-950 dark:hover:text-red-400"
-                    >
-                      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                      </svg>
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                Data
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={date}
+                  onChange={(event) => setDate(maskDate(event.target.value))}
+                  placeholder="DD/MM/AAAA"
+                  maxLength={10}
+                  className="mt-1.5 min-h-11 w-full rounded-xl border border-zinc-300 bg-white px-3.5 text-zinc-950 outline-none transition focus:border-blue-500 focus:ring-3 focus:ring-blue-500/15 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+                />
+              </label>
 
-        {/* Modal */}
-        {modalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-            <div className="w-full max-w-4xl rounded-xl bg-white dark:bg-zinc-900">
-              <div className="border-b border-zinc-200 px-6 py-4 dark:border-zinc-800">
-                <h2 className="text-lg font-bold text-zinc-900 dark:text-white">
-                  {modalMode === "create" ? "Novo Registro" : "Editar Registro"}
-                </h2>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 p-6">
-                {formError && (
-                  <div className="col-span-1 md:col-span-2 lg:col-span-4 rounded-lg bg-red-100 p-3 text-sm text-red-700 dark:bg-red-950 dark:text-red-200">
-                    {formError}
-                  </div>
-                )}
-
-                <label className="block">
-                  <span className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
-                    Data
-                  </span>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                  Gasto (R$)
                   <input
-                    type="date"
-                    value={form.data}
-                    onChange={(e) =>
-                      setForm((f) => ({ ...f, data: e.target.value }))
-                    }
-                    className="mt-1.5 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2.5 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-100"
-                  />
-                </label>
-
-                <label className="block">
-                  <span className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
-                    Entrada Real (R$)
-                  </span>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={form.entradaReal}
-                    onChange={(e) => {
-                      const entrada = parseFloat(e.target.value) || 0;
-                      const gastos = parseFloat(form.gastosGoogleAds) || 0;
-                      const clientes = parseInt(form.clientes, 10) || 0;
-                      const derived = calculateDerivedFields(entrada, gastos, clientes);
-                      setForm((f) => ({ 
-                        ...f, 
-                        entradaReal: e.target.value,
-                        ...derived
-                      }));
-                    }}
-                    className="mt-1.5 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2.5 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-100"
-                  />
-                </label>
-
-                <div className="block">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
-                      Gasto Google Ads (R$)
-                    </span>
-                    <button
-                      type="button"
-                      onClick={fetchGoogleAdsSync}
-                      disabled={syncStatus === "loading"}
-                      className="flex items-center gap-1 rounded-lg bg-blue-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
-                    >
-                      {syncStatus === "loading" ? "Buscando..." : "Buscar Google Ads"}
-                    </button>
-                  </div>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={form.gastosGoogleAds}
-                    onChange={(e) => {
-                      const entrada = parseFloat(form.entradaReal) || 0;
-                      const gastos = parseFloat(e.target.value) || 0;
-                      const clientes = parseInt(form.clientes, 10) || 0;
-                      const derived = calculateDerivedFields(entrada, gastos, clientes);
-                      setForm((f) => ({
-                        ...f,
-                        gastosGoogleAds: e.target.value,
-                        ...derived,
-                      }));
-                    }}
-                    className="mt-1.5 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2.5 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-100"
-                  />
-                  {syncStatus === "success" && (
-                    <p className="mt-1 text-xs text-emerald-600 dark:text-emerald-400">Sincronizado às {syncedAt}</p>
-                  )}
-                  {syncStatus === "not-found" && (
-                    <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">Sem dados para esta data</p>
-                  )}
-                  {syncStatus === "error" && (
-                    <p className="mt-1 text-xs text-red-600 dark:text-red-400">Erro ao buscar dados</p>
-                  )}
-                </div>
-
-                <label className="block">
-                  <span className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
-                    Clientes
-                  </span>
-                  <input
-                    type="number"
-                    value={form.clientes}
-                    onChange={(e) => {
-                      const entrada = parseFloat(form.entradaReal) || 0;
-                      const gastos = parseFloat(form.gastosGoogleAds) || 0;
-                      const clientes = parseInt(e.target.value, 10) || 0;
-                      const derived = calculateDerivedFields(entrada, gastos, clientes);
-                      setForm((f) => ({ 
-                        ...f, 
-                        clientes: e.target.value,
-                        ...derived
-                      }));
-                    }}
-                    className="mt-1.5 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2.5 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-100"
-                  />
-                </label>
-
-                <label className="block">
-                  <span className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
-                    CAC (R$)
-                  </span>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={form.cac}
-                    disabled
-                    readOnly
-                    className="mt-1.5 w-full rounded-lg border border-zinc-300 bg-zinc-100 px-3 py-2.5 cursor-not-allowed dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
-                  />
-                  <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">Calculado automaticamente</p>
-                </label>
-
-                <label className="block">
-                  <span className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
-                    Ticket Médio (R$)
-                  </span>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={form.ticketMedio}
-                    disabled
-                    readOnly
-                    className="mt-1.5 w-full rounded-lg border border-zinc-300 bg-zinc-100 px-3 py-2.5 cursor-not-allowed dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
-                  />
-                  <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">Calculado automaticamente</p>
-                </label>
-
-                <label className="block">
-                  <span className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
-                    CPC (R$)
-                  </span>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={form.cpc}
-                    onChange={(e) =>
-                      setForm((f) => ({ ...f, cpc: e.target.value }))
-                    }
-                    className="mt-1.5 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2.5 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-100"
+                    type="text"
+                    inputMode="decimal"
+                    value={spend}
+                    onChange={(event) => setSpend(event.target.value)}
                     placeholder="0,00"
+                    className="mt-1.5 min-h-11 w-full rounded-xl border border-zinc-300 bg-white px-3.5 text-zinc-950 outline-none transition focus:border-blue-500 focus:ring-3 focus:ring-blue-500/15 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
                   />
                 </label>
-
-                <label className="block">
-                  <span className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
-                    Resultado (R$)
-                  </span>
+                <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                  CPC (R$)
                   <input
-                    type="number"
-                    step="0.01"
-                    value={form.resultado}
-                    disabled
-                    readOnly
-                    className="mt-1.5 w-full rounded-lg border border-zinc-300 bg-zinc-100 px-3 py-2.5 cursor-not-allowed dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
+                    type="text"
+                    inputMode="decimal"
+                    value={cpc}
+                    onChange={(event) => setCpc(event.target.value)}
+                    placeholder="0,00"
+                    className="mt-1.5 min-h-11 w-full rounded-xl border border-zinc-300 bg-white px-3.5 text-zinc-950 outline-none transition focus:border-blue-500 focus:ring-3 focus:ring-blue-500/15 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
                   />
-                  <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">Calculado automaticamente</p>
                 </label>
               </div>
 
-              <div className="flex gap-3 border-t border-zinc-200 px-6 py-4 dark:border-zinc-800">
+              <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                Impressões
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={impressions}
+                  onChange={(event) => setImpressions(event.target.value.replace(/\D/g, ""))}
+                  placeholder="0"
+                  className="mt-1.5 min-h-11 w-full rounded-xl border border-zinc-300 bg-white px-3.5 text-zinc-950 outline-none transition focus:border-blue-500 focus:ring-3 focus:ring-blue-500/15 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+                />
+              </label>
+
+              {error ? <p className="text-sm font-medium text-red-600 dark:text-red-400">{error}</p> : null}
+
+              <div className="flex flex-col-reverse gap-3 pt-2 sm:flex-row sm:justify-end">
                 <button
-                  onClick={closeModal}
-                  className="flex-1 rounded-lg border border-zinc-300 px-4 py-2.5 font-semibold text-zinc-900 transition-colors hover:bg-zinc-50 dark:border-zinc-600 dark:text-zinc-100 dark:hover:bg-zinc-800"
+                  type="button"
+                  onClick={closeForm}
+                  className="min-h-11 rounded-xl px-4 text-sm font-semibold text-zinc-600 transition hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-900"
                 >
                   Cancelar
                 </button>
                 <button
-                  onClick={submit}
+                  type="submit"
                   disabled={submitting}
-                  className="flex-1 rounded-lg bg-sky-600 px-4 py-2.5 font-semibold text-white transition-colors hover:bg-sky-700 disabled:opacity-50 dark:bg-sky-700 dark:hover:bg-sky-600"
+                  className="min-h-11 rounded-xl bg-blue-600 px-5 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-wait disabled:opacity-65"
                 >
-                  {submitting ? "Salvando..." : "Salvar"}
+                  {submitting
+                    ? "Salvando..."
+                    : editingRecord
+                      ? "Salvar alterações"
+                      : "Salvar registro"}
                 </button>
               </div>
-            </div>
+            </form>
           </div>
-        )}
-      </div>
-    </div>
+        </div>
+      ) : null}
+    </section>
   );
 }

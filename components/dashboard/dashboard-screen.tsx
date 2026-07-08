@@ -2,7 +2,6 @@
 
 import { formatBRL } from "@/lib/money";
 import type { VendaLg } from "@/lib/venda-lg";
-import type { DailyAds } from "@/lib/daily-ads";
 import {
   useEffect,
   useMemo,
@@ -11,7 +10,20 @@ import {
 
 type DashboardData = {
   vendas: VendaLg[];
-  dailyAds: DailyAds[];
+};
+
+type RawVendaLgLine = Omit<
+  VendaLg["linhas"][number],
+  "precoOriginal" | "preco" | "quantidade"
+> & {
+  precoOriginal: number | string;
+  preco: number | string;
+  quantidade: number | string;
+};
+
+type RawVendaLg = Omit<VendaLg, "comissao" | "linhas"> & {
+  comissao?: number | string;
+  linhas?: RawVendaLgLine[];
 };
 
 const QuickStats = ({ label, value, change, color = "sky" }: { label: string; value: string; change?: string; color?: string }) => {
@@ -73,7 +85,6 @@ const SimpleChart = ({ data, maxValue }: { data: number[]; maxValue: number }) =
 export function DashboardScreen() {
   const [data, setData] = useState<DashboardData>({
     vendas: [],
-    dailyAds: [],
   });
   const [loading, setLoading] = useState(true);
   const [dateFilter, setDateFilter] = useState<"yesterday" | "today" | "7d" | "30d">("7d");
@@ -82,19 +93,15 @@ export function DashboardScreen() {
     const fetchData = async () => {
       try {
         setLoading(true);
-        const [vendasRes, adsRes] = await Promise.all([
-          fetch("/api/vendas-lg"),
-          fetch("/api/daily-ads"),
-        ]);
+        const vendasRes = await fetch("/api/vendas-lg");
 
-        const vendas = vendasRes.ok ? await vendasRes.json() : [];
-        const dailyAds = adsRes.ok ? await adsRes.json() : [];
+        const vendas: RawVendaLg[] = vendasRes.ok ? await vendasRes.json() : [];
 
         // Normalize numeric values
-        const normalizedVendas = vendas.map((v: any) => ({
+        const normalizedVendas: VendaLg[] = vendas.map((v) => ({
           ...v,
           comissao: typeof v.comissao === "string" ? parseFloat(v.comissao) : v.comissao,
-          linhas: Array.isArray(v.linhas) ? v.linhas.map((l: any) => ({
+          linhas: Array.isArray(v.linhas) ? v.linhas.map((l) => ({
             ...l,
             precoOriginal: typeof l.precoOriginal === "string" ? parseFloat(l.precoOriginal) : l.precoOriginal,
             preco: typeof l.preco === "string" ? parseFloat(l.preco) : l.preco,
@@ -102,20 +109,8 @@ export function DashboardScreen() {
           })) : [],
         }));
 
-        const normalizedAds = dailyAds.map((d: any) => ({
-          ...d,
-          entradaReal: typeof d.entradaReal === "string" ? parseFloat(d.entradaReal) : d.entradaReal,
-          gastosGoogleAds: typeof d.gastosGoogleAds === "string" ? parseFloat(d.gastosGoogleAds) : d.gastosGoogleAds,
-          clientes: typeof d.clientes === "string" ? parseInt(d.clientes, 10) : d.clientes,
-          cac: typeof d.cac === "string" ? parseFloat(d.cac) : d.cac,
-          ticketMedio: typeof d.ticketMedio === "string" ? parseFloat(d.ticketMedio) : d.ticketMedio,
-          cpc: typeof d.cpc === "string" ? parseFloat(d.cpc) : d.cpc,
-          resultado: typeof d.resultado === "string" ? parseFloat(d.resultado) : d.resultado,
-        }));
-
         setData({
           vendas: normalizedVendas,
-          dailyAds: normalizedAds,
         });
       } catch (err) {
         console.error("Error fetching dashboard data:", err);
@@ -145,11 +140,7 @@ export function DashboardScreen() {
         const vendaDate = new Date(v.dataVenda);
         return vendaDate >= cutoffDate && vendaDate < endOfYesterday;
       });
-      const filteredAds = data.dailyAds.filter((d) => {
-        const adsDate = new Date(d.data);
-        return adsDate >= cutoffDate && adsDate < endOfYesterday;
-      });
-      return { vendas: filteredVendas, dailyAds: filteredAds };
+      return { vendas: filteredVendas };
     } else if (dateFilter === "7d") {
       cutoffDate = new Date(startOfToday);
       cutoffDate.setDate(cutoffDate.getDate() - 7);
@@ -165,12 +156,7 @@ export function DashboardScreen() {
       return vendaDate >= cutoffDate;
     });
 
-    const filteredAds = data.dailyAds.filter((d) => {
-      const adsDate = new Date(d.data);
-      return adsDate >= cutoffDate;
-    });
-
-    return { vendas: filteredVendas, dailyAds: filteredAds };
+    return { vendas: filteredVendas };
   }, [data, dateFilter]);
 
   const stats = useMemo(() => {
@@ -180,15 +166,6 @@ export function DashboardScreen() {
     }, 0);
 
     const totalComissao = filteredData.vendas.reduce((acc, v) => acc + (v.comissao || 0), 0);
-    const totalGastosAds = filteredData.dailyAds.reduce((acc, d) => acc + d.gastosGoogleAds, 0);
-    const totalClientesAds = filteredData.dailyAds.reduce((acc, d) => acc + d.clientes, 0);
-    const avgCAC = filteredData.dailyAds.length > 0 
-      ? filteredData.dailyAds.reduce((acc, d) => acc + d.cac, 0) / filteredData.dailyAds.length
-      : 0;
-
-    const resultadoComissao = totalComissao - totalGastosAds;
-    const roi = totalGastosAds > 0 ? ((totalVendas - totalGastosAds) / totalGastosAds) * 100 : 0;
-    
     // Additional metrics
     const vendaComComissao = filteredData.vendas.filter((v) => v.comissao && v.comissao > 0);
     const comissaoMedia = vendaComComissao.length > 0 
@@ -212,11 +189,6 @@ export function DashboardScreen() {
       totalVendas,
       totalVendidas: filteredData.vendas.length,
       totalComissao,
-      totalGastosAds,
-      totalClientesAds,
-      avgCAC,
-      roi,
-      resultadoComissao,
       comissaoMedia,
       comissaoPaga,
       comissaoNaoPaga,
@@ -227,7 +199,7 @@ export function DashboardScreen() {
   }, [filteredData]);
 
   const recentEvents = useMemo(() => {
-    const events: Array<{ type: "venda" | "ads"; date: string; description: string; value: number }> = [];
+    const events: Array<{ type: "venda"; date: string; description: string; value: number }> = [];
 
     filteredData.vendas.slice(0, 5).forEach((v) => {
       if (!v.dataVenda) return;
@@ -236,15 +208,6 @@ export function DashboardScreen() {
         date: new Date(v.dataVenda).toISOString(),
         description: `Venda para ${v.clienteNome}`,
         value: v.comissao || 0,
-      });
-    });
-
-    filteredData.dailyAds.slice(0, 5).forEach((d) => {
-      events.push({
-        type: "ads",
-        date: new Date(d.data).toISOString(),
-        description: `Gasto Google Ads - ${d.clientes} clientes`,
-        value: d.gastosGoogleAds,
       });
     });
 
@@ -360,40 +323,10 @@ export function DashboardScreen() {
             change="Receita parceira"
             color="blue"
           />
-          <QuickStats
-            label="Gasto Google Ads"
-            value={formatBRL(stats.totalGastosAds)}
-            change={`${stats.totalClientesAds} clientes`}
-            color="red"
-          />
-          <QuickStats
-            label="CAC Médio"
-            value={formatBRL(stats.avgCAC)}
-            change="Custo por cliente"
-            color="amber"
-          />
-          <QuickStats
-            label="Resultado Comissão"
-            value={formatBRL(stats.resultadoComissao)}
-            change={stats.resultadoComissao >= 0 ? "Positivo" : "Negativo"}
-            color={stats.resultadoComissao >= 0 ? "green" : "red"}
-          />
-          <QuickStats
-            label="ROI Ads"
-            value={`${stats.roi.toFixed(1)}%`}
-            change="Retorno do investimento"
-            color={stats.roi > 100 ? "green" : stats.roi > 0 ? "sky" : "red"}
-          />
-          <QuickStats
-            label="Saúde Geral"
-            value={stats.roi > 100 ? "🚀 Ótima" : stats.roi > 0 ? "✅ Boa" : "⚠️ Atenção"}
-            change="Status do negócio"
-            color="sky"
-          />
         </div>
 
         {/* Charts Row */}
-        <div className="mb-8 grid gap-6 lg:grid-cols-2">
+        <div className="mb-8 grid gap-6">
           {/* Vendas Chart */}
           <div className="rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900">
             <h3 className="font-semibold text-zinc-900 dark:text-white mb-4">
@@ -414,26 +347,6 @@ export function DashboardScreen() {
                 />
               ) : (
                 <p className="text-center text-sm">Nenhuma venda registrada</p>
-              )}
-            </div>
-          </div>
-
-          {/* Ads Chart */}
-          <div className="rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900">
-            <h3 className="font-semibold text-zinc-900 dark:text-white mb-4">
-              Gastos Google Ads (últimos 7 dias)
-            </h3>
-            <div className="text-zinc-500 dark:text-zinc-400">
-              {data.dailyAds.slice(0, 7).length > 0 ? (
-                <SimpleChart
-                  data={data.dailyAds.slice(0, 7).map((d) => d.gastosGoogleAds)}
-                  maxValue={Math.max(
-                    ...data.dailyAds.slice(0, 7).map((d) => d.gastosGoogleAds),
-                    1
-                  )}
-                />
-              ) : (
-                <p className="text-center text-sm">Nenhum dado de ads registrado</p>
               )}
             </div>
           </div>
