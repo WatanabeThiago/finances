@@ -218,6 +218,7 @@ function emptyModalState() {
     clienteNome: "",
     clienteTelefone: "",
     clienteDoc: "",
+    vehiclePlate: "",
     endereco: "",
     latitude: "",
     longitude: "",
@@ -364,6 +365,7 @@ export function VendasLgScreen() {
         clienteNome: vendaToEdit.clienteNome,
         clienteTelefone: vendaToEdit.clienteTelefone,
         clienteDoc: vendaToEdit.clienteDoc ?? "",
+        vehiclePlate: vendaToEdit.vehiclePlate ?? "",
         endereco: vendaToEdit.endereco ?? "",
         latitude: vendaToEdit.latitude?.toString() ?? "",
         longitude: vendaToEdit.longitude?.toString() ?? "",
@@ -518,6 +520,7 @@ export function VendasLgScreen() {
             clienteNome: nome,
             clienteTelefone: tel,
             clienteDoc: doc || null,
+            vehiclePlate: form.vehiclePlate.trim().toUpperCase() || null,
             endereco: form.endereco || null,
             latitude: form.latitude ? parseFloat(form.latitude) : null,
             longitude: form.longitude ? parseFloat(form.longitude) : null,
@@ -776,6 +779,11 @@ export function VendasLgScreen() {
                   {v.clienteNome}
                   {v.clienteDoc ? ` · ${v.clienteDoc}` : ""}
                 </p>
+                {v.vehiclePlate ? (
+                  <p className="mt-1 text-xs font-medium uppercase tracking-wide text-sky-700 dark:text-sky-400">
+                    Placa {v.vehiclePlate}
+                  </p>
+                ) : null}
                 {v.prestadorId ? (
                   <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-500">
                     Prestador: <span className="font-medium">{(() => {
@@ -1424,6 +1432,28 @@ export function VendasLgScreen() {
                         }
                         className="mt-1.5 w-full rounded-xl border border-zinc-300 bg-white px-3 py-2.5 text-[15px] text-zinc-900 outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500/30 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-100"
                         placeholder="Somente se precisar"
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
+                        Placa do Veículo{" "}
+                        <span className="font-normal text-zinc-500">
+                          (opcional)
+                        </span>
+                      </span>
+                      <input
+                        type="text"
+                        value={form.vehiclePlate}
+                        onChange={(e) =>
+                          setForm((f) => ({
+                            ...f,
+                            vehiclePlate: e.target.value.toUpperCase(),
+                          }))
+                        }
+                        className="mt-1.5 w-full rounded-xl border border-zinc-300 bg-white px-3 py-2.5 uppercase text-[15px] text-zinc-900 outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500/30 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-100"
+                        placeholder="ABC1D23"
+                        maxLength={12}
+                        autoComplete="off"
                       />
                     </label>
                     <label className="block">

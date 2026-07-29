@@ -45,6 +45,7 @@ export async function PUT(
       clienteNome,
       clienteTelefone,
       clienteDoc,
+      vehiclePlate,
       endereco,
       latitude,
       longitude,
@@ -65,13 +66,14 @@ export async function PUT(
     // Update main venda record
     const result = await query(
       `UPDATE "VendaLg" 
-       SET "clienteNome" = $1, "clienteTelefone" = $2, "clienteDoc" = $3, endereco = $4, latitude = $5, longitude = $6, "prestadorId" = $7, comissao = $8, "comissaoPaga" = $9, "dataVenda" = $10, "updatedAt" = CURRENT_TIMESTAMP
-       WHERE id = $11
+       SET "clienteNome" = $1, "clienteTelefone" = $2, "clienteDoc" = $3, "vehiclePlate" = $4, endereco = $5, latitude = $6, longitude = $7, "prestadorId" = $8, comissao = $9, "comissaoPaga" = $10, "dataVenda" = $11, "updatedAt" = CURRENT_TIMESTAMP
+       WHERE id = $12
        RETURNING *`,
       [
         clienteNome,
         clienteTelefone || null,
         clienteDoc || null,
+        typeof vehiclePlate === "string" ? vehiclePlate.trim().toUpperCase() || null : null,
         endereco || null,
         latitude || null,
         longitude || null,

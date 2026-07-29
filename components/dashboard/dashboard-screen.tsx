@@ -26,6 +26,15 @@ type RawVendaLg = Omit<VendaLg, "comissao" | "linhas"> & {
   linhas?: RawVendaLgLine[];
 };
 
+type DateFilter = "yesterday" | "today" | "month" | "7d" | "30d";
+
+const FIXED_EXPENSES = [
+  {
+    label: "Apartamento",
+    monthlyAmount: 2000,
+  },
+];
+
 const QuickStats = ({ label, value, change, color = "sky" }: { label: string; value: string; change?: string; color?: string }) => {
   const colorClasses = {
     sky: "bg-sky-50 dark:bg-sky-950/30 border-sky-200 dark:border-sky-800",
@@ -33,6 +42,8 @@ const QuickStats = ({ label, value, change, color = "sky" }: { label: string; va
     red: "bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800",
     amber: "bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800",
     violet: "bg-violet-50 dark:bg-violet-950/30 border-violet-200 dark:border-violet-800",
+    emerald: "bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800",
+    blue: "bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800",
   };
 
   return (
@@ -48,6 +59,53 @@ const QuickStats = ({ label, value, change, color = "sky" }: { label: string; va
           {change}
         </p>
       )}
+    </div>
+  );
+};
+
+const FixedExpenseCard = ({
+  label,
+  monthlyAmount,
+  daysInMonth,
+  currentDay,
+}: {
+  label: string;
+  monthlyAmount: number;
+  daysInMonth: number;
+  currentDay: number;
+}) => {
+  const dailyAmount = monthlyAmount / daysInMonth;
+  const accruedAmount = dailyAmount * currentDay;
+
+  return (
+    <div className="rounded-lg border border-zinc-200 bg-white px-4 py-3 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+            Gasto fixo
+          </p>
+          <p className="mt-1 font-semibold text-zinc-900 dark:text-white">
+            {label}
+          </p>
+        </div>
+        <p className="text-sm font-semibold text-zinc-900 dark:text-white">
+          {formatBRL(monthlyAmount)}
+        </p>
+      </div>
+      <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
+        <div>
+          <p className="text-zinc-500 dark:text-zinc-400">Por dia</p>
+          <p className="font-semibold text-zinc-900 dark:text-white">
+            {formatBRL(dailyAmount)}
+          </p>
+        </div>
+        <div>
+          <p className="text-zinc-500 dark:text-zinc-400">Ate hoje</p>
+          <p className="font-semibold text-zinc-900 dark:text-white">
+            {formatBRL(accruedAmount)}
+          </p>
+        </div>
+      </div>
     </div>
   );
 };
@@ -87,7 +145,7 @@ export function DashboardScreen() {
     vendas: [],
   });
   const [loading, setLoading] = useState(true);
-  const [dateFilter, setDateFilter] = useState<"yesterday" | "today" | "7d" | "30d">("7d");
+  const [dateFilter, setDateFilter] = useState<DateFilter>("7d");
 
   useEffect(() => {
     const fetchData = async () => {
@@ -141,6 +199,8 @@ export function DashboardScreen() {
         return vendaDate >= cutoffDate && vendaDate < endOfYesterday;
       });
       return { vendas: filteredVendas };
+    } else if (dateFilter === "month") {
+      cutoffDate = new Date(now.getFullYear(), now.getMonth(), 1);
     } else if (dateFilter === "7d") {
       cutoffDate = new Date(startOfToday);
       cutoffDate.setDate(cutoffDate.getDate() - 7);
@@ -158,6 +218,22 @@ export function DashboardScreen() {
 
     return { vendas: filteredVendas };
   }, [data, dateFilter]);
+
+  const fixedExpenseSummary = useMemo(() => {
+    const now = new Date();
+    const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+    const currentDay = now.getDate();
+    const monthlyTotal = FIXED_EXPENSES.reduce((acc, expense) => acc + expense.monthlyAmount, 0);
+    const dailyTotal = monthlyTotal / daysInMonth;
+
+    return {
+      daysInMonth,
+      currentDay,
+      monthlyTotal,
+      dailyTotal,
+      accruedTotal: dailyTotal * currentDay,
+    };
+  }, []);
 
   const stats = useMemo(() => {
     const totalVendas = filteredData.vendas.reduce((acc, v) => {
@@ -235,6 +311,41 @@ export function DashboardScreen() {
           </p>
         </div>
 
+        {/* Fixed Expenses */}
+        <div className="mb-6 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          {FIXED_EXPENSES.map((expense) => (
+            <FixedExpenseCard
+              key={expense.label}
+              label={expense.label}
+              monthlyAmount={expense.monthlyAmount}
+              daysInMonth={fixedExpenseSummary.daysInMonth}
+              currentDay={fixedExpenseSummary.currentDay}
+            />
+          ))}
+          <div className="rounded-lg border border-zinc-200 bg-white px-4 py-3 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+            <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+              Total fixo do mes
+            </p>
+            <p className="mt-1 text-2xl font-bold text-zinc-900 dark:text-white">
+              {formatBRL(fixedExpenseSummary.monthlyTotal)}
+            </p>
+            <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-400">
+              {formatBRL(fixedExpenseSummary.dailyTotal)} por dia em {fixedExpenseSummary.daysInMonth} dias
+            </p>
+          </div>
+          <div className="rounded-lg border border-zinc-200 bg-white px-4 py-3 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+            <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+              Proporcional ate hoje
+            </p>
+            <p className="mt-1 text-2xl font-bold text-zinc-900 dark:text-white">
+              {formatBRL(fixedExpenseSummary.accruedTotal)}
+            </p>
+            <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-400">
+              Dia {fixedExpenseSummary.currentDay} de {fixedExpenseSummary.daysInMonth}
+            </p>
+          </div>
+        </div>
+
         {/* Date Filter */}
         <div className="mb-8 flex gap-2">
           <button
@@ -256,6 +367,16 @@ export function DashboardScreen() {
             }`}
           >
             Hoje
+          </button>
+          <button
+            onClick={() => setDateFilter("month")}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+              dateFilter === "month"
+                ? "bg-blue-600 text-white dark:bg-blue-500"
+                : "bg-zinc-200 text-zinc-900 hover:bg-zinc-300 dark:bg-zinc-700 dark:text-zinc-100 dark:hover:bg-zinc-600"
+            }`}
+          >
+            Esse Mes
           </button>
           <button
             onClick={() => setDateFilter("7d")}
@@ -333,13 +454,13 @@ export function DashboardScreen() {
               Últimas Vendas
             </h3>
             <div className="text-zinc-500 dark:text-zinc-400">
-              {data.vendas.slice(0, 7).length > 0 ? (
+              {filteredData.vendas.slice(0, 7).length > 0 ? (
                 <SimpleChart
-                  data={data.vendas.slice(0, 7).map((v) =>
+                  data={filteredData.vendas.slice(0, 7).map((v) =>
                     v.linhas.reduce((s, l) => s + l.preco * l.quantidade, 0)
                   )}
                   maxValue={Math.max(
-                    ...data.vendas.slice(0, 7).map((v) =>
+                    ...filteredData.vendas.slice(0, 7).map((v) =>
                       v.linhas.reduce((s, l) => s + l.preco * l.quantidade, 0)
                     ),
                     1

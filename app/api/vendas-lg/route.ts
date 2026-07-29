@@ -28,6 +28,7 @@ export async function POST(req: NextRequest) {
       clienteNome,
       clienteTelefone,
       clienteDoc,
+      vehiclePlate,
       endereco,
       latitude,
       longitude,
@@ -48,15 +49,16 @@ export async function POST(req: NextRequest) {
     const id = crypto.randomUUID();
     
     // Insert main venda record
-    const result = await query(
-      `INSERT INTO "VendaLg" (id, "clienteNome", "clienteTelefone", "clienteDoc", endereco, latitude, longitude, "prestadorId", comissao, "comissaoPaga", "dataVenda", "createdAt")
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, CURRENT_TIMESTAMP)
+    await query(
+      `INSERT INTO "VendaLg" (id, "clienteNome", "clienteTelefone", "clienteDoc", "vehiclePlate", endereco, latitude, longitude, "prestadorId", comissao, "comissaoPaga", "dataVenda", "createdAt")
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, CURRENT_TIMESTAMP)
        RETURNING *`,
       [
         id,
         clienteNome,
         clienteTelefone || null,
         clienteDoc || null,
+        typeof vehiclePlate === "string" ? vehiclePlate.trim().toUpperCase() || null : null,
         endereco || null,
         latitude || null,
         longitude || null,

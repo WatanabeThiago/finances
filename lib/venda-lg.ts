@@ -12,6 +12,7 @@ export type VendaLg = {
   clienteNome: string;
   clienteTelefone: string;
   clienteDoc?: string;
+  vehiclePlate?: string;
   endereco?: string;
   latitude?: number;
   longitude?: number;
@@ -69,6 +70,9 @@ export function parseVendasLgJson(raw: string): VendaLg[] {
         };
         if (typeof v.clienteDoc === "string" && v.clienteDoc.trim().length > 0) {
           out.clienteDoc = v.clienteDoc.trim();
+        }
+        if (typeof v.vehiclePlate === "string" && v.vehiclePlate.trim().length > 0) {
+          out.vehiclePlate = v.vehiclePlate.trim().toUpperCase();
         }
         if (typeof v.prestadorId === "string" && v.prestadorId.trim().length > 0) {
           out.prestadorId = v.prestadorId.trim();

@@ -171,6 +171,12 @@ export function generateReceiptHTML(
             <span class="info-value">${venda.clienteDoc}</span>
           </div>
           ` : ""}
+          ${venda.vehiclePlate ? `
+          <div class="info-row">
+            <span class="info-label">Placa:</span>
+            <span class="info-value">${venda.vehiclePlate}</span>
+          </div>
+          ` : ""}
           ${venda.endereco ? `
           <div class="info-row">
             <span class="info-label">Endereço:</span>
