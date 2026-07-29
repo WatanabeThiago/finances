@@ -19,6 +19,8 @@ export type VendaLg = {
   prestadorId?: string;
   comissao?: number;
   comissaoPaga?: boolean;
+  formaPagamento?: string;
+  clientePagou?: boolean;
   dataVenda?: string;
   linhas: VendaLgLine[];
 };
@@ -82,6 +84,12 @@ export function parseVendasLgJson(raw: string): VendaLg[] {
         }
         if (typeof v.comissaoPaga === "boolean") {
           out.comissaoPaga = v.comissaoPaga;
+        }
+        if (typeof v.formaPagamento === "string" && v.formaPagamento.trim()) {
+          out.formaPagamento = v.formaPagamento.trim();
+        }
+        if (typeof v.clientePagou === "boolean") {
+          out.clientePagou = v.clientePagou;
         }
         return out;
       })

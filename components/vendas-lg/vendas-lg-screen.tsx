@@ -33,6 +33,10 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import type {
+  VendaLgCommissionFilter,
+  VendaLgDateRange,
+} from "./types";
 
 function newId(): string {
   return crypto.randomUUID();
@@ -225,6 +229,8 @@ function emptyModalState() {
     prestadorId: "",
     comissao: "",
     comissaoPaga: false,
+    formaPagamento: "",
+    clientePagou: false,
     dataVenda: dataVendaDefault,
     servicoQuery: "",
     linhas: [] as LineDraft[],
@@ -232,6 +238,16 @@ function emptyModalState() {
 }
 
 type ModalMode = "create" | "edit";
+
+const PAYMENT_METHODS = [
+  "Pix",
+  "Dinheiro",
+  "Cartão de débito",
+  "Cartão de crédito",
+  "Transferência bancária",
+  "Boleto",
+  "Outro",
+] as const;
 
 export function VendasLgScreen() {
   // Fetch parceiros from API
@@ -270,8 +286,8 @@ export function VendasLgScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filterParceiro, setFilterParceiro] = useState<string>("");
-  const [filterComissao, setFilterComissao] = useState<"all" | "pago" | "nao-pago">("all");
-  const [filterDataRange, setFilterDataRange] = useState<"today" | "yesterday" | "7d" | "30d" | "upcoming" | "all">("7d");
+  const [filterComissao, setFilterComissao] = useState<VendaLgCommissionFilter>("all");
+  const [filterDataRange, setFilterDataRange] = useState<VendaLgDateRange>("7d");
 
   useEffect(() => {
     const fetchVendas = async () => {
@@ -372,6 +388,8 @@ export function VendasLgScreen() {
         prestadorId: vendaToEdit.prestadorId ?? "",
         comissao: vendaToEdit.comissao ? vendaToEdit.comissao.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "",
         comissaoPaga: vendaToEdit.comissaoPaga ?? false,
+        formaPagamento: vendaToEdit.formaPagamento ?? "",
+        clientePagou: vendaToEdit.clientePagou ?? false,
         dataVenda: vendaToEdit.dataVenda ? new Date(vendaToEdit.dataVenda).toISOString().slice(0, 16) : "",
         servicoQuery: "",
         linhas,
@@ -527,6 +545,8 @@ export function VendasLgScreen() {
             prestadorId: form.prestadorId || null,
             comissao: comissao > 0 ? comissao : null,
             comissaoPaga: form.comissaoPaga && comissao > 0,
+            formaPagamento: form.formaPagamento || null,
+            clientePagou: form.clientePagou,
             dataVenda: form.dataVenda ? new Date(form.dataVenda).toISOString() : new Date().toISOString(),
             linhas,
           }),
@@ -806,6 +826,15 @@ export function VendasLgScreen() {
                     </p>
                   </>
                 ) : null}
+                <p className="mt-2 text-xs">
+                  <span className={v.clientePagou
+                    ? "rounded-full bg-emerald-100 px-2 py-0.5 text-emerald-900 dark:bg-emerald-950/80 dark:text-emerald-200"
+                    : "rounded-full bg-zinc-100 px-2 py-0.5 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"}
+                  >
+                    {v.clientePagou ? "Cliente pagou" : "Pagamento pendente"}
+                    {v.formaPagamento ? ` · ${v.formaPagamento}` : ""}
+                  </span>
+                </p>
               </div>
               <div className="flex flex-col items-end gap-2">
                 <p className="text-lg font-semibold tabular-nums text-sky-700 dark:text-sky-400">
@@ -1335,7 +1364,7 @@ export function VendasLgScreen() {
             aria-modal="true"
             aria-labelledby={titleId}
             aria-describedby={descId}
-            className="flex max-h-[min(94dvh,800px)] w-full flex-col overflow-hidden rounded-t-2xl border border-zinc-200 bg-background shadow-2xl dark:border-zinc-800 sm:max-w-lg sm:rounded-2xl"
+            className="flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-2xl border border-zinc-200 bg-background shadow-2xl dark:border-zinc-800 sm:max-w-[calc(100vw-2rem)] sm:rounded-2xl 2xl:max-w-[1600px]"
             onMouseDown={(e) => e.stopPropagation()}
           >
             <div className="flex shrink-0 items-center justify-between border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
@@ -1360,7 +1389,7 @@ export function VendasLgScreen() {
             >
               <div
                 id={descId}
-                className="flex-1 space-y-5 overflow-y-auto px-4 py-4"
+                className="flex-1 space-y-5 overflow-y-auto px-4 py-4 sm:px-6 sm:py-5"
               >
                 {formError ? (
                   <p
@@ -1371,11 +1400,13 @@ export function VendasLgScreen() {
                   </p>
                 ) : null}
 
+                <div className="grid items-start gap-4 lg:grid-cols-2">
+                  <div className="space-y-6 rounded-2xl border border-zinc-200 bg-zinc-50/50 p-5 dark:border-zinc-800 dark:bg-zinc-900/25">
                 <section>
                   <h4 className="text-sm font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
                     Cliente
                   </h4>
-                  <div className="mt-3 space-y-3">
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
                     <label className="block">
                       <span className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
                         Telefone
@@ -1595,7 +1626,55 @@ export function VendasLgScreen() {
                   </div>
                 </section>
 
-                <section className="rounded-xl bg-zinc-50 p-3 dark:bg-zinc-900/50">
+                <section>
+                  <h4 className="text-sm font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                    Pagamento
+                  </h4>
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                    <label className="block">
+                      <span className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
+                        Forma de pagamento
+                      </span>
+                      <select
+                        value={form.formaPagamento}
+                        onChange={(event) =>
+                          setForm((current) => ({
+                            ...current,
+                            formaPagamento: event.target.value,
+                          }))
+                        }
+                        className="mt-1.5 w-full rounded-xl border border-zinc-300 bg-white px-3 py-2.5 text-[15px] text-zinc-900 outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500/30 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-100"
+                      >
+                        <option value="">Não informado</option>
+                        {PAYMENT_METHODS.map((method) => (
+                          <option key={method} value={method}>{method}</option>
+                        ))}
+                      </select>
+                    </label>
+
+                    <label className="mt-auto flex min-h-11 cursor-pointer items-center gap-3 rounded-xl border border-zinc-300 bg-white px-3 py-2.5 dark:border-zinc-600 dark:bg-zinc-950">
+                      <input
+                        type="checkbox"
+                        checked={form.clientePagou}
+                        onChange={(event) =>
+                          setForm((current) => ({
+                            ...current,
+                            clientePagou: event.target.checked,
+                          }))
+                        }
+                        className="h-4 w-4 rounded border-zinc-400 text-sky-600 focus:ring-sky-500"
+                      />
+                      <span className="text-[15px] font-medium text-zinc-800 dark:text-zinc-200">
+                        Cliente pagou
+                      </span>
+                    </label>
+                  </div>
+                </section>
+
+                  </div>
+
+                  <div className="space-y-6 rounded-2xl border border-zinc-200 bg-zinc-50/50 p-5 dark:border-zinc-800 dark:bg-zinc-900/25">
+                <section className="rounded-xl border border-sky-200 bg-sky-50 p-4 dark:border-sky-900/60 dark:bg-sky-950/20">
                   <h4 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
                     Total
                   </h4>
@@ -1752,6 +1831,8 @@ export function VendasLgScreen() {
                     </div>
                   ) : null}
                 </section>
+                  </div>
+                </div>
               </div>
 
               <div className="shrink-0 border-t border-zinc-200 p-4 dark:border-zinc-800">

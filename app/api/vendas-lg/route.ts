@@ -35,6 +35,8 @@ export async function POST(req: NextRequest) {
       prestadorId,
       comissao,
       comissaoPaga,
+      formaPagamento,
+      clientePagou,
       dataVenda,
       linhas,
     } = body;
@@ -50,8 +52,8 @@ export async function POST(req: NextRequest) {
     
     // Insert main venda record
     await query(
-      `INSERT INTO "VendaLg" (id, "clienteNome", "clienteTelefone", "clienteDoc", "vehiclePlate", endereco, latitude, longitude, "prestadorId", comissao, "comissaoPaga", "dataVenda", "createdAt")
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, CURRENT_TIMESTAMP)
+      `INSERT INTO "VendaLg" (id, "clienteNome", "clienteTelefone", "clienteDoc", "vehiclePlate", endereco, latitude, longitude, "prestadorId", comissao, "comissaoPaga", "formaPagamento", "clientePagou", "dataVenda", "createdAt")
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, CURRENT_TIMESTAMP)
        RETURNING *`,
       [
         id,
@@ -65,6 +67,8 @@ export async function POST(req: NextRequest) {
         prestadorId || null,
         comissao || null,
         comissaoPaga || false,
+        typeof formaPagamento === "string" ? formaPagamento.trim() || null : null,
+        clientePagou === true,
         dataVenda || new Date().toISOString(),
       ]
     );

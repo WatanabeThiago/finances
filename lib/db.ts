@@ -138,6 +138,8 @@ export async function initializeDatabase() {
         "prestadorId" TEXT,
         comissao DECIMAL(10, 2),
         "comissaoPaga" BOOLEAN DEFAULT false,
+        "formaPagamento" TEXT,
+        "clientePagou" BOOLEAN NOT NULL DEFAULT false,
         "dataVenda" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         "updatedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -151,7 +153,9 @@ export async function initializeDatabase() {
        ADD COLUMN IF NOT EXISTS endereco TEXT,
        ADD COLUMN IF NOT EXISTS latitude DECIMAL(10, 8),
        ADD COLUMN IF NOT EXISTS longitude DECIMAL(11, 8),
-       ADD COLUMN IF NOT EXISTS "vehiclePlate" TEXT`
+       ADD COLUMN IF NOT EXISTS "vehiclePlate" TEXT,
+       ADD COLUMN IF NOT EXISTS "formaPagamento" TEXT,
+       ADD COLUMN IF NOT EXISTS "clientePagou" BOOLEAN NOT NULL DEFAULT false`
     );
 
     await query(

@@ -1,0 +1,3 @@
+ALTER TABLE public."VendaLg"
+  ADD COLUMN IF NOT EXISTS "formaPagamento" TEXT,
+  ADD COLUMN IF NOT EXISTS "clientePagou" BOOLEAN NOT NULL DEFAULT false;

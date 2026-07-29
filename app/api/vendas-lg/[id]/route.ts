@@ -52,6 +52,8 @@ export async function PUT(
       prestadorId,
       comissao,
       comissaoPaga,
+      formaPagamento,
+      clientePagou,
       dataVenda,
       linhas,
     } = body;
@@ -66,8 +68,8 @@ export async function PUT(
     // Update main venda record
     const result = await query(
       `UPDATE "VendaLg" 
-       SET "clienteNome" = $1, "clienteTelefone" = $2, "clienteDoc" = $3, "vehiclePlate" = $4, endereco = $5, latitude = $6, longitude = $7, "prestadorId" = $8, comissao = $9, "comissaoPaga" = $10, "dataVenda" = $11, "updatedAt" = CURRENT_TIMESTAMP
-       WHERE id = $12
+       SET "clienteNome" = $1, "clienteTelefone" = $2, "clienteDoc" = $3, "vehiclePlate" = $4, endereco = $5, latitude = $6, longitude = $7, "prestadorId" = $8, comissao = $9, "comissaoPaga" = $10, "formaPagamento" = $11, "clientePagou" = $12, "dataVenda" = $13, "updatedAt" = CURRENT_TIMESTAMP
+       WHERE id = $14
        RETURNING *`,
       [
         clienteNome,
@@ -80,6 +82,8 @@ export async function PUT(
         prestadorId || null,
         comissao || null,
         comissaoPaga || false,
+        typeof formaPagamento === "string" ? formaPagamento.trim() || null : null,
+        clientePagou === true,
         dataVenda || new Date().toISOString(),
         id,
       ]
