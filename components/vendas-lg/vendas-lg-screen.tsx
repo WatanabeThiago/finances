@@ -14,11 +14,14 @@ import {
 import type { VendaLg, VendaLgLine } from "@/lib/venda-lg";
 import { totalVendaLg } from "@/lib/venda-lg";
 import { generateReceiptHTML } from "@/lib/pdf-receipt";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   useCallback,
   useEffect,
   useId,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import {
@@ -227,6 +230,7 @@ function emptyModalState() {
     latitude: "",
     longitude: "",
     prestadorId: "",
+    prestadorQuery: "",
     comissao: "",
     comissaoPaga: false,
     formaPagamento: "",
@@ -249,7 +253,11 @@ const PAYMENT_METHODS = [
   "Outro",
 ] as const;
 
-export function VendasLgScreen() {
+type VendasLgWorkspaceMode = "dashboard" | "create-page";
+
+function VendasLgWorkspace({ mode }: { mode: VendasLgWorkspaceMode }) {
+  const router = useRouter();
+  const isCreatePage = mode === "create-page";
   // Fetch parceiros from API
   const [parceiros, setParceiros] = useState<Partner[]>([]);
 
@@ -351,15 +359,19 @@ export function VendasLgScreen() {
     return m;
   }, [servicos]);
 
-  const [modalOpen, setModalOpen] = useState(false);
+  const [modalOpen, setModalOpen] = useState(isCreatePage);
   const [modalMode, setModalMode] = useState<ModalMode>("create");
   const [editingVendaId, setEditingVendaId] = useState<string | null>(null);
   const [form, setForm] = useState(emptyModalState());
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [geoLoading, setGeoLoading] = useState(false);
+  const [prestadorOpen, setPrestadorOpen] = useState(false);
+  const prestadorComboboxRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
   const descId = useId();
+  const formId = useId();
+  const prestadorListId = useId();
 
   const openModal = useCallback((vendaToEdit?: VendaLg) => {
     setModalMode("create");
@@ -386,6 +398,7 @@ export function VendasLgScreen() {
         latitude: vendaToEdit.latitude?.toString() ?? "",
         longitude: vendaToEdit.longitude?.toString() ?? "",
         prestadorId: vendaToEdit.prestadorId ?? "",
+        prestadorQuery: parceiros.find((partner) => partner.id === vendaToEdit.prestadorId)?.nome ?? "",
         comissao: vendaToEdit.comissao ? vendaToEdit.comissao.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "",
         comissaoPaga: vendaToEdit.comissaoPaga ?? false,
         formaPagamento: vendaToEdit.formaPagamento ?? "",
@@ -398,14 +411,31 @@ export function VendasLgScreen() {
       setForm(emptyModalState());
     }
     setModalOpen(true);
-  }, []);
+  }, [parceiros]);
 
   const closeModal = useCallback(() => {
+    if (isCreatePage) {
+      router.push("/vendas-lg");
+      return;
+    }
     setModalOpen(false);
     setFormError(null);
     setEditingVendaId(null);
     setModalMode("create");
-  }, []);
+  }, [isCreatePage, router]);
+
+  useEffect(() => {
+    if (!prestadorOpen) return;
+
+    const closeOnOutsideClick = (event: PointerEvent) => {
+      if (!prestadorComboboxRef.current?.contains(event.target as Node)) {
+        setPrestadorOpen(false);
+      }
+    };
+
+    document.addEventListener("pointerdown", closeOnOutsideClick);
+    return () => document.removeEventListener("pointerdown", closeOnOutsideClick);
+  }, [prestadorOpen]);
 
   const handleGeocode = useCallback(async () => {
     const address = form.endereco.trim();
@@ -974,6 +1004,17 @@ export function VendasLgScreen() {
       .map(({ p, dist }) => ({ ...p, _dist: dist }));
   }, [parceiros, form.latitude, form.longitude]);
 
+  const filteredParceiros = useMemo(() => {
+    const query = form.prestadorQuery.trim().toLocaleLowerCase("pt-BR");
+    if (!query) return sortedParceiros;
+
+    return sortedParceiros.filter(
+      (parceiro) =>
+        parceiro.id === form.prestadorId ||
+        parceiro.nome.toLocaleLowerCase("pt-BR").includes(query)
+    );
+  }, [sortedParceiros, form.prestadorId, form.prestadorQuery]);
+
   const chartDayData = useMemo(() => {
     let filtered = vendas;
     const now = new Date();
@@ -1040,21 +1081,25 @@ export function VendasLgScreen() {
   }, [vendas, filterDataRange, filterParceiro]);
 
   return (
-    <div className="mx-auto flex w-full max-w-4xl flex-col gap-6 pb-8">
+    <div className={isCreatePage
+      ? "mx-auto w-full max-w-[1600px] pb-10"
+      : "mx-auto flex w-full max-w-4xl flex-col gap-6 pb-8"}
+    >
+      {mode === "dashboard" ? (
+        <>
       <div className="flex items-center justify-between gap-4">
         <p className="text-sm text-zinc-500 dark:text-zinc-400">
           Registro local de vendas. Cadastre serviços em &quot;Serviços&quot; para poder selecioná-los aqui.
         </p>
-        <button
-          type="button"
-          onClick={() => openModal()}
+        <Link
+          href="/vendas-lg/nova"
           className="shrink-0 flex h-10 items-center gap-2 rounded-xl bg-sky-600 px-4 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-sky-700 active:bg-sky-800"
         >
           <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
           </svg>
           Nova Venda
-        </button>
+        </Link>
       </div>
 
       {/* Stats Cards */}
@@ -1350,46 +1395,69 @@ export function VendasLgScreen() {
       </div>
 
       {listContent}
+        </>
+      ) : null}
 
       {modalOpen ? (
         <div
-          className="fixed inset-0 z-[60] flex flex-col justify-end bg-black/50 sm:items-center sm:justify-center sm:p-4"
-          role="presentation"
+          className={isCreatePage
+            ? "relative"
+            : "fixed inset-0 z-[60] flex flex-col justify-end bg-black/50 sm:items-center sm:justify-center sm:p-4"}
+          role={isCreatePage ? undefined : "presentation"}
           onMouseDown={(ev) => {
-            if (ev.target === ev.currentTarget) closeModal();
+            if (!isCreatePage && ev.target === ev.currentTarget) closeModal();
           }}
         >
           <div
-            role="dialog"
-            aria-modal="true"
+            role={isCreatePage ? undefined : "dialog"}
+            aria-modal={isCreatePage ? undefined : "true"}
             aria-labelledby={titleId}
             aria-describedby={descId}
-            className="flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-2xl border border-zinc-200 bg-background shadow-2xl dark:border-zinc-800 sm:max-w-[calc(100vw-2rem)] sm:rounded-2xl 2xl:max-w-[1600px]"
+            className={isCreatePage
+              ? "w-full overflow-hidden rounded-2xl border border-zinc-200 bg-background shadow-sm dark:border-zinc-800"
+              : "flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-2xl border border-zinc-200 bg-background shadow-2xl dark:border-zinc-800 sm:max-w-[calc(100vw-2rem)] sm:rounded-2xl 2xl:max-w-[1600px]"}
             onMouseDown={(e) => e.stopPropagation()}
           >
             <div className="flex shrink-0 items-center justify-between border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
-              <h3
+              <h1
                 id={titleId}
-                className="text-base font-semibold text-zinc-900 dark:text-zinc-50"
+                className={isCreatePage
+                  ? "text-xl font-semibold text-zinc-900 dark:text-zinc-50"
+                  : "text-base font-semibold text-zinc-900 dark:text-zinc-50"}
               >
                 {modalMode === "edit" ? "Editar Venda" : "Nova Venda"}
-              </h3>
-              <button
-                type="button"
-                onClick={closeModal}
-                className="rounded-lg px-3 py-2 text-sm font-medium text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800"
-              >
-                Fechar
-              </button>
+              </h1>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={closeModal}
+                  className="rounded-lg px-3 py-2 text-sm font-medium text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800"
+                >
+                  {isCreatePage ? "Voltar" : "Fechar"}
+                </button>
+                {isCreatePage ? (
+                  <button
+                    type="submit"
+                    form={formId}
+                    disabled={submitting}
+                    className="hidden h-10 items-center justify-center rounded-xl bg-sky-600 px-5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-sky-700 active:bg-sky-800 disabled:cursor-not-allowed disabled:opacity-50 sm:flex"
+                  >
+                    {submitting ? "Salvando..." : "Salvar venda"}
+                  </button>
+                ) : null}
+              </div>
             </div>
 
             <form
+              id={formId}
               onSubmit={submit}
-              className="flex min-h-0 flex-1 flex-col overflow-hidden"
+              className={isCreatePage ? "flex flex-col" : "flex min-h-0 flex-1 flex-col overflow-hidden"}
             >
               <div
                 id={descId}
-                className="flex-1 space-y-5 overflow-y-auto px-4 py-4 sm:px-6 sm:py-5"
+                className={isCreatePage
+                  ? "space-y-5 px-4 py-4 sm:px-6 sm:py-6"
+                  : "flex-1 space-y-5 overflow-y-auto px-4 py-4 sm:px-6 sm:py-5"}
               >
                 {formError ? (
                   <p
@@ -1550,32 +1618,85 @@ export function VendasLgScreen() {
                   <h4 className="text-sm font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
                     Prestador de Serviços
                   </h4>
-                  <div className="mt-3 space-y-3">
+                  <div ref={prestadorComboboxRef} className="relative mt-3">
                     <label className="block">
                       <span className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
-                        Selecione{" "}
-                        <span className="font-normal text-zinc-500">
-                          (opcional)
-                        </span>
+                        Prestador <span className="font-normal text-zinc-500">(opcional)</span>
                       </span>
-                      <select
-                        value={form.prestadorId}
-                        onChange={(e) =>
-                          setForm((f) => ({
-                            ...f,
-                            prestadorId: e.target.value,
-                          }))
-                        }
+                      <input
+                        type="search"
+                        value={form.prestadorQuery}
+                        onFocus={() => setPrestadorOpen(true)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Escape") setPrestadorOpen(false);
+                        }}
+                        onChange={(event) => {
+                          setPrestadorOpen(true);
+                          setForm((current) => ({
+                            ...current,
+                            prestadorQuery: event.target.value,
+                            prestadorId: "",
+                          }));
+                        }}
                         className="mt-1.5 w-full rounded-xl border border-zinc-300 bg-white px-3 py-2.5 text-[15px] text-zinc-900 outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500/30 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-100"
-                      >
-                        <option value="">Sem prestador</option>
-                        {sortedParceiros.map((p) => (
-                          <option key={p.id} value={p.id}>
-                            {p.nome}{(p as any)._dist != null ? ` — ${((p as any)._dist as number).toFixed(1)} km` : ""}
-                          </option>
-                        ))}
-                      </select>
+                        placeholder="Digite para buscar um prestador..."
+                        autoComplete="off"
+                        aria-label="Buscar prestador por nome"
+                        role="combobox"
+                        aria-expanded={prestadorOpen}
+                        aria-controls={prestadorListId}
+                      />
                     </label>
+
+                    {prestadorOpen ? (
+                      <div
+                        id={prestadorListId}
+                        role="listbox"
+                        className="absolute z-30 mt-2 max-h-64 w-full overflow-y-auto rounded-xl border border-zinc-200 bg-white p-1.5 shadow-xl dark:border-zinc-700 dark:bg-zinc-950"
+                      >
+                        <button
+                          type="button"
+                          role="option"
+                          aria-selected={!form.prestadorId}
+                          onClick={() => {
+                            setForm((current) => ({ ...current, prestadorId: "", prestadorQuery: "" }));
+                            setPrestadorOpen(false);
+                          }}
+                          className="flex w-full rounded-lg px-3 py-2.5 text-left text-sm text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800"
+                        >
+                          Sem prestador
+                        </button>
+                        {filteredParceiros.map((partner) => (
+                          <button
+                            key={partner.id}
+                            type="button"
+                            role="option"
+                            aria-selected={form.prestadorId === partner.id}
+                            onClick={() => {
+                              setForm((current) => ({
+                                ...current,
+                                prestadorId: partner.id,
+                                prestadorQuery: partner.nome,
+                              }));
+                              setPrestadorOpen(false);
+                            }}
+                            className="flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2.5 text-left text-sm text-zinc-900 hover:bg-sky-50 dark:text-zinc-100 dark:hover:bg-sky-950/40"
+                          >
+                            <span className="font-medium">{partner.nome}</span>
+                            {(partner as any)._dist != null ? (
+                              <span className="shrink-0 text-xs text-zinc-500">
+                                {((partner as any)._dist as number).toFixed(1)} km
+                              </span>
+                            ) : null}
+                          </button>
+                        ))}
+                        {filteredParceiros.length === 0 ? (
+                          <p className="px-3 py-4 text-center text-sm text-zinc-500">
+                            Nenhum prestador encontrado.
+                          </p>
+                        ) : null}
+                      </div>
+                    ) : null}
                   </div>
                 </section>
 
@@ -1835,7 +1956,10 @@ export function VendasLgScreen() {
                 </div>
               </div>
 
-              <div className="shrink-0 border-t border-zinc-200 p-4 dark:border-zinc-800">
+              <div className={isCreatePage
+                ? "shrink-0 border-t border-zinc-200 p-4 dark:border-zinc-800 sm:hidden"
+                : "shrink-0 border-t border-zinc-200 p-4 dark:border-zinc-800"}
+              >
                 <button
                   type="submit"
                   disabled={submitting}
@@ -1850,4 +1974,12 @@ export function VendasLgScreen() {
       ) : null}
     </div>
   );
+}
+
+export function VendasLgScreen() {
+  return <VendasLgWorkspace mode="dashboard" />;
+}
+
+export function NovaVendaScreen() {
+  return <VendasLgWorkspace mode="create-page" />;
 }

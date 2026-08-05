@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useId, useState } from "react";
 import { NAV_ITEMS, navItemActive, titleForPathname } from "@/lib/navigation";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 function HamburgerIcon({ className }: { className?: string }) {
   return (
@@ -75,6 +76,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <h1 className="min-w-0 truncate text-base font-semibold tracking-tight">
           {currentTitle}
         </h1>
+        <ThemeToggle />
       </header>
 
       {/* Overlay + drawer */}

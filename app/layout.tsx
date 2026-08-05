@@ -6,6 +6,19 @@ import { TrackingNotificationsVisual } from "@/components/tracking-notifications
 import { ContactRequestNotifications } from "@/components/contact-request-notifications";
 import "./globals.css";
 
+const themeInitializer = `
+  (() => {
+    try {
+      const saved = localStorage.getItem("finances.theme");
+      const dark = saved
+        ? saved === "dark"
+        : window.matchMedia("(prefers-color-scheme: dark)").matches;
+      document.documentElement.classList.toggle("dark", dark);
+      document.documentElement.style.colorScheme = dark ? "dark" : "light";
+    } catch {}
+  })();
+`;
+
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
@@ -38,7 +51,11 @@ export default function RootLayout({
     <html
       lang="pt-BR"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      suppressHydrationWarning
     >
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeInitializer }} />
+      </head>
       <body className="min-h-full flex flex-col font-sans">
         <TrackingNotificationListener />
         <TrackingNotificationsVisual />
