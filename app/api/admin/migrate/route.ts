@@ -51,6 +51,12 @@ export async function POST(request: Request) {
       ON contact_requests(displayed)
     `);
 
+    // Adicionar coluna telefone em Partner se não existir
+    await query(`
+      ALTER TABLE "Partner"
+      ADD COLUMN IF NOT EXISTS telefone VARCHAR(30)
+    `);
+
     return Response.json(
       {
         success: true,

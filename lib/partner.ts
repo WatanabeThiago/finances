@@ -7,6 +7,7 @@ export type Partner = {
   longitude?: number;
   automotivo: boolean;
   residencial: boolean;
+  telefone?: string;
 };
 
 export const PARTNERS_STORAGE_KEY = "finances.parceiros.v1";

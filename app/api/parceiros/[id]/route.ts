@@ -44,6 +44,7 @@ export async function PUT(
       automotivo,
       residencial,
       fotoDataUrl,
+      telefone,
     } = body;
 
     if (!nome) {
@@ -55,8 +56,8 @@ export async function PUT(
 
     const result = await query(
       `UPDATE "Partner" 
-       SET nome = $1, endereco = $2, latitude = $3, longitude = $4, automotivo = $5, residencial = $6, "fotoDataUrl" = $7, "updatedAt" = CURRENT_TIMESTAMP
-       WHERE id = $8
+       SET nome = $1, endereco = $2, latitude = $3, longitude = $4, automotivo = $5, residencial = $6, "fotoDataUrl" = $7, telefone = $8, "updatedAt" = CURRENT_TIMESTAMP
+       WHERE id = $9
        RETURNING *`,
       [
         nome,
@@ -66,6 +67,7 @@ export async function PUT(
         automotivo || false,
         residencial || false,
         fotoDataUrl || null,
+        telefone || null,
         id,
       ]
     );

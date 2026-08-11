@@ -27,6 +27,7 @@ export async function POST(req: NextRequest) {
       automotivo,
       residencial,
       fotoDataUrl,
+      telefone,
     } = body;
 
     if (!nome) {
@@ -38,8 +39,8 @@ export async function POST(req: NextRequest) {
 
     const id = crypto.randomUUID();
     const result = await query(
-      `INSERT INTO "Partner" (id, nome, endereco, latitude, longitude, automotivo, residencial, "fotoDataUrl", "createdAt")
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP)
+      `INSERT INTO "Partner" (id, nome, endereco, latitude, longitude, automotivo, residencial, "fotoDataUrl", telefone, "createdAt")
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP)
        RETURNING *`,
       [
         id,
@@ -50,6 +51,7 @@ export async function POST(req: NextRequest) {
         automotivo || false,
         residencial || false,
         fotoDataUrl || null,
+        telefone || null,
       ]
     );
 
