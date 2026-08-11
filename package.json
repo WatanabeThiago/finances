@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "prestart": "node scripts/populate-clientes.js",
     "start": "next start",
     "lint": "eslint",
     "migrate": "node scripts/run-migrations.js"

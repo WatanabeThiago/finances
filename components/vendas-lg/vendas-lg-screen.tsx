@@ -40,6 +40,8 @@ import type {
   VendaLgCommissionFilter,
   VendaLgDateRange,
 } from "./types";
+import { VendasLgFilters } from "./vendas-lg-filters";
+import { ClienteAutocomplete } from "./cliente-autocomplete";
 
 function newId(): string {
   return crypto.randomUUID();
@@ -295,7 +297,22 @@ function VendasLgWorkspace({ mode }: { mode: VendasLgWorkspaceMode }) {
   const [error, setError] = useState<string | null>(null);
   const [filterParceiro, setFilterParceiro] = useState<string>("");
   const [filterComissao, setFilterComissao] = useState<VendaLgCommissionFilter>("all");
-  const [filterDataRange, setFilterDataRange] = useState<VendaLgDateRange>("7d");
+  const [filterDataRange, setFilterDataRange] = useState<VendaLgDateRange>("today");
+  const [filterParceiroOpen, setFilterParceiroOpen] = useState(false);
+  const [filterParceiroQuery, setFilterParceiroQuery] = useState("");
+  const filterParceiroComboboxRef = useRef<HTMLDivElement>(null);
+  const filterParceiroListId = useId();
+
+  useEffect(() => {
+    if (!filterParceiroOpen) return;
+    const closeOnOutsideClick = (event: PointerEvent) => {
+      if (!filterParceiroComboboxRef.current?.contains(event.target as Node)) {
+        setFilterParceiroOpen(false);
+      }
+    };
+    document.addEventListener("pointerdown", closeOnOutsideClick);
+    return () => document.removeEventListener("pointerdown", closeOnOutsideClick);
+  }, [filterParceiroOpen]);
 
   useEffect(() => {
     const fetchVendas = async () => {
@@ -817,7 +834,7 @@ function VendasLgWorkspace({ mode }: { mode: VendasLgWorkspaceMode }) {
     }
     return (
       <ul className="flex flex-col gap-3">
-        {filteredVendas.map((v) => {
+        {filteredVendas.map((v, index) => {
           const partner = v.prestadorId ? parceiros.find((pc) => pc.id === v.prestadorId) : null;
           // Valid coords to avoid showing null island (Atlantic Ocean)
           const hasValidCoords = v.latitude != null && v.longitude != null && v.latitude !== 0 && v.longitude !== 0;
@@ -825,7 +842,7 @@ function VendasLgWorkspace({ mode }: { mode: VendasLgWorkspaceMode }) {
           return (
             <li
               key={v.id}
-              className="flex flex-col md:flex-row overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-950"
+              className={`flex flex-col md:flex-row overflow-hidden rounded-2xl border border-zinc-200 shadow-sm dark:border-zinc-800 ${index % 2 === 0 ? "bg-white dark:bg-zinc-950" : "bg-zinc-50/50 dark:bg-zinc-900/50"}`}
             >
               {/* Left Side: Card Details */}
               <div className="flex-1 p-4 flex flex-col justify-between">
@@ -993,7 +1010,7 @@ function VendasLgWorkspace({ mode }: { mode: VendasLgWorkspaceMode }) {
                   <iframe
                     title={`Localização do serviço - ${v.clienteNome}`}
                     className="h-full w-full border-0"
-                    src={`https://www.openstreetmap.org/export/embed.html?bbox=${v.longitude - 0.024}%2C${v.latitude - 0.016}%2C${v.longitude + 0.024}%2C${v.latitude + 0.016}&layer=mapnik&marker=${v.latitude}%2C${v.longitude}`}
+                    src={`https://www.openstreetmap.org/export/embed.html?bbox=${v.longitude! - 0.048}%2C${v.latitude! - 0.032}%2C${v.longitude! + 0.048}%2C${v.latitude! + 0.032}&layer=mapnik&marker=${v.latitude!}%2C${v.longitude!}`}
                     scrolling="no"
                   />
                 </div>
@@ -1363,22 +1380,83 @@ function VendasLgWorkspace({ mode }: { mode: VendasLgWorkspaceMode }) {
           </div>
         </div>
 
-        <div>
+        <div ref={filterParceiroComboboxRef} className="relative">
           <label className="block text-xs font-semibold uppercase tracking-wide text-zinc-600 dark:text-zinc-400 mb-2">
             Filtrar por Parceiro
           </label>
-          <select
-            value={filterParceiro}
-            onChange={(e) => setFilterParceiro(e.target.value)}
-            className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-100"
-          >
-            <option value="">Todos os parceiros</option>
-            {parceiros.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.nome}
-              </option>
-            ))}
-          </select>
+          <input
+            type="search"
+            value={filterParceiroQuery}
+            onFocus={() => setFilterParceiroOpen(true)}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") setFilterParceiroOpen(false);
+            }}
+            onChange={(event) => {
+              setFilterParceiroOpen(true);
+              setFilterParceiroQuery(event.target.value);
+              setFilterParceiro("");
+            }}
+            className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500/50 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-100"
+            placeholder="Digite para buscar..."
+            autoComplete="off"
+            role="combobox"
+            aria-expanded={filterParceiroOpen}
+            aria-controls={filterParceiroListId}
+          />
+          {filterParceiroOpen ? (
+            <div
+              id={filterParceiroListId}
+              role="listbox"
+              className="absolute z-30 mt-2 max-h-64 w-full overflow-y-auto rounded-xl border border-zinc-200 bg-white p-1.5 shadow-xl dark:border-zinc-700 dark:bg-zinc-950"
+            >
+              <button
+                type="button"
+                role="option"
+                aria-selected={!filterParceiro}
+                onClick={() => {
+                  setFilterParceiro("");
+                  setFilterParceiroQuery("");
+                  setFilterParceiroOpen(false);
+                }}
+                className="flex w-full rounded-lg px-3 py-2.5 text-left text-sm text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800"
+              >
+                Todos os parceiros
+              </button>
+              {parceiros
+                .filter((p) =>
+                  !filterParceiroQuery.trim() || p.id === filterParceiro || p.nome.toLocaleLowerCase("pt-BR").includes(filterParceiroQuery.trim().toLocaleLowerCase("pt-BR"))
+                )
+                .map((partner) => (
+                  <button
+                    key={partner.id}
+                    type="button"
+                    role="option"
+                    aria-selected={filterParceiro === partner.id}
+                    onClick={() => {
+                      setFilterParceiro(partner.id);
+                      setFilterParceiroQuery(partner.nome);
+                      setFilterParceiroOpen(false);
+                    }}
+                    className="flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2.5 text-left text-sm text-zinc-900 hover:bg-sky-50 dark:text-zinc-100 dark:hover:bg-sky-950/40"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      {partner.fotoDataUrl ? (
+                        <img
+                          src={partner.fotoDataUrl}
+                          alt={partner.nome}
+                          className="h-8 w-8 rounded-full object-cover shrink-0"
+                        />
+                      ) : (
+                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-sky-400 to-indigo-500 text-[10px] font-bold text-white">
+                          {partner.nome.split(" ").filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join("")}
+                        </span>
+                      )}
+                      <span className="font-medium truncate">{partner.nome}</span>
+                    </div>
+                  </button>
+                ))}
+            </div>
+          ) : null}
         </div>
 
         <div>
@@ -1525,18 +1603,16 @@ function VendasLgWorkspace({ mode }: { mode: VendasLgWorkspaceMode }) {
                       <span className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
                         Nome
                       </span>
-                      <input
-                        type="text"
-                        value={form.clienteNome}
-                        onChange={(e) =>
+                      <ClienteAutocomplete
+                        nome={form.clienteNome}
+                        telefone={form.clienteTelefone}
+                        documento={form.clienteDoc}
+                        onChange={(fields) =>
                           setForm((f) => ({
                             ...f,
-                            clienteNome: e.target.value,
+                            ...fields,
                           }))
                         }
-                        autoComplete="name"
-                        className="mt-1.5 w-full rounded-xl border border-zinc-300 bg-white px-3 py-2.5 text-[15px] text-zinc-900 outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500/30 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-100"
-                        placeholder="Nome completo ou fantasia"
                       />
                     </label>
                     <label className="block">

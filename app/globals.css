@@ -4,6 +4,7 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  --body-bg: #f8fafc;
   color-scheme: light;
 }
 
@@ -17,11 +18,12 @@
 .dark {
   --background: #0a0a0a;
   --foreground: #ededed;
+  --body-bg: #030712;
   color-scheme: dark;
 }
 
 body {
-  background: var(--background);
+  background: var(--body-bg);
   color: var(--foreground);
   font-family: var(--font-sans), system-ui, sans-serif;
 }

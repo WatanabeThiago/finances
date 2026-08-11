@@ -7,6 +7,11 @@ export type NavItem = {
 export const NAV_ITEMS: NavItem[] = [
   { href: "/", label: "Início" },
   {
+    href: "/vendas-lg",
+    label: "Vendas",
+    description: "Captação e venda do serviço",
+  },
+  {
     href: "/servicos",
     label: "Serviços",
     description: "Catálogo e gestão dos serviços",
@@ -17,14 +22,14 @@ export const NAV_ITEMS: NavItem[] = [
     description: "Catálogo de itens usados nos serviços",
   },
   {
+    href: "/clientes",
+    label: "Clientes",
+    description: "Gestão da carteira de clientes",
+  },
+  {
     href: "/parceiros",
     label: "Parceiros",
     description: "Rede de parceiros e prestadores",
-  },
-  {
-    href: "/vendas-lg",
-    label: "Lead generation",
-    description: "Captação e venda do serviço",
   },
   {
     href: "/daily-ads",

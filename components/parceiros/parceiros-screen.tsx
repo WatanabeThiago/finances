@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import type { Partner } from "@/lib/partner";
 import {
   appendPartner,
@@ -487,18 +488,21 @@ export function ParceirosScreen() {
               return (
                 <tr
                   key={p.id}
-                  className={`group transition-colors hover:bg-zinc-50/80 dark:hover:bg-zinc-900/60 ${
-                    isEven ? "bg-white dark:bg-zinc-950" : "bg-zinc-50/30 dark:bg-zinc-900/15"
+                  className={`group transition-colors hover:bg-zinc-100/70 dark:hover:bg-zinc-900/70 ${
+                    isEven ? "bg-white dark:bg-zinc-950" : "bg-zinc-50 dark:bg-zinc-900/40"
                   }`}
                 >
                   {/* Parceiro */}
                   <td className="px-4 py-3">
-                    <div className="flex items-center gap-3">
+                    <Link
+                      href={`/parceiros/${p.id}`}
+                      className="flex items-center gap-3 group/link hover:underline decoration-sky-500"
+                    >
                       <PartnerAvatar partner={p} size="sm" />
-                      <span className="font-medium text-zinc-900 dark:text-zinc-50">
+                      <span className="font-medium text-zinc-900 dark:text-zinc-50 group-hover/link:text-sky-600 dark:group-hover/link:text-sky-400">
                         {p.nome}
                       </span>
-                    </div>
+                    </Link>
                   </td>
                   {/* Endereço */}
                   <td className="px-4 py-3 text-zinc-700 dark:text-zinc-300 max-w-xs truncate">
@@ -553,11 +557,15 @@ export function ParceirosScreen() {
               className="flex flex-col rounded-xl border border-zinc-200 bg-white px-3 py-3 shadow-sm dark:border-zinc-800 dark:bg-zinc-950"
             >
               <div className="flex gap-3">
-                <PartnerAvatar partner={p} />
+                <Link href={`/parceiros/${p.id}`}>
+                  <PartnerAvatar partner={p} />
+                </Link>
                 <div className="min-w-0 flex-1">
-                  <p className="font-semibold leading-tight text-zinc-900 dark:text-zinc-50">
-                    {p.nome}
-                  </p>
+                  <Link href={`/parceiros/${p.id}`} className="hover:underline decoration-sky-500">
+                    <p className="font-semibold leading-tight text-zinc-900 dark:text-zinc-50 hover:text-sky-600 dark:hover:text-sky-400">
+                      {p.nome}
+                    </p>
+                  </Link>
                   <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400 truncate">
                     {p.endereco || "Sem endereço cadastrado"}
                   </p>

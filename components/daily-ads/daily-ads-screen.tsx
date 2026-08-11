@@ -89,8 +89,8 @@ function SortButton({
     <button
       type="button"
       onClick={() => onSort(sortKey)}
-      className={`flex min-h-9 items-center gap-1.5 rounded-lg px-1.5 transition-colors hover:bg-zinc-100 hover:text-zinc-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 dark:hover:bg-zinc-900 dark:hover:text-zinc-200 ${
-        align === "right" ? "justify-self-end" : "justify-self-start"
+      className={`flex min-h-9 w-full items-center gap-1.5 rounded-lg px-3 transition-colors hover:bg-zinc-100 hover:text-zinc-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 dark:hover:bg-zinc-900 dark:hover:text-zinc-200 ${
+        align === "right" ? "justify-end" : "justify-start"
       } ${active ? "text-blue-600 dark:text-blue-400" : ""}`}
       aria-label={`Ordenar por ${label} em ordem ${
         active && direction === "asc" ? "decrescente" : "crescente"
@@ -139,6 +139,8 @@ export function DailyAdsScreen() {
   const [actionError, setActionError] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("date");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+  const [dateFilter, setDateFilter] = useState<"this_month" | "all">("this_month");
+  const [expandedRecordId, setExpandedRecordId] = useState<string | null>(null);
 
   const salesMetricsByDate = useMemo(() => {
     const metrics = new Map<
@@ -174,9 +176,36 @@ export function DailyAdsScreen() {
     return metrics;
   }, [sales]);
 
+  const salesByDate = useMemo(() => {
+    const map = new Map<string, VendaLg[]>();
+    for (const sale of sales) {
+      if (!sale.dataVenda) continue;
+      const saleDate = new Date(sale.dataVenda);
+      if (Number.isNaN(saleDate.getTime())) continue;
+      const dateKey = campoGrandeDateFormatter.format(saleDate);
+      const current = map.get(dateKey) ?? [];
+      current.push(sale);
+      map.set(dateKey, current);
+    }
+    return map;
+  }, [sales]);
+
+  const filteredRecords = useMemo(() => {
+    if (dateFilter === "all") return records;
+
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+
+    return records.filter((record) => {
+      const [day, month, year] = record.date.split("/").map(Number);
+      return month - 1 === currentMonth && year === currentYear;
+    });
+  }, [records, dateFilter]);
+
   const displayRecords = useMemo<DailyAdsDisplayRecord[]>(
     () =>
-      records.map((record) => {
+      filteredRecords.map((record) => {
         const salesMetrics = salesMetricsByDate.get(record.date);
         const clients = salesMetrics?.clients ?? 0;
         const revenue = salesMetrics?.revenue ?? 0;
@@ -194,7 +223,7 @@ export function DailyAdsScreen() {
           averageCommission: clients > 0 ? commission / clients : 0,
         };
       }),
-    [records, salesMetricsByDate],
+    [filteredRecords, salesMetricsByDate],
   );
 
   const sortedRecords = useMemo(() => {
@@ -397,19 +426,36 @@ export function DailyAdsScreen() {
             </p>
           </div>
 
-          <button
-            type="button"
-            onClick={openCreateForm}
-            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
-          >
-            <Plus aria-hidden="true" size={18} strokeWidth={2.5} />
-            Adicionar registro
-          </button>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <select
+              value={dateFilter}
+              onChange={(e) => setDateFilter(e.target.value as "this_month" | "all")}
+              className="min-h-11 cursor-pointer appearance-none rounded-xl border border-zinc-200 bg-white px-4 pr-10 text-sm font-semibold text-zinc-700 outline-none transition hover:bg-zinc-50 focus:border-blue-500 focus:ring-3 focus:ring-blue-500/15 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-200 dark:hover:bg-zinc-900"
+              style={{
+                backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke-width='2' stroke='currentColor' class='size-6'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M8.25 15 12 18.75 15.75 15m-7.5-6L12 5.25 15.75 9' /%3E%3C/svg%3E")`,
+                backgroundPosition: "right 10px center",
+                backgroundRepeat: "no-repeat",
+                backgroundSize: "16px",
+              }}
+            >
+              <option value="this_month">Esse mês</option>
+              <option value="all">Todo o período</option>
+            </select>
+            
+            <button
+              type="button"
+              onClick={openCreateForm}
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+            >
+              <Plus aria-hidden="true" size={18} strokeWidth={2.5} />
+              Adicionar registro
+            </button>
+          </div>
         </header>
 
         <div className="overflow-x-auto p-3 sm:p-5">
-          <div className="min-w-[1660px]">
-            <div className="grid grid-cols-[1.2fr_1.1fr_1fr_1fr_1fr_1fr_1fr_1.2fr_1fr_1fr_1fr_1.2fr_96px] px-3 pb-2 text-xs font-semibold uppercase tracking-wider text-zinc-400">
+          <div className="min-w-[1400px]">
+            <div className="grid grid-cols-[1.2fr_1.1fr_1fr_1fr_1fr_1fr_1fr_1.2fr_1fr_1fr_1fr_1.2fr_96px] divide-x divide-zinc-200 pb-2 text-xs font-semibold uppercase tracking-wider text-zinc-400 dark:divide-zinc-800">
               <SortButton label="Data" sortKey="date" activeKey={sortKey} direction={sortDirection} align="left" onSort={handleSort} />
               <SortButton label="Resultado" sortKey="result" activeKey={sortKey} direction={sortDirection} onSort={handleSort} />
               <SortButton label="Comissão" sortKey="commission" activeKey={sortKey} direction={sortDirection} onSort={handleSort} />
@@ -422,7 +468,7 @@ export function DailyAdsScreen() {
               <SortButton label="ROAS" sortKey="roas" activeKey={sortKey} direction={sortDirection} onSort={handleSort} />
               <SortButton label="Clientes" sortKey="clients" activeKey={sortKey} direction={sortDirection} onSort={handleSort} />
               <SortButton label="Comissão média" sortKey="averageCommission" activeKey={sortKey} direction={sortDirection} onSort={handleSort} />
-              <span className="self-center text-right">Ações</span>
+              <span className="self-center px-3 text-right">Ações</span>
             </div>
 
             {actionError ? (
@@ -438,17 +484,34 @@ export function DailyAdsScreen() {
             ) : records.length === 0 ? (
               <p className="py-12 text-center text-sm text-zinc-500">Nenhum registro adicionado ainda.</p>
             ) : (
-              <ul className="divide-y divide-zinc-100 dark:divide-zinc-800/80">
-                {sortedRecords.map((item) => (
-                  <li
-                    key={item.id}
-                    className="grid grid-cols-[1.2fr_1.1fr_1fr_1fr_1fr_1fr_1fr_1.2fr_1fr_1fr_1fr_1.2fr_96px] items-center rounded-xl px-3 py-4 transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-900"
-                  >
-                    <span className="text-sm font-medium text-zinc-700 dark:text-zinc-200">
-                      {item.date}
-                    </span>
+              <ul className="divide-y divide-zinc-200 border-y border-zinc-200 dark:divide-zinc-800 dark:border-zinc-800">
+                {sortedRecords.map((item) => {
+                  const isExpanded = expandedRecordId === item.id;
+                  const daySales = salesByDate.get(item.date) ?? [];
+
+                  return (
+                    <li
+                      key={item.id}
+                      className="flex flex-col even:bg-zinc-50/60 dark:even:bg-zinc-900/40"
+                    >
+                      <div
+                        onClick={(e) => {
+                          if ((e.target as HTMLElement).closest('button')) return;
+                          setExpandedRecordId(isExpanded ? null : item.id);
+                        }}
+                        className={`grid grid-cols-[1.2fr_1.1fr_1fr_1fr_1fr_1fr_1fr_1.2fr_1fr_1fr_1fr_1.2fr_96px] items-center divide-x divide-zinc-200 py-2.5 transition-colors cursor-pointer hover:bg-blue-50/50 dark:divide-zinc-800 dark:hover:bg-blue-900/20 ${
+                          isExpanded ? "bg-blue-50/50 dark:bg-blue-900/20" : ""
+                        }`}
+                      >
+                        <span className="px-3 text-sm font-medium text-zinc-700 dark:text-zinc-200 flex items-center gap-2">
+                          <ArrowDown 
+                            size={14} 
+                            className={`transition-transform duration-200 ${isExpanded ? 'rotate-180 text-blue-600' : 'text-zinc-400'}`} 
+                          />
+                          {item.date}
+                        </span>
                     <span
-                      className={`text-right text-sm font-semibold tabular-nums ${
+                      className={`px-3 text-right text-sm font-semibold tabular-nums ${
                         item.result > 0
                           ? "text-emerald-600 dark:text-emerald-400"
                           : item.result < 0
@@ -458,59 +521,94 @@ export function DailyAdsScreen() {
                     >
                       {currencyFormatter.format(item.result)}
                     </span>
-                    <span className="text-right text-sm font-semibold tabular-nums text-blue-600 dark:text-blue-400">
+                    <span className="px-3 text-right text-sm font-semibold tabular-nums text-blue-600 dark:text-blue-400">
                       {currencyFormatter.format(item.commission)}
                     </span>
-                    <span className="text-right text-sm font-semibold tabular-nums text-zinc-950 dark:text-zinc-50">
+                    <span className="px-3 text-right text-sm font-semibold tabular-nums text-zinc-950 dark:text-zinc-50">
                       {currencyFormatter.format(item.spend)}
                     </span>
-                    <span className="text-right text-sm tabular-nums text-zinc-500 dark:text-zinc-400">
+                    <span className="px-3 text-right text-sm tabular-nums text-zinc-500 dark:text-zinc-400">
                       {currencyFormatter.format(item.cpc)}
                     </span>
-                    <span className="text-right text-sm font-medium tabular-nums text-zinc-700 dark:text-zinc-300">
+                    <span className="px-3 text-right text-sm font-medium tabular-nums text-zinc-700 dark:text-zinc-300">
                       {numberFormatter.format(item.clicks)}
                     </span>
-                    <span className="text-right text-sm tabular-nums text-zinc-500 dark:text-zinc-400">
+                    <span className="px-3 text-right text-sm tabular-nums text-zinc-500 dark:text-zinc-400">
                       {numberFormatter.format(item.impressions)}
                     </span>
-                    <span className="text-right text-sm font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">
+                    <span className="px-3 text-right text-sm font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">
                       {currencyFormatter.format(item.revenue)}
                     </span>
-                    <span className="text-right text-sm tabular-nums text-zinc-500 dark:text-zinc-400">
+                    <span className="px-3 text-right text-sm tabular-nums text-zinc-500 dark:text-zinc-400">
                       {item.clients > 0 ? currencyFormatter.format(item.cpa) : "—"}
                     </span>
-                    <span className="text-right text-sm font-medium tabular-nums text-zinc-700 dark:text-zinc-300">
+                    <span className="px-3 text-right text-sm font-medium tabular-nums text-zinc-700 dark:text-zinc-300">
                       {item.spend > 0 ? `${ratioFormatter.format(item.roas)}x` : "—"}
                     </span>
-                    <span className="text-right text-sm font-medium tabular-nums text-zinc-700 dark:text-zinc-300">
+                    <span className="px-3 text-right text-sm font-medium tabular-nums text-zinc-700 dark:text-zinc-300">
                       {numberFormatter.format(item.clients)}
                     </span>
-                    <span className="text-right text-sm tabular-nums text-zinc-500 dark:text-zinc-400">
+                    <span className="px-3 text-right text-sm tabular-nums text-zinc-500 dark:text-zinc-400">
                       {item.clients > 0
                         ? currencyFormatter.format(item.averageCommission)
                         : "—"}
                     </span>
-                    <span className="flex justify-end gap-1">
-                      <button
-                        type="button"
-                        onClick={() => openEditForm(item)}
-                        className="grid size-9 place-items-center rounded-lg text-zinc-500 transition hover:bg-blue-50 hover:text-blue-600 focus-visible:outline-2 focus-visible:outline-blue-600 dark:hover:bg-blue-950/40 dark:hover:text-blue-400"
-                        aria-label={`Editar registro de ${item.date}`}
-                      >
-                        <Pencil aria-hidden="true" size={16} />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDelete(item)}
-                        disabled={deletingId === item.id}
-                        className="grid size-9 place-items-center rounded-lg text-zinc-500 transition hover:bg-red-50 hover:text-red-600 focus-visible:outline-2 focus-visible:outline-red-600 disabled:cursor-wait disabled:opacity-50 dark:hover:bg-red-950/40 dark:hover:text-red-400"
-                        aria-label={`Excluir registro de ${item.date}`}
-                      >
-                        <Trash2 aria-hidden="true" size={16} />
-                      </button>
-                    </span>
+                      <div className="flex justify-end gap-1 px-3">
+                        <button
+                          type="button"
+                          onClick={() => openEditForm(item)}
+                          className="grid size-9 place-items-center rounded-lg text-zinc-500 transition hover:bg-blue-50 hover:text-blue-600 focus-visible:outline-2 focus-visible:outline-blue-600 dark:hover:bg-blue-950/40 dark:hover:text-blue-400"
+                          aria-label={`Editar registro de ${item.date}`}
+                        >
+                          <Pencil aria-hidden="true" size={16} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDelete(item)}
+                          disabled={deletingId === item.id}
+                          className="grid size-9 place-items-center rounded-lg text-zinc-500 transition hover:bg-red-50 hover:text-red-600 focus-visible:outline-2 focus-visible:outline-red-600 disabled:cursor-wait disabled:opacity-50 dark:hover:bg-red-950/40 dark:hover:text-red-400"
+                          aria-label={`Excluir registro de ${item.date}`}
+                        >
+                          <Trash2 aria-hidden="true" size={16} />
+                        </button>
+                      </div>
+                    </div>
+
+                    {isExpanded ? (
+                      <div className="border-t border-zinc-200 px-6 py-4 dark:border-zinc-800/80">
+                        {daySales.length === 0 ? (
+                          <p className="text-sm text-zinc-500">Nenhuma venda registrada neste dia.</p>
+                        ) : (
+                          <div className="space-y-3">
+                            <h4 className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
+                              Vendas do dia ({daySales.length})
+                            </h4>
+                            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                              {daySales.map((sale) => (
+                                <div key={sale.id} className="rounded-xl border border-zinc-200 bg-white/50 p-3 shadow-sm dark:border-zinc-800 dark:bg-zinc-950/50">
+                                  <p className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-100" title={sale.clienteNome}>
+                                    {sale.clienteNome}
+                                  </p>
+                                  <p className="mt-1 text-sm font-semibold text-emerald-600 dark:text-emerald-400">
+                                    {currencyFormatter.format(
+                                      sale.linhas.reduce((acc, l) => acc + l.preco * l.quantidade, 0)
+                                    )}
+                                  </p>
+                                  {sale.comissao ? (
+                                    <p className="mt-0.5 text-xs font-medium text-blue-600 dark:text-blue-400">
+                                      Comissão: {currencyFormatter.format(sale.comissao)}
+                                    </p>
+                                  ) : null}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ) : null}
                   </li>
-                ))}
+                );
+              })}
               </ul>
             )}
           </div>

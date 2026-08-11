@@ -81,6 +81,31 @@ function truncateUrl(url: string, max = 40): string {
   }
 }
 
+function getMarketplaceName(url: string): string {
+  if (!url) return "";
+  try {
+    const lower = url.toLowerCase();
+    if (lower.includes("shopee.com")) return "Shopee";
+    if (lower.includes("mercadolivre.com")) return "MeLi";
+    if (lower.includes("aliexpress.com")) return "AliExpress";
+    if (lower.includes("amazon.com")) return "Amazon";
+    if (lower.includes("shein.com")) return "Shein";
+    if (lower.includes("magazineluiza.com") || lower.includes("magalu.com")) return "Magalu";
+    if (lower.includes("americanas.com")) return "Americanas";
+    if (lower.includes("casasbahia.com")) return "Casas Bahia";
+    if (lower.includes("kabum.com")) return "Kabum";
+    
+    const u = new URL(url);
+    let host = u.hostname;
+    if (host.startsWith("www.")) {
+      host = host.substring(4);
+    }
+    return host;
+  } catch {
+    return "Link";
+  }
+}
+
 /* ── icons ───────────────────────────────────────────────────────────── */
 
 function EditIcon({ className }: { className?: string }) {
@@ -690,12 +715,12 @@ export function ProdutosScreen() {
                 <Fragment key={p.id}>
                   <tr
                     onClick={() => toggleRow(p.id)}
-                    className={`group cursor-pointer transition-colors hover:bg-zinc-50/80 dark:hover:bg-zinc-900/60 ${
+                    className={`group cursor-pointer transition-colors hover:bg-zinc-100/70 dark:hover:bg-zinc-900/70 ${
                       isExpanded
                         ? "bg-zinc-100/40 dark:bg-zinc-900/30"
                         : isEven
                         ? "bg-white dark:bg-zinc-950"
-                        : "bg-zinc-50/30 dark:bg-zinc-900/15"
+                        : "bg-zinc-50 dark:bg-zinc-900/40"
                     }`}
                   >
                     {/* Produto */}
@@ -816,7 +841,7 @@ export function ProdutosScreen() {
                                           onClick={(e) => e.stopPropagation()}
                                           className="inline-flex items-center gap-1.5 text-sky-600 hover:underline dark:text-sky-400"
                                         >
-                                          {truncateUrl(l.url, 50)}
+                                          {getMarketplaceName(l.url)}
                                           <ExternalLinkIcon className="h-3 w-3" />
                                         </a>
                                       </td>
@@ -959,7 +984,7 @@ export function ProdutosScreen() {
                                 rel="noopener noreferrer"
                                 className="inline-flex items-center gap-1 text-sky-600 hover:underline dark:text-sky-400"
                               >
-                                Comprar ↗
+                                {getMarketplaceName(l.url)} ↗
                               </a>
                             </div>
                             <div className="mt-1 pl-7 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-zinc-500 dark:text-zinc-400">
@@ -1292,7 +1317,7 @@ export function ProdutosScreen() {
                                     rel="noopener noreferrer"
                                     className="truncate text-xs font-medium text-sky-600 hover:underline dark:text-sky-400"
                                   >
-                                    {truncateUrl(link.url)}
+                                    {getMarketplaceName(link.url)}
                                   </a>
                                   <ExternalLinkIcon className="h-3 w-3 shrink-0 text-zinc-400" />
                                 </div>

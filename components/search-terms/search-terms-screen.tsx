@@ -1,5 +1,5 @@
 "use client";
-
+import { Search as SearchIcon } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
 type SearchTerm = {
@@ -130,7 +130,7 @@ export default function SearchTermsScreen() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Termos de Pesquisa</h1>
+          <h1 className="flex items-center text-2xl font-bold"><SearchIcon className="h-6 w-6 mr-2"/>Termos de Pesquisa</h1>
           <p className="text-sm text-gray-500">
             {counts.pending} {counts.pending === 1 ? "termo pendente" : "termos pendentes"}
           </p>

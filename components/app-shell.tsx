@@ -15,6 +15,7 @@ import {
   Activity,
   Inbox,
   MessageCircle,
+  Handshake,
 } from "lucide-react";
 
 function HamburgerIcon({ className }: { className?: string }) {
@@ -63,6 +64,8 @@ function getIconForHref(href: string) {
     case "/produtos":
       return <Package {...props} />;
     case "/parceiros":
+      return <Handshake {...props} />;
+    case "/clientes":
       return <Users {...props} />;
     case "/vendas-lg":
       return <Target {...props} />;

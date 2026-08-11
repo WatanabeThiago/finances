@@ -11,6 +11,7 @@ export type Service = {
   produtoIds: string[];
   automotivo: boolean;
   residencial: boolean;
+  ferramentas?: string;
 };
 
 export const SERVICES_STORAGE_KEY = "finances.servicos.v1";
@@ -57,6 +58,7 @@ export function parseServicesJson(raw: string): Service[] {
           produtoIds,
           automotivo: s.automotivo,
           residencial: s.residencial,
+          ferramentas: typeof s.ferramentas === "string" ? s.ferramentas : "",
         };
         if (typeof s.fotoDataUrl === "string" && s.fotoDataUrl.length > 0) {
           out.fotoDataUrl = s.fotoDataUrl;

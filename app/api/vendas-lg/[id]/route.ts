@@ -113,6 +113,14 @@ export async function PUT(
             linha.quantidade,
           ]
         );
+
+        // Auto-link partner (prestadorId) to service (servicoId) if both exist
+        if (prestadorId && linha.servicoId) {
+          await query(
+            `INSERT INTO public."_PartnerToService" ("A", "B") VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+            [prestadorId, linha.servicoId]
+          );
+        }
       }
     }
 

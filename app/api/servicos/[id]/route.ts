@@ -19,7 +19,26 @@ export async function GET(
       );
     }
 
-    return NextResponse.json(sanitizeData(rows[0]));
+    const service = rows[0];
+    const partnerRelations = await query(
+      `SELECT "A" FROM public."_PartnerToService" WHERE "B" = $1`,
+      [id]
+    );
+    const productRelations = await query(
+      `SELECT "A" FROM public."_ProdutoToService" WHERE "B" = $1`,
+      [id]
+    );
+
+    const prestadorIds = partnerRelations.map((r: any) => r.A);
+    const produtoIds = productRelations.map((r: any) => r.A);
+
+    return NextResponse.json(
+      sanitizeData({
+        ...service,
+        prestadorIds,
+        produtoIds,
+      })
+    );
   } catch (error) {
     console.error("Error fetching service:", error);
     return NextResponse.json(
@@ -45,6 +64,9 @@ export async function PUT(
       fotoDataUrl,
       automotivo,
       residencial,
+      prestadorIds,
+      produtoIds,
+      ferramentas,
     } = body;
 
     const rows = await query(
@@ -58,8 +80,9 @@ export async function PUT(
         "fotoDataUrl" = $6,
         automotivo = $7,
         residencial = $8,
+        ferramentas = $9,
         "updatedAt" = CURRENT_TIMESTAMP
-      WHERE id = $9
+      WHERE id = $10
       RETURNING *`,
       [
         nome,
@@ -70,6 +93,7 @@ export async function PUT(
         fotoDataUrl || null,
         automotivo || false,
         residencial || false,
+        ferramentas || "",
         id,
       ]
     );
@@ -81,7 +105,37 @@ export async function PUT(
       );
     }
 
-    return NextResponse.json(sanitizeData(rows[0]));
+    const updatedService = rows[0];
+
+    // Sync partner relations
+    await query(`DELETE FROM public."_PartnerToService" WHERE "B" = $1`, [id]);
+    if (Array.isArray(prestadorIds) && prestadorIds.length > 0) {
+      for (const pId of prestadorIds) {
+        await query(
+          `INSERT INTO public."_PartnerToService" ("A", "B") VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+          [pId, id]
+        );
+      }
+    }
+
+    // Sync product relations
+    await query(`DELETE FROM public."_ProdutoToService" WHERE "B" = $1`, [id]);
+    if (Array.isArray(produtoIds) && produtoIds.length > 0) {
+      for (const prId of produtoIds) {
+        await query(
+          `INSERT INTO public."_ProdutoToService" ("A", "B") VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+          [prId, id]
+        );
+      }
+    }
+
+    return NextResponse.json(
+      sanitizeData({
+        ...updatedService,
+        prestadorIds: prestadorIds || [],
+        produtoIds: produtoIds || [],
+      })
+    );
   } catch (error) {
     console.error("Error updating service:", error);
     return NextResponse.json(

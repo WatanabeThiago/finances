@@ -73,6 +73,19 @@ export async function POST(req: NextRequest) {
       ]
     );
 
+    // Auto-create or update client
+    if (clienteTelefone && clienteNome) {
+      await query(
+        `INSERT INTO public."Cliente" (telefone, nome, documento, "createdAt", "updatedAt")
+         VALUES ($1, $2, $3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+         ON CONFLICT (telefone) DO UPDATE 
+         SET nome = EXCLUDED.nome, 
+             documento = COALESCE(EXCLUDED.documento, public."Cliente".documento), 
+             "updatedAt" = CURRENT_TIMESTAMP`,
+        [clienteTelefone, clienteNome, clienteDoc || null]
+      );
+    }
+
     // Insert linhas
     if (Array.isArray(linhas) && linhas.length > 0) {
       for (const linha of linhas) {
@@ -88,6 +101,14 @@ export async function POST(req: NextRequest) {
             linha.quantidade,
           ]
         );
+
+        // Auto-link partner (prestadorId) to service (servicoId) if both exist
+        if (prestadorId && linha.servicoId) {
+          await query(
+            `INSERT INTO public."_PartnerToService" ("A", "B") VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+            [prestadorId, linha.servicoId]
+          );
+        }
       }
     }
 

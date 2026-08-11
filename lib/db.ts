@@ -126,8 +126,19 @@ export async function initializeDatabase() {
        ADD COLUMN IF NOT EXISTS observacoes TEXT DEFAULT '',
        ADD COLUMN IF NOT EXISTS automotivo BOOLEAN DEFAULT false,
        ADD COLUMN IF NOT EXISTS residencial BOOLEAN DEFAULT false,
+       ADD COLUMN IF NOT EXISTS ferramentas TEXT DEFAULT '',
        ADD COLUMN IF NOT EXISTS "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
        ADD COLUMN IF NOT EXISTS "updatedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP`
+    );
+
+    await query(
+      `CREATE TABLE IF NOT EXISTS public."Cliente" (
+        telefone TEXT PRIMARY KEY,
+        nome TEXT NOT NULL,
+        documento TEXT,
+        "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        "updatedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )`
     );
 
     // Join tables for relationships
