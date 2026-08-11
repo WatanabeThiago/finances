@@ -4,7 +4,17 @@ import { NextRequest, NextResponse } from "next/server";
 export async function GET() {
   try {
     const rows = await query(
-      `SELECT * FROM public."Produto" ORDER BY "createdAt" DESC`
+      `SELECT p.*,
+              COALESCE(l.cnt, 0)::int AS "linksCount",
+              l."menorPreco"
+       FROM public."Produto" p
+       LEFT JOIN LATERAL (
+         SELECT COUNT(*)::int AS cnt,
+                MIN(preco / COALESCE(NULLIF(quantidade, 0), 1)) AS "menorPreco"
+         FROM public."ProdutoLink"
+         WHERE "produtoId" = p.id
+       ) l ON true
+       ORDER BY p."createdAt" DESC`
     );
     return NextResponse.json(sanitizeData(rows));
   } catch (error) {

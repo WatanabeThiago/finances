@@ -42,7 +42,20 @@ export async function PUT(
       fotoDataUrl,
       automotivo,
       residencial,
+      linkSelecionadoId,
     } = body;
+
+    let finalValor = parseFloat(valorCompra) || 0;
+    if (linkSelecionadoId) {
+      const linkRows = await query(
+        `SELECT preco, quantidade FROM public."ProdutoLink" WHERE id = $1`,
+        [linkSelecionadoId]
+      );
+      if (linkRows.length > 0) {
+        const qty = parseFloat(linkRows[0].quantidade) || 1;
+        finalValor = parseFloat(linkRows[0].preco) / qty;
+      }
+    }
 
     const rows = await query(
       `UPDATE public."Produto"
@@ -52,15 +65,17 @@ export async function PUT(
         "fotoDataUrl" = $3,
         automotivo = $4,
         residencial = $5,
+        "linkSelecionadoId" = $6,
         "updatedAt" = CURRENT_TIMESTAMP
-      WHERE id = $6
+      WHERE id = $7
       RETURNING *`,
       [
         nome,
-        parseFloat(valorCompra) || 0,
+        finalValor,
         fotoDataUrl || null,
         automotivo || false,
         residencial || false,
+        linkSelecionadoId || null,
         id,
       ]
     );

@@ -63,6 +63,7 @@ export async function initializeDatabase() {
         automotivo BOOLEAN DEFAULT false,
         residencial BOOLEAN DEFAULT false,
         "fotoDataUrl" TEXT,
+        "linkSelecionadoId" TEXT,
         "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         "updatedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )`
@@ -74,8 +75,30 @@ export async function initializeDatabase() {
        ADD COLUMN IF NOT EXISTS "fotoDataUrl" TEXT,
        ADD COLUMN IF NOT EXISTS automotivo BOOLEAN DEFAULT false,
        ADD COLUMN IF NOT EXISTS residencial BOOLEAN DEFAULT false,
+       ADD COLUMN IF NOT EXISTS "linkSelecionadoId" TEXT,
        ADD COLUMN IF NOT EXISTS "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
        ADD COLUMN IF NOT EXISTS "updatedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP`
+    );
+
+    await query(
+      `CREATE TABLE IF NOT EXISTS public."ProdutoLink" (
+        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        "produtoId" TEXT NOT NULL,
+        url TEXT NOT NULL,
+        fornecedor TEXT DEFAULT '',
+        preco DECIMAL(10, 2) NOT NULL DEFAULT 0,
+        quantidade INTEGER DEFAULT 1,
+        frete DECIMAL(10, 2) DEFAULT 0,
+        "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY ("produtoId") REFERENCES public."Produto"(id) ON DELETE CASCADE
+      )`
+    );
+
+    // Add missing columns to ProdutoLink if they don't exist
+    await query(
+      `ALTER TABLE public."ProdutoLink"
+       ADD COLUMN IF NOT EXISTS quantidade INTEGER DEFAULT 1,
+       ADD COLUMN IF NOT EXISTS frete DECIMAL(10, 2) DEFAULT 0`
     );
 
     await query(

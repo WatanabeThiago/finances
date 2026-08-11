@@ -308,6 +308,8 @@ function VendasLgWorkspace({ mode }: { mode: VendasLgWorkspaceMode }) {
         const normalizedVendas = data.map((v: any) => ({
           ...v,
           comissao: typeof v.comissao === "string" ? parseFloat(v.comissao) : v.comissao,
+          latitude: typeof v.latitude === "string" ? parseFloat(v.latitude) : (v.latitude != null ? v.latitude : null),
+          longitude: typeof v.longitude === "string" ? parseFloat(v.longitude) : (v.longitude != null ? v.longitude : null),
           linhas: Array.isArray(v.linhas) ? v.linhas.map((l: any) => ({
             ...l,
             precoOriginal: typeof l.precoOriginal === "string" ? parseFloat(l.precoOriginal) : l.precoOriginal,
@@ -815,166 +817,190 @@ function VendasLgWorkspace({ mode }: { mode: VendasLgWorkspaceMode }) {
     }
     return (
       <ul className="flex flex-col gap-3">
-        {filteredVendas.map((v) => (
-          <li
-            key={v.id}
-            className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950"
-          >
-            <div className="flex flex-wrap items-start justify-between gap-2">
-              <div>
-                <p className="font-semibold tabular-nums text-zinc-900 dark:text-zinc-50">
-                  {v.clienteTelefone}
-                </p>
-                <p className="text-sm text-zinc-600 dark:text-zinc-400">
-                  {v.clienteNome}
-                  {v.clienteDoc ? ` · ${v.clienteDoc}` : ""}
-                </p>
-                {v.vehiclePlate ? (
-                  <p className="mt-1 text-xs font-medium uppercase tracking-wide text-sky-700 dark:text-sky-400">
-                    Placa {v.vehiclePlate}
-                  </p>
-                ) : null}
-                {v.prestadorId ? (
-                  <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-500">
-                    Prestador: <span className="font-medium">{(() => {
-                      const p = parceiros.find((pc) => pc.id === v.prestadorId);
-                      return p?.nome ?? "Prestador removido";
-                    })()}</span>
-                  </p>
-                ) : null}
-                {v.comissao ? (
-                  <>
-                    <p className="mt-1 text-xs">
-                      <span className={v.comissaoPaga ? "rounded-full bg-emerald-100 px-2 py-0.5 text-emerald-900 dark:bg-emerald-950/80 dark:text-emerald-200" : "rounded-full bg-amber-100 px-2 py-0.5 text-amber-900 dark:bg-amber-950/80 dark:text-amber-200"}>
-                        Comissão {v.comissaoPaga ? "✓ Paga" : "Pendente"} · {formatBRL(v.comissao)}
+        {filteredVendas.map((v) => {
+          const partner = v.prestadorId ? parceiros.find((pc) => pc.id === v.prestadorId) : null;
+          // Valid coords to avoid showing null island (Atlantic Ocean)
+          const hasValidCoords = v.latitude != null && v.longitude != null && v.latitude !== 0 && v.longitude !== 0;
+
+          return (
+            <li
+              key={v.id}
+              className="flex flex-col md:flex-row overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-950"
+            >
+              {/* Left Side: Card Details */}
+              <div className="flex-1 p-4 flex flex-col justify-between">
+                <div>
+                  {/* Header: Phone, total price, and avatar */}
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex items-start gap-3 min-w-0">
+                      {v.prestadorId && partner && (
+                        <div className="shrink-0 mt-1">
+                          {partner.fotoDataUrl ? (
+                            <img
+                              src={partner.fotoDataUrl}
+                              alt={partner.nome}
+                              className="h-12 w-12 rounded-full object-cover ring-2 ring-zinc-150 dark:ring-zinc-800"
+                            />
+                          ) : (
+                            <span className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-sky-400 to-indigo-500 text-sm font-bold text-white ring-2 ring-zinc-150 dark:ring-zinc-800">
+                              {partner.nome
+                                .split(" ")
+                                .filter(Boolean)
+                                .slice(0, 2)
+                                .map((w) => w[0].toUpperCase())
+                                .join("")}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                      <div className="min-w-0">
+                        <p className="font-semibold text-base tabular-nums text-zinc-900 dark:text-zinc-50">
+                          {v.clienteTelefone}
+                        </p>
+                        <p className="text-sm text-zinc-650 dark:text-zinc-400">
+                          {v.clienteNome}
+                          {v.clienteDoc ? ` · ${v.clienteDoc}` : ""}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="text-right">
+                      <p className="text-lg font-bold tabular-nums text-sky-700 dark:text-sky-400">
+                        {formatBRL(totalVendaLg(v))}
+                      </p>
+                      <p className="text-[11px] text-zinc-400 dark:text-zinc-500">
+                        {v.dataVenda ? new Date(v.dataVenda).toLocaleString("pt-BR", {
+                          dateStyle: "short",
+                          timeStyle: "short",
+                        }) : "Data não registrada"}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Middle Row: Metadata & Badges */}
+                  <div className={`mt-2.5 space-y-1.5 pl-0 ${v.prestadorId && partner ? "sm:pl-[60px]" : ""}`}>
+                    {v.vehiclePlate ? (
+                      <p className="text-xs font-semibold uppercase tracking-wide text-sky-700 dark:text-sky-400">
+                        Placa {v.vehiclePlate}
+                      </p>
+                    ) : null}
+                    {partner ? (
+                      <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                        Prestador: <span className="font-medium">{partner.nome}</span>
+                      </p>
+                    ) : v.prestadorId ? (
+                      <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                        Prestador: <span className="font-medium">Prestador removido</span>
+                      </p>
+                    ) : null}
+
+                    {/* Badges */}
+                    <div className="flex flex-wrap gap-1.5 pt-1">
+                      {v.comissao ? (
+                        <>
+                          <span className={v.comissaoPaga ? "rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-400" : "rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-850 dark:bg-amber-950/30 dark:text-amber-400"}>
+                            Comissão {v.comissaoPaga ? "✓ Paga" : "Pendente"} · {formatBRL(v.comissao)}
+                          </span>
+                          <span className="rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-800 dark:bg-blue-950/30 dark:text-blue-400">
+                            Repasse · {formatBRL(totalVendaLg(v) - v.comissao)}
+                          </span>
+                        </>
+                      ) : null}
+                      <span className={v.clientePagou
+                        ? "rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-400"
+                        : "rounded-full bg-zinc-50 px-2 py-0.5 text-xs font-medium text-zinc-650 dark:bg-zinc-800 dark:text-zinc-300"}
+                      >
+                        {v.clientePagou ? "Cliente pagou" : "Pagamento pendente"}
+                        {v.formaPagamento ? ` · ${v.formaPagamento}` : ""}
                       </span>
-                    </p>
-                    <p className="mt-1 text-xs">
-                      <span className="rounded-full bg-blue-100 px-2 py-0.5 text-blue-900 dark:bg-blue-950/80 dark:text-blue-200">
-                        Faturamento do Parceiro · {formatBRL(totalVendaLg(v) - v.comissao)}
-                      </span>
-                    </p>
-                  </>
-                ) : null}
-                <p className="mt-2 text-xs">
-                  <span className={v.clientePagou
-                    ? "rounded-full bg-emerald-100 px-2 py-0.5 text-emerald-900 dark:bg-emerald-950/80 dark:text-emerald-200"
-                    : "rounded-full bg-zinc-100 px-2 py-0.5 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"}
-                  >
-                    {v.clientePagou ? "Cliente pagou" : "Pagamento pendente"}
-                    {v.formaPagamento ? ` · ${v.formaPagamento}` : ""}
-                  </span>
-                </p>
-              </div>
-              <div className="flex flex-col items-end gap-2">
-                <p className="text-lg font-semibold tabular-nums text-sky-700 dark:text-sky-400">
-                  {formatBRL(totalVendaLg(v))}
-                </p>
-                <div className="flex gap-1">
-                  <button
-                    type="button"
-                    onClick={() => openModal(v)}
-                    className="rounded-lg p-2 text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-600 dark:hover:bg-zinc-800 dark:hover:text-zinc-300"
-                    aria-label="Editar venda"
-                  >
-                    <svg
-                      className="h-5 w-5"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
+                    </div>
+                  </div>
+                </div>
+
+                {/* Bottom Row: Items List & Action Buttons */}
+                <div className={`mt-4 border-t border-zinc-100 pt-3 dark:border-zinc-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pl-0 ${v.prestadorId && partner ? "sm:pl-[60px]" : ""}`}>
+                  {/* Items List */}
+                  <ul className="flex-1 space-y-1 text-sm">
+                    {v.linhas.map((ln) => {
+                      const sn =
+                        servicoById.get(ln.servicoId)?.nome ?? "Serviço removido";
+                      return (
+                        <li
+                          key={ln.id}
+                          className="flex flex-wrap items-center gap-x-2 text-zinc-700 dark:text-zinc-300"
+                        >
+                          <span className="font-medium text-zinc-900 dark:text-zinc-50">{sn}</span>
+                          <span className="text-zinc-400 dark:text-zinc-500">×{ln.quantidade}</span>
+                          <span className="tabular-nums text-zinc-500">({formatBRL(ln.preco)})</span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+
+                  {/* Actions */}
+                  <div className="flex gap-1 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => openModal(v)}
+                      className="rounded-lg p-2 text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-600 dark:hover:bg-zinc-800 dark:hover:text-zinc-300"
+                      aria-label="Editar venda"
+                      title="Editar venda"
                     >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-                      />
-                    </svg>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => deleteVenda(v.id)}
-                    className="rounded-lg p-2 text-zinc-400 transition-colors hover:bg-red-100 hover:text-red-600 dark:hover:bg-red-950 dark:hover:text-red-400"
-                    aria-label="Deletar venda"
-                  >
-                    <svg
-                      className="h-5 w-5"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
+                      <svg className="h-4.5 w-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                      </svg>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => deleteVenda(v.id)}
+                      className="rounded-lg p-2 text-zinc-400 transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/45 dark:hover:text-red-400"
+                      aria-label="Deletar venda"
+                      title="Deletar venda"
                     >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                      />
-                    </svg>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => downloadQuotePDF(v, servicoById)}
-                    className="rounded-lg p-2 text-zinc-400 transition-colors hover:bg-amber-100 hover:text-amber-600 dark:hover:bg-amber-950 dark:hover:text-amber-400"
-                    aria-label="Baixar orçamento em PDF"
-                    title="Orçamento PDF"
-                  >
-                    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                    </svg>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => downloadReceiptPDF(v, servicoById, new Map(parceiros.map(p => [p.id, p])))}
-                    className="rounded-lg p-2 text-zinc-400 transition-colors hover:bg-sky-100 hover:text-sky-600 dark:hover:bg-sky-950 dark:hover:text-sky-400"
-                    aria-label="Baixar recibo em PDF"
-                  >
-                    <svg
-                      className="h-5 w-5"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
+                      <svg className="h-4.5 w-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => downloadQuotePDF(v, servicoById)}
+                      className="rounded-lg p-2 text-zinc-400 transition-colors hover:bg-amber-50 hover:text-amber-600 dark:hover:bg-amber-950/45 dark:hover:text-amber-400"
+                      aria-label="Baixar orçamento em PDF"
+                      title="Orçamento PDF"
                     >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M12 19l9 2-9-18-9 18 9-2m0-8v6m0 0l-3-3m3 3l3-3"
-                      />
-                    </svg>
-                  </button>
+                      <svg className="h-4.5 w-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => downloadReceiptPDF(v, servicoById, new Map(parceiros.map(p => [p.id, p])))}
+                      className="rounded-lg p-2 text-zinc-400 transition-colors hover:bg-sky-50 hover:text-sky-600 dark:hover:bg-sky-950/45 dark:hover:text-sky-400"
+                      aria-label="Baixar recibo em PDF"
+                      title="Recibo PDF"
+                    >
+                      <svg className="h-4.5 w-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2m0-8v6m0 0l-3-3m3 3l3-3" />
+                      </svg>
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
-            <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-500">
-              {v.dataVenda ? new Date(v.dataVenda).toLocaleString("pt-BR", {
-                dateStyle: "short",
-                timeStyle: "short",
-              }) : "Data não registrada"}
-            </p>
-            <ul className="mt-3 space-y-1.5 border-t border-zinc-100 pt-3 text-sm dark:border-zinc-800">
-              {v.linhas.map((ln) => {
-                const sn =
-                  servicoById.get(ln.servicoId)?.nome ?? "Serviço removido";
-                return (
-                  <li
-                    key={ln.id}
-                    className="flex flex-wrap justify-between gap-x-3 gap-y-0.5 text-zinc-700 dark:text-zinc-300"
-                  >
-                    <span className="min-w-0">
-                      {sn}{" "}
-                      <span className="text-zinc-500">
-                        ×{ln.quantidade}
-                      </span>
-                    </span>
-                    <span className="shrink-0 tabular-nums text-zinc-600 dark:text-zinc-400">
-                      {formatBRL(ln.preco * ln.quantidade)}
-                    </span>
-                  </li>
-                );
-              })}
-            </ul>
-          </li>
-        ))}
+
+              {/* Right Side: Map */}
+              {hasValidCoords && (
+                <div className="w-full md:w-96 shrink-0 border-t md:border-t-0 md:border-l border-zinc-200 dark:border-zinc-800 h-56 md:h-auto relative overflow-hidden">
+                  <iframe
+                    title={`Localização do serviço - ${v.clienteNome}`}
+                    className="h-full w-full border-0"
+                    src={`https://www.openstreetmap.org/export/embed.html?bbox=${v.longitude - 0.024}%2C${v.latitude - 0.016}%2C${v.longitude + 0.024}%2C${v.latitude + 0.016}&layer=mapnik&marker=${v.latitude}%2C${v.longitude}`}
+                    scrolling="no"
+                  />
+                </div>
+              )}
+            </li>
+          );
+        })}
       </ul>
     );
   }, [vendas, servicoById, parceiros, filterParceiro, filterComissao, filterDataRange]);
@@ -1083,7 +1109,7 @@ function VendasLgWorkspace({ mode }: { mode: VendasLgWorkspaceMode }) {
   return (
     <div className={isCreatePage
       ? "mx-auto w-full max-w-[1600px] pb-10"
-      : "mx-auto flex w-full max-w-4xl flex-col gap-6 pb-8"}
+      : "mx-auto flex w-full max-w-6xl flex-col gap-6 pb-8"}
     >
       {mode === "dashboard" ? (
         <>

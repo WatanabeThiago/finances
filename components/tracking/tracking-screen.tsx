@@ -2,6 +2,7 @@
 
 import { Fragment, useEffect, useMemo, useState } from "react";
 import type { TrackingEvent } from "@/lib/tracking";
+import { formatTelefone } from "@/lib/phone";
 
 const StatCard = ({ label, value, change, color = "sky" }: { label: string; value: string; change?: string; color?: string }) => {
   const colorClasses = {
@@ -1067,8 +1068,8 @@ export function TrackingScreen() {
                             <input
                               type="tel"
                               value={editingPhone}
-                              onChange={(e) => setEditingPhone(e.target.value)}
-                              placeholder="(11) 99999-9999"
+                              onChange={(e) => setEditingPhone(formatTelefone(e.target.value))}
+                              placeholder="+55 (48) 9 99868-1137"
                               className="px-2 py-1 rounded border border-zinc-300 text-sm dark:border-zinc-600 dark:bg-zinc-700 dark:text-zinc-100 w-40"
                               autoFocus
                             />

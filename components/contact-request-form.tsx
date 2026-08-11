@@ -4,6 +4,8 @@ import { useState } from 'react';
 import { trackSubmitCallbackRequest } from '@/lib/gtag-events';
 import { X } from 'lucide-react';
 
+import { formatTelefone } from '@/lib/phone';
+
 interface ContactRequestFormProps {
   onClose?: () => void;
   className?: string;
@@ -15,15 +17,6 @@ export function ContactRequestForm({ onClose, className = '' }: ContactRequestFo
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
 
-  const formatPhone = (value: string) => {
-    // Remove tudo que não é número
-    const digits = value.replace(/\D/g, '');
-    
-    // Formata o telefone
-    if (digits.length <= 2) return digits;
-    if (digits.length <= 7) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
-    return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7, 11)}`;
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -101,8 +94,8 @@ export function ContactRequestForm({ onClose, className = '' }: ContactRequestFo
                 id="phone"
                 type="tel"
                 value={phone}
-                onChange={(e) => setPhone(formatPhone(e.target.value))}
-                placeholder="(11) 99999-9999"
+                onChange={(e) => setPhone(formatTelefone(e.target.value))}
+                placeholder="+55 (48) 9 99868-1137"
                 disabled={loading}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
               />

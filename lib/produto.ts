@@ -1,3 +1,14 @@
+/** Link de compra de um produto (fornecedor, URL, preço, quantidade, frete). */
+export type ProdutoLink = {
+  id: string;
+  produtoId: string;
+  url: string;
+  fornecedor: string;
+  preco: number;
+  quantidade: number;
+  frete: number;
+};
+
 /** Item do catálogo em Produtos (miolos, chips, chaves, etc.). */
 export type Produto = {
   id: string;
@@ -6,6 +17,9 @@ export type Produto = {
   residencial: boolean;
   automotivo: boolean;
   fotoDataUrl?: string;
+  linkSelecionadoId?: string;
+  linksCount?: number;
+  menorPreco?: number;
 };
 
 export const PRODUTOS_STORAGE_KEY = "finances.produtos.v1";

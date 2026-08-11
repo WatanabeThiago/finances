@@ -91,6 +91,18 @@ export function parseVendasLgJson(raw: string): VendaLg[] {
         if (typeof v.clientePagou === "boolean") {
           out.clientePagou = v.clientePagou;
         }
+        if (typeof v.endereco === "string" && v.endereco.trim().length > 0) {
+          out.endereco = v.endereco.trim();
+        }
+        if (typeof v.latitude === "number" && Number.isFinite(v.latitude)) {
+          out.latitude = v.latitude;
+        }
+        if (typeof v.longitude === "number" && Number.isFinite(v.longitude)) {
+          out.longitude = v.longitude;
+        }
+        if (typeof v.dataVenda === "string" && v.dataVenda.trim().length > 0) {
+          out.dataVenda = v.dataVenda.trim();
+        }
         return out;
       })
       .filter((x): x is VendaLg => x !== null);
