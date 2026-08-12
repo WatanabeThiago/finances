@@ -107,14 +107,16 @@ export async function PUT(
 
     const updatedService = rows[0];
 
-    // Sync partner relations
-    await query(`DELETE FROM public."_PartnerToService" WHERE "B" = $1`, [id]);
-    if (Array.isArray(prestadorIds) && prestadorIds.length > 0) {
-      for (const pId of prestadorIds) {
-        await query(
-          `INSERT INTO public."_PartnerToService" ("A", "B") VALUES ($1, $2) ON CONFLICT DO NOTHING`,
-          [pId, id]
-        );
+    // Sync partner relations (only if explicitly provided)
+    if (Array.isArray(prestadorIds)) {
+      await query(`DELETE FROM public."_PartnerToService" WHERE "B" = $1`, [id]);
+      if (prestadorIds.length > 0) {
+        for (const pId of prestadorIds) {
+          await query(
+            `INSERT INTO public."_PartnerToService" ("A", "B") VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+            [pId, id]
+          );
+        }
       }
     }
 
@@ -129,10 +131,16 @@ export async function PUT(
       }
     }
 
+    const currentPartnerRelations = await query(
+      `SELECT "A" FROM public."_PartnerToService" WHERE "B" = $1`,
+      [id]
+    );
+    const finalPrestadorIds = currentPartnerRelations.map((r: any) => r.A);
+
     return NextResponse.json(
       sanitizeData({
         ...updatedService,
-        prestadorIds: prestadorIds || [],
+        prestadorIds: finalPrestadorIds,
         produtoIds: produtoIds || [],
       })
     );

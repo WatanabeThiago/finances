@@ -77,6 +77,17 @@ function normalizeServices(data: any[]): Service[] {
   }));
 }
 
+function normalizeProdutos(data: any[]): Produto[] {
+  if (!Array.isArray(data)) return [];
+  return data.map((p: any) => ({
+    ...p,
+    valorCompra:
+      typeof p.valor === "string"
+        ? parseFloat(p.valor)
+        : p.valor || p.valorCompra || 0,
+  }));
+}
+
 /* ── avatar ───────────────────────────────────────────────────────────── */
 
 function ServiceAvatar({
@@ -163,6 +174,22 @@ function PlusIcon({ className }: { className?: string }) {
   );
 }
 
+function XIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+    </svg>
+  );
+}
+
+function SearchIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+    </svg>
+  );
+}
+
 function UsersIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -177,50 +204,49 @@ function UsersIcon({ className }: { className?: string }) {
 }
 
 export function ServicosScreen() {
-  const partnersRaw = useSyncExternalStore(
-    subscribePartners,
-    partnersStorageSnapshot,
-    () => "[]"
-  );
-  const partners = useMemo(() => parsePartnersJson(partnersRaw), [partnersRaw]);
-
-  const produtosRaw = useSyncExternalStore(
-    subscribeProdutos,
-    produtosStorageSnapshot,
-    () => "[]"
-  );
-  const produtos = useMemo(() => parseProdutosJson(produtosRaw), [produtosRaw]);
-
   const [services, setServices] = useState<Service[]>([]);
+  const [partners, setPartners] = useState<Partner[]>([]);
+  const [produtos, setProdutos] = useState<Produto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Fetch services from API
-  useEffect(() => {
-    const fetchServices = async () => {
-      try {
-        setLoading(true);
-        const response = await fetch("/api/servicos");
-        if (!response.ok) throw new Error("Falha ao carregar serviços");
-        const data = await response.json();
+  const fetchAllData = useCallback(async () => {
+    try {
+      setLoading(true);
+      const [resServices, resProdutos, resPartners] = await Promise.all([
+        fetch("/api/servicos"),
+        fetch("/api/produtos"),
+        fetch("/api/parceiros"),
+      ]);
+
+      if (resServices.ok) {
+        const data = await resServices.json();
         setServices(normalizeServices(data));
-        setError(null);
-      } catch (err) {
-        console.error("Error fetching services:", err);
-        setError("Erro ao carregar serviços");
-        // Fallback to localStorage
-        const localData = localStorage.getItem("finances.servicos.v1");
-        if (localData) {
-          setServices(parseServicesJson(localData));
-        }
-      } finally {
-        setLoading(false);
       }
-    };
-    fetchServices();
+      if (resProdutos.ok) {
+        const dataPr = await resProdutos.json();
+        setProdutos(normalizeProdutos(dataPr));
+      }
+      if (resPartners.ok) {
+        const dataPa = await resPartners.json();
+        setPartners(Array.isArray(dataPa) ? dataPa : []);
+      }
+      setError(null);
+    } catch (err) {
+      console.error("Error fetching services data:", err);
+      setError("Erro ao carregar dados");
+      const localData = localStorage.getItem("finances.servicos.v1");
+      if (localData) {
+        setServices(parseServicesJson(localData));
+      }
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-
+  useEffect(() => {
+    fetchAllData();
+  }, [fetchAllData]);
 
   const partnerById = useMemo(() => {
     const m = new Map<string, Partner>();
@@ -240,15 +266,23 @@ export function ServicosScreen() {
   const [form, setForm] = useState<FormState>(emptyForm());
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [produtoQuery, setProdutoQuery] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const titleId = useId();
   const descId = useId();
+
+  const filteredProdutosForModal = useMemo(() => {
+    const q = produtoQuery.trim().toLowerCase();
+    if (!q) return produtos;
+    return produtos.filter((p) => p.nome.toLowerCase().includes(q));
+  }, [produtos, produtoQuery]);
 
   const openModal = useCallback((serviceToEdit?: Service) => {
     // Always reset to create mode first
     setModalMode("create");
     setEditingServiceId(null);
     setFormError(null);
+    setProdutoQuery("");
     
     if (serviceToEdit) {
       setModalMode("edit");
@@ -284,8 +318,31 @@ export function ServicosScreen() {
     const onKey = (ev: KeyboardEvent) => {
       if (ev.key === "Escape") closeModal();
     };
+    const onPaste = (ev: ClipboardEvent) => {
+      const items = ev.clipboardData?.items;
+      if (!items) return;
+      for (const item of Array.from(items)) {
+        if (!item.type.startsWith("image/")) continue;
+        const file = item.getAsFile();
+        if (!file) continue;
+        const reader = new FileReader();
+        reader.onload = () => {
+          if (typeof reader.result === "string") {
+            setForm((f) => ({ ...f, fotoDataUrl: reader.result as string }));
+            setFormError(null);
+          }
+        };
+        reader.readAsDataURL(file);
+        ev.preventDefault();
+        break;
+      }
+    };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    document.addEventListener("paste", onPaste);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.removeEventListener("paste", onPaste);
+    };
   }, [modalOpen, closeModal]);
 
   const onPickPhoto = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -351,7 +408,6 @@ export function ServicosScreen() {
             fotoDataUrl: form.fotoDataUrl || null,
             automotivo: form.automotivo,
             residencial: form.residencial,
-            prestadorIds: form.prestadorIds,
             produtoIds: form.produtoIds,
             ferramentas: form.ferramentas.trim(),
           }),
@@ -361,12 +417,8 @@ export function ServicosScreen() {
           throw new Error("Falha ao salvar serviço");
         }
 
-        // Refresh the services list
-        const refreshResponse = await fetch("/api/servicos");
-        if (refreshResponse.ok) {
-          const updatedServices = await refreshResponse.json();
-          setServices(normalizeServices(updatedServices));
-        }
+        // Refresh data
+        await fetchAllData();
 
         closeModal();
       } catch (err) {
@@ -376,7 +428,7 @@ export function ServicosScreen() {
         setSubmitting(false);
       }
     },
-    [form, closeModal, modalMode, editingServiceId]
+    [form, closeModal, modalMode, editingServiceId, fetchAllData]
   );
 
   const deleteService = useCallback(
@@ -392,12 +444,7 @@ export function ServicosScreen() {
           throw new Error("Falha ao deletar serviço");
         }
 
-        // Refresh the services list
-        const refreshResponse = await fetch("/api/servicos");
-        if (refreshResponse.ok) {
-          const updatedServices = await refreshResponse.json();
-          setServices(normalizeServices(updatedServices));
-        }
+        await fetchAllData();
       } catch (err) {
         console.error("Error deleting service:", err);
         alert("Erro ao deletar serviço");
@@ -770,7 +817,7 @@ export function ServicosScreen() {
   function renderModal() {
     return (
       <div
-        className="fixed inset-0 z-[60] flex flex-col justify-end bg-black/50 sm:items-center sm:justify-center sm:p-4"
+        className="fixed inset-0 z-[60] flex flex-col justify-end bg-black/60 backdrop-blur-xs sm:items-center sm:justify-center sm:p-4"
         role="presentation"
         onMouseDown={(ev) => {
           if (ev.target === ev.currentTarget) closeModal();
@@ -781,318 +828,380 @@ export function ServicosScreen() {
           aria-modal="true"
           aria-labelledby={titleId}
           aria-describedby={descId}
-          className="max-h-[min(92dvh,720px)] w-full overflow-hidden rounded-t-2xl border border-zinc-200 bg-background shadow-2xl dark:border-zinc-800 sm:mx-auto sm:max-w-md sm:rounded-2xl"
+          className="flex max-h-[90dvh] w-full flex-col overflow-hidden rounded-t-2xl border border-zinc-200 bg-background shadow-2xl dark:border-zinc-800 sm:mx-auto sm:max-w-3xl sm:rounded-2xl"
           onMouseDown={(e) => e.stopPropagation()}
         >
-          <div className="flex max-h-[inherit] flex-col">
-            <div className="flex shrink-0 items-center justify-between border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
+          {/* Header */}
+          <div className="flex shrink-0 items-center justify-between border-b border-zinc-200 px-6 py-4 dark:border-zinc-800">
+            <div>
               <h3
                 id={titleId}
-                className="text-base font-semibold text-zinc-900 dark:text-zinc-50"
+                className="text-lg font-bold text-zinc-900 dark:text-zinc-50"
               >
                 {modalMode === "edit" ? "Editar serviço" : "Novo serviço"}
               </h3>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                Preencha os dados do serviço, valores e produtos vinculados.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={closeModal}
+              className="rounded-lg p-2 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200 transition-colors"
+              aria-label="Fechar"
+            >
+              <XIcon className="h-5 w-5" />
+            </button>
+          </div>
+
+          {/* Form Content */}
+          <form
+            onSubmit={submit}
+            className="flex flex-1 flex-col overflow-hidden"
+          >
+            <div
+              id={descId}
+              className="flex-1 space-y-6 overflow-y-auto px-6 py-5"
+            >
+              {formError ? (
+                <p
+                  className="rounded-xl bg-red-50 p-3.5 text-sm font-medium text-red-800 dark:bg-red-950/50 dark:text-red-200"
+                  role="alert"
+                >
+                  {formError}
+                </p>
+              ) : null}
+
+              {/* 2-Column Grid on Desktop */}
+              <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+                {/* Column 1: Basic Info & Tools */}
+                <div className="space-y-4">
+                  {/* Foto */}
+                  <div>
+                    <span className="block text-sm font-medium text-zinc-800 dark:text-zinc-200">
+                      Foto do Serviço <span className="font-normal text-zinc-500">(opcional)</span>
+                    </span>
+                    <div className="mt-2 flex items-center gap-4">
+                      <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-xl border border-zinc-200 bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-900">
+                        {form.fotoDataUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={form.fotoDataUrl}
+                            alt=""
+                            className="h-full w-full object-cover"
+                          />
+                        ) : (
+                          <span className="flex h-full w-full items-center justify-center text-xs text-zinc-400">
+                            Sem foto
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={onPickPhoto}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => fileInputRef.current?.click()}
+                          className="inline-flex items-center justify-center rounded-lg border border-zinc-300 px-3 py-1.5 text-xs font-semibold text-zinc-800 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                        >
+                          Escolher foto
+                        </button>
+                        <p className="text-[11px] text-zinc-400 dark:text-zinc-500">
+                          ou <kbd className="rounded bg-zinc-100 px-1 py-0.5 font-mono text-[10px] dark:bg-zinc-800">Ctrl+V</kbd> para colar
+                        </p>
+                        {form.fotoDataUrl ? (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setForm((f) => ({ ...f, fotoDataUrl: "" }))
+                            }
+                            className="text-left text-xs font-medium text-red-600 hover:underline dark:text-red-400"
+                          >
+                            Remover foto
+                          </button>
+                        ) : null}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Nome */}
+                  <label className="block">
+                    <span className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
+                      Nome do Serviço <span className="text-red-500">*</span>
+                    </span>
+                    <input
+                      type="text"
+                      value={form.nome}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, nome: e.target.value }))
+                      }
+                      className="mt-1.5 w-full rounded-xl border border-zinc-300 bg-white px-3.5 py-2.5 text-[15px] text-zinc-900 outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500/30 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
+                      placeholder="Ex.: Abertura residencial, Cópia de chave VW"
+                      autoFocus
+                    />
+                  </label>
+
+                  {/* Segmentos */}
+                  <div className="space-y-2">
+                    <span className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
+                      Segmentos
+                    </span>
+                    <div className="grid grid-cols-2 gap-2">
+                      <label className={`flex cursor-pointer items-center gap-2.5 rounded-xl border p-2.5 transition-colors ${form.automotivo ? "border-sky-500 bg-sky-50/50 dark:border-sky-600 dark:bg-sky-950/30" : "border-zinc-200 dark:border-zinc-800"}`}>
+                        <input
+                          type="checkbox"
+                          checked={form.automotivo}
+                          onChange={(e) =>
+                            setForm((f) => ({ ...f, automotivo: e.target.checked }))
+                          }
+                          className="h-4 w-4 rounded border-zinc-400 text-sky-600 focus:ring-sky-500"
+                        />
+                        <span className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
+                          Automotivo
+                        </span>
+                      </label>
+                      <label className={`flex cursor-pointer items-center gap-2.5 rounded-xl border p-2.5 transition-colors ${form.residencial ? "border-violet-500 bg-violet-50/50 dark:border-violet-600 dark:bg-violet-950/30" : "border-zinc-200 dark:border-zinc-800"}`}>
+                        <input
+                          type="checkbox"
+                          checked={form.residencial}
+                          onChange={(e) =>
+                            setForm((f) => ({
+                              ...f,
+                              residencial: e.target.checked,
+                            }))
+                          }
+                          className="h-4 w-4 rounded border-zinc-400 text-violet-600 focus:ring-violet-500"
+                        />
+                        <span className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
+                          Residencial
+                        </span>
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* Ferramentas */}
+                  <label className="block">
+                    <span className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
+                      Ferramentas Necessárias{" "}
+                      <span className="font-normal text-zinc-500">(opcional)</span>
+                    </span>
+                    <input
+                      type="text"
+                      value={form.ferramentas}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, ferramentas: e.target.value }))
+                      }
+                      className="mt-1.5 w-full rounded-xl border border-zinc-300 bg-white px-3.5 py-2.5 text-[15px] text-zinc-900 outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500/30 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
+                      placeholder="Ex.: Chave Phillips, Gamarra Fácil Pro, Estilete"
+                    />
+                    <span className="mt-1 block text-xs text-zinc-400">
+                      Separe os itens por vírgula.
+                    </span>
+                  </label>
+                </div>
+
+                {/* Column 2: Values & Notes */}
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <label className="block sm:col-span-2">
+                      <span className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
+                        Valor Padrão (R$) <span className="text-red-500">*</span>
+                      </span>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={form.valor}
+                        onChange={(e) =>
+                          setForm((f) => ({ ...f, valor: e.target.value }))
+                        }
+                        className="mt-1.5 w-full rounded-xl border border-zinc-300 bg-white px-3.5 py-2.5 text-[15px] font-semibold text-zinc-900 outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500/30 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
+                        placeholder="0,00"
+                      />
+                    </label>
+
+                    <label className="block">
+                      <span className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
+                        Valor Noturno <span className="font-normal text-zinc-500">(R$)</span>
+                      </span>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={form.valorNoturno}
+                        onChange={(e) =>
+                          setForm((f) => ({ ...f, valorNoturno: e.target.value }))
+                        }
+                        className="mt-1.5 w-full rounded-xl border border-zinc-300 bg-white px-3.5 py-2.5 text-sm text-zinc-900 outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500/30 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
+                        placeholder="0,00"
+                      />
+                    </label>
+
+                    <label className="block">
+                      <span className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
+                        Gastos Estimados <span className="font-normal text-zinc-500">(R$)</span>
+                      </span>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={form.gastosEstimados}
+                        onChange={(e) =>
+                          setForm((f) => ({
+                            ...f,
+                            gastosEstimados: e.target.value,
+                          }))
+                        }
+                        className="mt-1.5 w-full rounded-xl border border-zinc-300 bg-white px-3.5 py-2.5 text-sm text-zinc-900 outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500/30 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
+                        placeholder="0,00"
+                      />
+                    </label>
+                  </div>
+
+                  {/* Observações */}
+                  <label className="block">
+                    <span className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
+                      Observações
+                    </span>
+                    <textarea
+                      value={form.observacoes}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, observacoes: e.target.value }))
+                      }
+                      rows={5}
+                      className="mt-1.5 w-full resize-none rounded-xl border border-zinc-300 bg-white px-3.5 py-2.5 text-sm text-zinc-900 outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500/30 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
+                      placeholder="Detalhes adicionais do serviço, especificações, prazos, observações importantes…"
+                    />
+                  </label>
+                </div>
+              </div>
+
+              {/* Full Width Section: Searchable Products Multiselect */}
+              <div className="rounded-xl border border-zinc-200 bg-zinc-50/50 p-4 dark:border-zinc-800 dark:bg-zinc-900/30 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="block text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                      Produtos Usados no Serviço
+                    </span>
+                    <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                      Digite abaixo para buscar e selecionar itens do seu catálogo (miolos, chips, chaves…).
+                    </span>
+                  </div>
+                  <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-950 dark:bg-amber-950/80 dark:text-amber-100">
+                    {form.produtoIds.length} selecionado(s)
+                  </span>
+                </div>
+
+                {/* Selected Products Badges */}
+                {form.produtoIds.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 pt-1">
+                    {form.produtoIds.map((pid) => {
+                      const prod = produtoById.get(pid);
+                      const label = prod?.nome ?? "Produto indisponível";
+                      return (
+                        <span
+                          key={pid}
+                          className="inline-flex items-center gap-1.5 rounded-full bg-amber-100/90 border border-amber-300 px-2.5 py-1 text-xs font-medium text-amber-950 dark:bg-amber-950/70 dark:border-amber-800 dark:text-amber-100"
+                        >
+                          {label}
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setForm((f) => ({
+                                ...f,
+                                produtoIds: f.produtoIds.filter((x) => x !== pid),
+                              }))
+                            }
+                            className="rounded-full p-0.5 hover:bg-amber-200 dark:hover:bg-amber-900 text-amber-800 dark:text-amber-300 transition-colors"
+                            title="Remover produto"
+                          >
+                            <XIcon className="h-3 w-3" />
+                          </button>
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Search Input for Products */}
+                <div className="relative">
+                  <SearchIcon className="absolute left-3.5 top-3 h-4 w-4 text-zinc-400" />
+                  <input
+                    type="search"
+                    value={produtoQuery}
+                    onChange={(e) => setProdutoQuery(e.target.value)}
+                    className="w-full rounded-xl border border-zinc-300 bg-white pl-10 pr-3 py-2.5 text-sm text-zinc-900 outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500/30 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
+                    placeholder="Digite para buscar produtos no catálogo..."
+                    autoComplete="off"
+                  />
+                </div>
+
+                {/* Filtered Products List */}
+                <div className="max-h-48 overflow-y-auto rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950">
+                  {filteredProdutosForModal.length === 0 ? (
+                    <div className="p-3 text-center text-xs text-zinc-500 dark:text-zinc-400">
+                      {produtos.length === 0
+                        ? "Nenhum produto cadastrado no catálogo."
+                        : "Nenhum produto encontrado com essa busca."}
+                    </div>
+                  ) : (
+                    <ul className="divide-y divide-zinc-100 dark:divide-zinc-800/60">
+                      {filteredProdutosForModal.map((pr) => {
+                        const isSelected = form.produtoIds.includes(pr.id);
+                        return (
+                          <li key={pr.id}>
+                            <label className={`flex cursor-pointer items-center justify-between px-3.5 py-2.5 text-sm transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-900/60 ${isSelected ? "bg-amber-50/50 dark:bg-amber-950/20" : ""}`}>
+                              <div className="flex items-center gap-3">
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  onChange={() =>
+                                    setForm((f) => ({
+                                      ...f,
+                                      produtoIds: toggleId(f.produtoIds, pr.id),
+                                    }))
+                                  }
+                                  className="h-4 w-4 rounded border-zinc-400 text-amber-600 focus:ring-amber-500"
+                                />
+                                <span className="font-medium text-zinc-900 dark:text-zinc-100">
+                                  {pr.nome}
+                                </span>
+                              </div>
+                              {pr.valorCompra > 0 && (
+                                <span className="text-xs text-zinc-400 tabular-nums">
+                                  {formatBRL(pr.valorCompra)}
+                                </span>
+                              )}
+                            </label>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="flex items-center justify-end gap-3 border-t border-zinc-200 bg-zinc-50/50 px-6 py-4 dark:border-zinc-800 dark:bg-zinc-900/50">
               <button
                 type="button"
                 onClick={closeModal}
-                className="rounded-lg px-3 py-2 text-sm font-medium text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800"
+                className="rounded-xl border border-zinc-300 px-4 py-2.5 text-sm font-semibold text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800 transition-colors"
               >
-                Fechar
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                disabled={submitting}
+                className="inline-flex items-center justify-center rounded-xl bg-sky-600 px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-sky-700 active:bg-sky-800 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {submitting ? "Salvando…" : modalMode === "edit" ? "Salvar alterações" : "Criar serviço"}
               </button>
             </div>
-
-            <form
-              onSubmit={submit}
-              className="flex flex-1 flex-col overflow-hidden"
-            >
-              <div
-                id={descId}
-                className="flex-1 space-y-4 overflow-y-auto px-4 py-4"
-              >
-                {formError ? (
-                  <p
-                    className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800 dark:bg-red-950/50 dark:text-red-200"
-                    role="alert"
-                  >
-                    {formError}
-                  </p>
-                ) : null}
-
-                <div>
-                  <span className="block text-sm font-medium text-zinc-800 dark:text-zinc-200">
-                    Foto{" "}
-                    <span className="font-normal text-zinc-500">(opcional)</span>
-                  </span>
-                  <div className="mt-2 flex items-center gap-3">
-                    <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-zinc-200 dark:bg-zinc-800">
-                      {form.fotoDataUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={form.fotoDataUrl}
-                          alt=""
-                          className="h-full w-full object-cover"
-                        />
-                      ) : (
-                        <span className="flex h-full w-full items-center justify-center text-xs text-zinc-500">
-                          —
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex flex-col gap-1">
-                      <input
-                        ref={fileInputRef}
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        onChange={onPickPhoto}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => fileInputRef.current?.click()}
-                        className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-800 hover:bg-zinc-50 dark:border-zinc-600 dark:text-zinc-200 dark:hover:bg-zinc-800"
-                      >
-                        Escolher foto
-                      </button>
-                      {form.fotoDataUrl ? (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setForm((f) => ({ ...f, fotoDataUrl: "" }))
-                          }
-                          className="text-left text-xs text-red-600 hover:underline dark:text-red-400"
-                        >
-                          Remover foto
-                        </button>
-                      ) : null}
-                    </div>
-                  </div>
-                </div>
-
-                <label className="block">
-                  <span className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
-                    Nome
-                  </span>
-                  <input
-                    type="text"
-                    value={form.nome}
-                    onChange={(e) =>
-                      setForm((f) => ({ ...f, nome: e.target.value }))
-                    }
-                    className="mt-1.5 w-full rounded-xl border border-zinc-300 bg-white px-3 py-2.5 text-[15px] text-zinc-900 outline-none ring-sky-500/40 focus:border-sky-500 focus:ring-2 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-100"
-                    placeholder="Ex.: Abertura residencial"
-                  />
-                </label>
-
-                <label className="block">
-                  <span className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
-                    Valor
-                  </span>
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    value={form.valor}
-                    onChange={(e) =>
-                      setForm((f) => ({ ...f, valor: e.target.value }))
-                    }
-                    className="mt-1.5 w-full rounded-xl border border-zinc-300 bg-white px-3 py-2.5 text-[15px] text-zinc-900 outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500/30 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-100"
-                    placeholder="0,00"
-                  />
-                </label>
-
-                <label className="block">
-                  <span className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
-                    Valor noturno{" "}
-                    <span className="font-normal text-zinc-500">(opcional)</span>
-                  </span>
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    value={form.valorNoturno}
-                    onChange={(e) =>
-                      setForm((f) => ({ ...f, valorNoturno: e.target.value }))
-                    }
-                    className="mt-1.5 w-full rounded-xl border border-zinc-300 bg-white px-3 py-2.5 text-[15px] text-zinc-900 outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500/30 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-100"
-                    placeholder="0,00 — vazio = R$ 0,00"
-                  />
-                </label>
-
-                <label className="block">
-                  <span className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
-                    Gastos estimados{" "}
-                    <span className="font-normal text-zinc-500">(opcional)</span>
-                  </span>
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    value={form.gastosEstimados}
-                    onChange={(e) =>
-                      setForm((f) => ({
-                        ...f,
-                        gastosEstimados: e.target.value,
-                      }))
-                    }
-                    className="mt-1.5 w-full rounded-xl border border-zinc-300 bg-white px-3 py-2.5 text-[15px] text-zinc-900 outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500/30 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-100"
-                    placeholder="0,00 — vazio = R$ 0,00"
-                  />
-                </label>
-
-                <label className="block">
-                  <span className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
-                    Observações
-                  </span>
-                  <textarea
-                    value={form.observacoes}
-                    onChange={(e) =>
-                      setForm((f) => ({ ...f, observacoes: e.target.value }))
-                    }
-                    rows={3}
-                    className="mt-1.5 w-full resize-none rounded-xl border border-zinc-300 bg-white px-3 py-2.5 text-[15px] text-zinc-900 outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500/30 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-100"
-                    placeholder="Detalhes, prazos, inclusões…"
-                  />
-                </label>
-
-                <label className="block">
-                  <span className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
-                    Ferramentas{" "}
-                    <span className="font-normal text-zinc-500">(opcional, separadas por vírgula)</span>
-                  </span>
-                  <input
-                    type="text"
-                    value={form.ferramentas}
-                    onChange={(e) =>
-                      setForm((f) => ({ ...f, ferramentas: e.target.value }))
-                    }
-                    className="mt-1.5 w-full rounded-xl border border-zinc-300 bg-white px-3 py-2.5 text-[15px] text-zinc-900 outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500/30 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-100"
-                    placeholder="Ex.: Chave Phillips, Ferro de solda, Estilete"
-                  />
-                </label>
-
-                <fieldset className="rounded-xl border border-zinc-200 p-3 dark:border-zinc-700">
-                  <legend className="px-1 text-sm font-medium text-zinc-800 dark:text-zinc-200">
-                    Prestadores de serviço
-                  </legend>
-                  <p className="mb-2 text-xs text-zinc-500 dark:text-zinc-400">
-                    Marque os parceiros que realizam este serviço. Cadastre
-                    parceiros em &quot;Parceiros&quot; se a lista estiver vazia.
-                  </p>
-                  {partners.length === 0 ? (
-                    <p className="text-sm text-zinc-500 dark:text-zinc-400">
-                      Nenhum parceiro cadastrado.
-                    </p>
-                  ) : (
-                    <ul className="max-h-40 space-y-2 overflow-y-auto pr-1">
-                      {partners.map((p) => (
-                        <li key={p.id}>
-                          <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-transparent px-2 py-2 hover:bg-zinc-50 dark:hover:bg-zinc-900">
-                            <input
-                              type="checkbox"
-                              checked={form.prestadorIds.includes(p.id)}
-                              onChange={() =>
-                                setForm((f) => ({
-                                  ...f,
-                                  prestadorIds: toggleId(
-                                    f.prestadorIds,
-                                    p.id
-                                  ),
-                                }))
-                              }
-                              className="h-4 w-4 rounded border-zinc-400 text-sky-600 focus:ring-sky-500"
-                            />
-                            <span className="min-w-0 text-[15px] text-zinc-800 dark:text-zinc-200">
-                              {p.nome}
-                            </span>
-                          </label>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </fieldset>
-
-                <fieldset className="rounded-xl border border-zinc-200 p-3 dark:border-zinc-700">
-                  <legend className="px-1 text-sm font-medium text-zinc-800 dark:text-zinc-200">
-                    Produtos usados no serviço
-                  </legend>
-                  <p className="mb-2 text-xs text-zinc-500 dark:text-zinc-400">
-                    Marque itens como miolos, chips ou chaves. Cadastre-os em
-                    &quot;Produtos&quot; se a lista estiver vazia.
-                  </p>
-                  {produtos.length === 0 ? (
-                    <p className="text-sm text-zinc-500 dark:text-zinc-400">
-                      Nenhum produto no catálogo.
-                    </p>
-                  ) : (
-                    <ul className="max-h-40 space-y-2 overflow-y-auto pr-1">
-                      {produtos.map((pr) => (
-                        <li key={pr.id}>
-                          <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-transparent px-2 py-2 hover:bg-zinc-50 dark:hover:bg-zinc-900">
-                            <input
-                              type="checkbox"
-                              checked={form.produtoIds.includes(pr.id)}
-                              onChange={() =>
-                                setForm((f) => ({
-                                  ...f,
-                                  produtoIds: toggleId(f.produtoIds, pr.id),
-                                }))
-                              }
-                              className="h-4 w-4 rounded border-zinc-400 text-amber-600 focus:ring-amber-500"
-                            />
-                            <span className="min-w-0 text-[15px] text-zinc-800 dark:text-zinc-200">
-                              {pr.nome}
-                            </span>
-                          </label>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </fieldset>
-
-                <div className="space-y-2">
-                  <span className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
-                    Segmentos
-                  </span>
-                  <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-zinc-200 px-3 py-2.5 dark:border-zinc-700">
-                    <input
-                      type="checkbox"
-                      checked={form.automotivo}
-                      onChange={(e) =>
-                        setForm((f) => ({ ...f, automotivo: e.target.checked }))
-                      }
-                      className="h-4 w-4 rounded border-zinc-400 text-sky-600 focus:ring-sky-500"
-                    />
-                    <span className="text-[15px] text-zinc-800 dark:text-zinc-200">
-                      Automotivo
-                    </span>
-                  </label>
-                  <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-zinc-200 px-3 py-2.5 dark:border-zinc-700">
-                    <input
-                      type="checkbox"
-                      checked={form.residencial}
-                      onChange={(e) =>
-                        setForm((f) => ({
-                          ...f,
-                          residencial: e.target.checked,
-                        }))
-                      }
-                      className="h-4 w-4 rounded border-zinc-400 text-sky-600 focus:ring-sky-500"
-                    />
-                    <span className="text-[15px] text-zinc-800 dark:text-zinc-200">
-                      Residencial
-                    </span>
-                  </label>
-                </div>
-              </div>
-
-              <div className="shrink-0 border-t border-zinc-200 p-4 dark:border-zinc-800">
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="flex h-12 w-full items-center justify-center rounded-xl bg-sky-600 text-base font-semibold text-white hover:bg-sky-700 active:bg-sky-800 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {submitting ? "Salvando..." : "Salvar serviço"}
-                </button>
-              </div>
-            </form>
-          </div>
+          </form>
         </div>
       </div>
     );

@@ -615,6 +615,32 @@ export function ProdutosScreen() {
     [editingProdutoId, fetchProdutos]
   );
 
+  /* ── delete link from inline expanded row (no modal) ─────────── */
+  const deleteLinkFromProduct = useCallback(
+    async (produtoId: string, linkId: string) => {
+      try {
+        const response = await fetch(
+          `/api/produtos/${produtoId}/links?linkId=${linkId}`,
+          { method: "DELETE" }
+        );
+        if (!response.ok) throw new Error("Falha ao deletar link");
+
+        // Refresh the expanded row data
+        setExpandedLinks((prev) => ({
+          ...prev,
+          [produtoId]: {
+            loading: false,
+            data: prev[produtoId]?.data?.filter((l) => l.id !== linkId) ?? [],
+          },
+        }));
+        fetchProdutos();
+      } catch (err) {
+        console.error("Error deleting link:", err);
+      }
+    },
+    [fetchProdutos]
+  );
+
   /* ── escape to close & paste image ──────────────────────────────── */
   useEffect(() => {
     if (!modalOpen) return;
@@ -831,29 +857,28 @@ export function ProdutosScreen() {
                                           <StarIcon className="h-4.5 w-4.5" solid={isSelected} />
                                         </button>
                                       </td>
-                                      <td className="px-3 py-2 font-medium text-zinc-800 dark:text-zinc-200 whitespace-nowrap">
+                                      <td className="px-3 py-2 font-medium text-zinc-800 dark:text-zinc-200">
                                         {l.fornecedor || "—"}
                                       </td>
-                                      <td className="px-3 py-2 max-w-[220px]">
+                                      <td className="px-3 py-2">
                                         <a
                                           href={l.url}
                                           target="_blank"
                                           rel="noopener noreferrer"
                                           onClick={(e) => e.stopPropagation()}
                                           className="inline-flex items-center gap-1.5 text-sky-600 hover:underline dark:text-sky-400"
-                                          title={l.url}
                                         >
                                           {getMarketplaceName(l.url)}
-                                          <ExternalLinkIcon className="h-3 w-3 shrink-0" />
+                                          <ExternalLinkIcon className="h-3 w-3" />
                                         </a>
                                       </td>
-                                      <td className="px-3 py-2 text-zinc-600 dark:text-zinc-400 whitespace-nowrap">
+                                      <td className="px-3 py-2 text-zinc-600 dark:text-zinc-400">
                                         {l.quantidade} {l.quantidade === 1 ? "unidade" : "unidades"}
                                       </td>
-                                      <td className="px-3 py-2 text-zinc-700 dark:text-zinc-300 whitespace-nowrap">
+                                      <td className="px-3 py-2 text-zinc-700 dark:text-zinc-300">
                                         {formatBRL(l.preco)}
                                       </td>
-                                      <td className="px-3 py-2 font-semibold text-zinc-900 dark:text-zinc-50 text-right whitespace-nowrap">
+                                      <td className="px-3 py-2 font-semibold text-zinc-900 dark:text-zinc-50 text-right">
                                         {formatBRL(unit)}
                                       </td>
                                       <td className="px-2 py-2 text-center">
@@ -861,13 +886,13 @@ export function ProdutosScreen() {
                                           type="button"
                                           onClick={(e) => {
                                             e.stopPropagation();
-                                            deleteLink(l.id);
+                                            if (confirm("Remover este link de compra?")) deleteLinkFromProduct(p.id, l.id);
                                           }}
-                                          className="rounded-full p-1 text-zinc-300 transition-colors hover:bg-red-50 hover:text-red-500 dark:text-zinc-700 dark:hover:bg-red-950/40 dark:hover:text-red-400"
+                                          className="rounded-full p-0.5 text-zinc-300 transition-colors hover:text-red-500 dark:text-zinc-700 dark:hover:text-red-400"
                                           title="Remover link"
                                         >
                                           <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                                           </svg>
                                         </button>
                                       </td>

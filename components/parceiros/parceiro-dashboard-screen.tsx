@@ -8,8 +8,10 @@ import { parsePartnersJson } from "@/lib/partner";
 import type { VendaLg } from "@/lib/venda-lg";
 import { parseVendasLgJson } from "@/lib/venda-lg";
 import type { Service } from "@/lib/service";
+import { parseServicesJson } from "@/lib/service";
+import { VendaDetailModal } from "@/components/vendas-lg/venda-detail-modal";
+import { SingleLocationMap } from "@/components/locations/single-location-map";
 import { formatBRL } from "@/lib/money";
-import { VendaDetalheModal } from "@/components/vendas-lg/venda-detalhe-modal";
 import {
   ArrowLeft,
   DollarSign,
@@ -106,8 +108,9 @@ function SegmentBadges({ partner }: { partner: Partner }) {
 export function ParceiroDashboardScreen({ id }: ParceiroDashboardScreenProps) {
   const router = useRouter();
   const [partner, setPartner] = useState<Partner | null>(null);
+  const [allPartners, setAllPartners] = useState<Partner[]>([]);
   const [vendas, setVendas] = useState<VendaLg[]>([]);
-  const [services, setServices] = useState<Service[]>([]);
+  const [servicos, setServicos] = useState<Service[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedVenda, setSelectedVenda] = useState<VendaLg | null>(null);
@@ -116,10 +119,11 @@ export function ParceiroDashboardScreen({ id }: ParceiroDashboardScreenProps) {
     const fetchData = async () => {
       try {
         setLoading(true);
-        const [partnerRes, vendasRes, servicosRes] = await Promise.all([
+        const [partnerRes, vendasRes, servicosRes, partnersRes] = await Promise.all([
           fetch(`/api/parceiros/${id}`),
           fetch("/api/vendas-lg"),
           fetch("/api/servicos"),
+          fetch("/api/parceiros"),
         ]);
 
         if (!partnerRes.ok) {
@@ -131,9 +135,14 @@ export function ParceiroDashboardScreen({ id }: ParceiroDashboardScreenProps) {
         const partnerData = await partnerRes.json();
         setPartner(partnerData);
 
+        if (partnersRes.ok) {
+          const partnersData = await partnersRes.json();
+          setAllPartners(partnersData);
+        }
+
         if (servicosRes.ok) {
-          const svcData = await servicosRes.json();
-          setServices(svcData);
+          const servicosData = await servicosRes.json();
+          setServicos(servicosData);
         }
 
         if (vendasRes.ok) {
@@ -158,6 +167,7 @@ export function ParceiroDashboardScreen({ id }: ParceiroDashboardScreenProps) {
         const localPartners = localStorage.getItem("finances.parceiros.v1");
         if (localPartners) {
           const partnersList = parsePartnersJson(localPartners);
+          setAllPartners(partnersList);
           const found = partnersList.find((p) => p.id === id);
           if (found) {
             setPartner(found);
@@ -167,6 +177,10 @@ export function ParceiroDashboardScreen({ id }: ParceiroDashboardScreenProps) {
         const localVendas = localStorage.getItem("finances.vendas-lg.v1");
         if (localVendas) {
           setVendas(parseVendasLgJson(localVendas));
+        }
+        const localServicos = localStorage.getItem("finances.servicos.v1");
+        if (localServicos) {
+          setServicos(parseServicesJson(localServicos));
         }
       } finally {
         setLoading(false);
@@ -270,6 +284,12 @@ export function ParceiroDashboardScreen({ id }: ParceiroDashboardScreenProps) {
       { name: "Pendente", value: stats.comissaoNaoPaga, color: "#f59e0b" },
     ].filter((item) => item.value > 0);
   }, [stats]);
+
+  const servicoById = useMemo(() => {
+    const m = new Map<string, Service>();
+    for (const s of servicos) m.set(s.id, s);
+    return m;
+  }, [servicos]);
 
   if (loading) {
     return (
@@ -439,12 +459,12 @@ export function ParceiroDashboardScreen({ id }: ParceiroDashboardScreenProps) {
               Abrir no Google Maps ↗
             </a>
           </div>
-          <div className="relative h-64 w-full">
-            <iframe
-              title={`Localização de ${partner.nome}`}
-              className="h-full w-full border-0"
-              src={`https://www.openstreetmap.org/export/embed.html?bbox=${Number(partner.longitude) - 0.048}%2C${Number(partner.latitude) - 0.032}%2C${Number(partner.longitude) + 0.048}%2C${Number(partner.latitude) + 0.032}&layer=mapnik&marker=${partner.latitude}%2C${partner.longitude}`}
-              scrolling="no"
+          <div className="h-64 w-full">
+            <SingleLocationMap
+              latitude={Number(partner.latitude)}
+              longitude={Number(partner.longitude)}
+              popupTitle={partner.nome}
+              popupSubtitle={partner.endereco}
             />
           </div>
         </section>
@@ -674,15 +694,17 @@ export function ParceiroDashboardScreen({ id }: ParceiroDashboardScreenProps) {
         )}
       </section>
 
-      {/* Venda detail modal */}
-      {partner && (
-        <VendaDetalheModal
-          venda={selectedVenda}
-          servicoById={new Map(services.map((s) => [s.id, s]))}
-          parceiros={partner ? [partner] : []}
-          onClose={() => setSelectedVenda(null)}
-        />
-      )}
+      {/* Sale Detail Modal */}
+      <VendaDetailModal
+        venda={selectedVenda}
+        servicoById={servicoById}
+        parceiros={allPartners.length > 0 ? allPartners : partner ? [partner] : []}
+        onClose={() => setSelectedVenda(null)}
+        onUpdateVenda={(updated) => {
+          setSelectedVenda(updated);
+          setVendas((prev) => prev.map((v) => (v.id === updated.id ? updated : v)));
+        }}
+      />
     </div>
   );
 }

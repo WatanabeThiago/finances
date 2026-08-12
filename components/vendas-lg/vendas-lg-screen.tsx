@@ -14,6 +14,8 @@ import {
 import type { VendaLg, VendaLgLine } from "@/lib/venda-lg";
 import { totalVendaLg } from "@/lib/venda-lg";
 import { generateReceiptHTML } from "@/lib/pdf-receipt";
+import { VendaDetailModal } from "@/components/vendas-lg/venda-detail-modal";
+import { SingleLocationMap } from "@/components/locations/single-location-map";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -381,6 +383,7 @@ function VendasLgWorkspace({ mode }: { mode: VendasLgWorkspaceMode }) {
   const [modalOpen, setModalOpen] = useState(isCreatePage);
   const [modalMode, setModalMode] = useState<ModalMode>("create");
   const [editingVendaId, setEditingVendaId] = useState<string | null>(null);
+  const [viewingVenda, setViewingVenda] = useState<VendaLg | null>(null);
   const [form, setForm] = useState(emptyModalState());
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -958,6 +961,18 @@ function VendasLgWorkspace({ mode }: { mode: VendasLgWorkspaceMode }) {
                   <div className="flex gap-1 shrink-0">
                     <button
                       type="button"
+                      onClick={() => setViewingVenda(v)}
+                      className="rounded-lg p-2 text-zinc-400 transition-colors hover:bg-sky-50 hover:text-sky-600 dark:hover:bg-sky-950/45 dark:hover:text-sky-400"
+                      aria-label="Ver detalhes da venda"
+                      title="Ver detalhes"
+                    >
+                      <svg className="h-4.5 w-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                      </svg>
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => openModal(v)}
                       className="rounded-lg p-2 text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-600 dark:hover:bg-zinc-800 dark:hover:text-zinc-300"
                       aria-label="Editar venda"
@@ -1006,12 +1021,12 @@ function VendasLgWorkspace({ mode }: { mode: VendasLgWorkspaceMode }) {
 
               {/* Right Side: Map */}
               {hasValidCoords && (
-                <div className="w-full md:w-96 shrink-0 border-t md:border-t-0 md:border-l border-zinc-200 dark:border-zinc-800 h-56 md:h-auto relative overflow-hidden">
-                  <iframe
-                    title={`Localização do serviço - ${v.clienteNome}`}
-                    className="h-full w-full border-0"
-                    src={`https://www.openstreetmap.org/export/embed.html?bbox=${v.longitude! - 0.048}%2C${v.latitude! - 0.032}%2C${v.longitude! + 0.048}%2C${v.latitude! + 0.032}&layer=mapnik&marker=${v.latitude!}%2C${v.longitude!}`}
-                    scrolling="no"
+                <div className="w-full md:w-96 shrink-0 border-t md:border-t-0 md:border-l border-zinc-200 dark:border-zinc-800 h-56 md:h-auto min-h-[220px]">
+                  <SingleLocationMap
+                    latitude={v.latitude!}
+                    longitude={v.longitude!}
+                    popupTitle={v.clienteNome}
+                    popupSubtitle={v.endereco}
                   />
                 </div>
               )}
@@ -2074,6 +2089,18 @@ function VendasLgWorkspace({ mode }: { mode: VendasLgWorkspaceMode }) {
           </div>
         </div>
       ) : null}
+
+      {/* Detail Modal */}
+      <VendaDetailModal
+        venda={viewingVenda}
+        servicoById={servicoById}
+        parceiros={parceiros}
+        onClose={() => setViewingVenda(null)}
+        onUpdateVenda={(updated) => {
+          setViewingVenda(updated);
+          setVendas((prev) => prev.map((v) => (v.id === updated.id ? updated : v)));
+        }}
+      />
     </div>
   );
 }
