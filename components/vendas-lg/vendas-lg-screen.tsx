@@ -1802,7 +1802,20 @@ function VendasLgWorkspace({ mode }: { mode: VendasLgWorkspaceMode }) {
                             }}
                             className="flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2.5 text-left text-sm text-zinc-900 hover:bg-sky-50 dark:text-zinc-100 dark:hover:bg-sky-950/40"
                           >
-                            <span className="font-medium">{partner.nome}</span>
+                            <div className="flex items-center gap-3 min-w-0">
+                              {partner.fotoDataUrl ? (
+                                <img
+                                  src={partner.fotoDataUrl}
+                                  alt={partner.nome}
+                                  className="h-8 w-8 rounded-full object-cover shrink-0"
+                                />
+                              ) : (
+                                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-sky-400 to-indigo-500 text-[10px] font-bold text-white">
+                                  {partner.nome.split(" ").filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join("")}
+                                </span>
+                              )}
+                              <span className="font-medium truncate">{partner.nome}</span>
+                            </div>
                             {(partner as any)._dist != null ? (
                               <span className="shrink-0 text-xs text-zinc-500">
                                 {((partner as any)._dist as number).toFixed(1)} km
@@ -1977,9 +1990,22 @@ function VendasLgWorkspace({ mode }: { mode: VendasLgWorkspaceMode }) {
                                 onClick={() => addServicoLinha(s)}
                                 className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left text-[15px] hover:bg-zinc-50 active:bg-zinc-100 dark:hover:bg-zinc-900 dark:active:bg-zinc-800"
                               >
-                                <span className="font-medium text-zinc-900 dark:text-zinc-50">
-                                  {s.nome}
-                                </span>
+                                <div className="flex items-center gap-3 min-w-0">
+                                  {s.fotoDataUrl ? (
+                                    <img
+                                      src={s.fotoDataUrl}
+                                      alt={s.nome}
+                                      className="h-8 w-8 rounded-md object-cover shrink-0"
+                                    />
+                                  ) : (
+                                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-gradient-to-br from-sky-400 to-indigo-500 text-[10px] font-bold text-white">
+                                      {s.nome.split(" ").filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join("")}
+                                    </span>
+                                  )}
+                                  <span className="font-medium text-zinc-900 dark:text-zinc-50 truncate">
+                                    {s.nome}
+                                  </span>
+                                </div>
                                 <span className="shrink-0 text-sm tabular-nums text-zinc-500">
                                   {formatBRL(s.valor)}
                                 </span>
