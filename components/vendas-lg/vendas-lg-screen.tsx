@@ -1623,10 +1623,13 @@ function VendasLgWorkspace({ mode }: { mode: VendasLgWorkspaceMode }) {
                         telefone={form.clienteTelefone}
                         documento={form.clienteDoc}
                         onChange={(fields) =>
-                          setForm((f) => ({
-                            ...f,
-                            ...fields,
-                          }))
+                          setForm((f) => {
+                            const patch: any = {};
+                            if (fields.nome !== undefined) patch.clienteNome = fields.nome;
+                            if (fields.telefone !== undefined) patch.clienteTelefone = fields.telefone;
+                            if (fields.documento !== undefined) patch.clienteDoc = fields.documento;
+                            return { ...f, ...patch };
+                          })
                         }
                       />
                     </label>
