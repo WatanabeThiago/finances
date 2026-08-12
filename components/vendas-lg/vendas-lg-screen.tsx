@@ -350,29 +350,34 @@ function VendasLgWorkspace({ mode }: { mode: VendasLgWorkspaceMode }) {
 
   // Fetch servicos from API
   const [servicos, setServicos] = useState<Service[]>([]);
+  const [isFetchingServicos, setIsFetchingServicos] = useState(false);
+
+  const fetchServicos = useCallback(async () => {
+    setIsFetchingServicos(true);
+    try {
+      const response = await fetch("/api/servicos");
+      if (!response.ok) throw new Error("Falha ao carregar serviços");
+      const data = await response.json();
+      setServicos(normalizeServices(data));
+    } catch (err) {
+      console.error("Error fetching servicos:", err);
+      // Fallback to localStorage
+      try {
+        const localData = localStorage.getItem("finances.servicos.v1");
+        if (localData) {
+          setServicos(parseServicesJson(localData));
+        }
+      } catch {
+        setServicos([]);
+      }
+    } finally {
+      setIsFetchingServicos(false);
+    }
+  }, []);
 
   useEffect(() => {
-    const fetchServicos = async () => {
-      try {
-        const response = await fetch("/api/servicos");
-        if (!response.ok) throw new Error("Falha ao carregar serviços");
-        const data = await response.json();
-        setServicos(normalizeServices(data));
-      } catch (err) {
-        console.error("Error fetching servicos:", err);
-        // Fallback to localStorage
-        try {
-          const localData = localStorage.getItem("finances.servicos.v1");
-          if (localData) {
-            setServicos(parseServicesJson(localData));
-          }
-        } catch {
-          setServicos([]);
-        }
-      }
-    };
     fetchServicos();
-  }, []);
+  }, [fetchServicos]);
 
   const servicoById = useMemo(() => {
     const m = new Map<string, Service>();
@@ -1946,9 +1951,19 @@ function VendasLgWorkspace({ mode }: { mode: VendasLgWorkspaceMode }) {
                 </section>
 
                 <section>
-                  <h4 className="text-sm font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-                    Serviços
-                  </h4>
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-sm font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                      Serviços
+                    </h4>
+                    <button
+                      type="button"
+                      onClick={() => fetchServicos()}
+                      disabled={isFetchingServicos}
+                      className="flex items-center gap-1.5 text-xs font-medium text-sky-600 hover:text-sky-700 disabled:opacity-50 dark:text-sky-400 dark:hover:text-sky-300"
+                    >
+                      {isFetchingServicos ? "⏳ Atualizando..." : "🔄 Atualizar"}
+                    </button>
+                  </div>
                   <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
                     Busque e toque em um serviço para adicionar à venda. Você
                     pode ajustar preços e quantidade em cada linha.
