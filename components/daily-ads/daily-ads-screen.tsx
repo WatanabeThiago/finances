@@ -243,6 +243,45 @@ export function DailyAdsScreen() {
     });
   }, [displayRecords, sortDirection, sortKey]);
 
+  const totals = useMemo(() => {
+    let result = 0;
+    let commission = 0;
+    let spend = 0;
+    let clicks = 0;
+    let impressions = 0;
+    let revenue = 0;
+    let clients = 0;
+
+    for (const record of displayRecords) {
+      result += record.result;
+      commission += record.commission;
+      spend += record.spend;
+      clicks += record.clicks;
+      impressions += record.impressions;
+      revenue += record.revenue;
+      clients += record.clients;
+    }
+
+    const cpc = clicks > 0 ? spend / clicks : 0;
+    const cpa = clients > 0 ? spend / clients : 0;
+    const roas = spend > 0 ? commission / spend : 0;
+    const averageCommission = clients > 0 ? commission / clients : 0;
+
+    return {
+      result,
+      commission,
+      spend,
+      cpc,
+      clicks,
+      impressions,
+      revenue,
+      cpa,
+      roas,
+      clients,
+      averageCommission,
+    };
+  }, [displayRecords]);
+
   useEffect(() => {
     let active = true;
 
@@ -470,6 +509,58 @@ export function DailyAdsScreen() {
               <SortButton label="Comissão média" sortKey="averageCommission" activeKey={sortKey} direction={sortDirection} onSort={handleSort} />
               <span className="self-center px-3 text-right">Ações</span>
             </div>
+
+            {displayRecords.length > 0 && (
+              <div className="mb-3 mt-1 grid grid-cols-[1.2fr_1.1fr_1fr_1fr_1fr_1fr_1fr_1.2fr_1fr_1fr_1fr_1.2fr_96px] items-center divide-x divide-blue-200/60 rounded-xl bg-blue-50 py-3 text-blue-900 shadow-sm dark:divide-blue-900/50 dark:bg-blue-950/40 dark:text-blue-100">
+                <span className="px-3 text-sm font-bold uppercase tracking-wider">
+                  Total
+                </span>
+                <span
+                  className={`px-3 text-right text-sm font-bold tabular-nums ${
+                    totals.result > 0
+                      ? "text-emerald-700 dark:text-emerald-400"
+                      : totals.result < 0
+                        ? "text-red-700 dark:text-red-400"
+                        : ""
+                  }`}
+                >
+                  {currencyFormatter.format(totals.result)}
+                </span>
+                <span className="px-3 text-right text-sm font-bold tabular-nums">
+                  {currencyFormatter.format(totals.commission)}
+                </span>
+                <span className="px-3 text-right text-sm font-bold tabular-nums">
+                  {currencyFormatter.format(totals.spend)}
+                </span>
+                <span className="px-3 text-right text-sm font-medium tabular-nums opacity-90">
+                  {currencyFormatter.format(totals.cpc)}
+                </span>
+                <span className="px-3 text-right text-sm font-medium tabular-nums opacity-90">
+                  {numberFormatter.format(totals.clicks)}
+                </span>
+                <span className="px-3 text-right text-sm font-medium tabular-nums opacity-90">
+                  {numberFormatter.format(totals.impressions)}
+                </span>
+                <span className="px-3 text-right text-sm font-bold tabular-nums text-emerald-700 dark:text-emerald-400">
+                  {currencyFormatter.format(totals.revenue)}
+                </span>
+                <span className="px-3 text-right text-sm font-medium tabular-nums opacity-90">
+                  {totals.clients > 0 ? currencyFormatter.format(totals.cpa) : "—"}
+                </span>
+                <span className="px-3 text-right text-sm font-bold tabular-nums">
+                  {totals.spend > 0 ? `${ratioFormatter.format(totals.roas)}x` : "—"}
+                </span>
+                <span className="px-3 text-right text-sm font-bold tabular-nums">
+                  {numberFormatter.format(totals.clients)}
+                </span>
+                <span className="px-3 text-right text-sm font-medium tabular-nums opacity-90">
+                  {totals.clients > 0 ? currencyFormatter.format(totals.averageCommission) : "—"}
+                </span>
+                <span className="px-3 text-right text-sm font-medium opacity-50">
+                  —
+                </span>
+              </div>
+            )}
 
             {actionError ? (
               <p className="mb-2 rounded-lg bg-red-50 px-3 py-2 text-sm font-medium text-red-600 dark:bg-red-950/30 dark:text-red-400">
