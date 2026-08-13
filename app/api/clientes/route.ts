@@ -6,15 +6,36 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const search = searchParams.get("q") || "";
 
-    let sql = `SELECT * FROM public."Cliente"`;
+    let whereClause = "";
     let params: any[] = [];
 
     if (search) {
-      sql += ` WHERE nome ILIKE $1 OR telefone ILIKE $1`;
+      whereClause = `WHERE c.nome ILIKE $1 OR c.telefone ILIKE $1 OR c.documento ILIKE $1`;
       params.push(`%${search}%`);
     }
 
-    sql += ` ORDER BY "updatedAt" DESC`;
+    const sql = `
+      SELECT 
+        c.telefone,
+        c.nome,
+        c.documento,
+        c."createdAt",
+        c."updatedAt",
+        COALESCE(COUNT(DISTINCT v.id), 0)::int AS "totalVendas",
+        COALESCE(SUM(l.preco * l.quantidade), 0)::float AS "faturamento"
+      FROM public."Cliente" c
+      LEFT JOIN public."VendaLg" v ON (
+        TRIM(v."clienteTelefone") = TRIM(c.telefone)
+        OR (
+          (v."clienteTelefone" IS NULL OR TRIM(v."clienteTelefone") = '') 
+          AND LOWER(TRIM(v."clienteNome")) = LOWER(TRIM(c.nome))
+        )
+      )
+      LEFT JOIN public."VendaLgLine" l ON l."vendaLgId" = v.id
+      ${whereClause}
+      GROUP BY c.telefone, c.nome, c.documento, c."createdAt", c."updatedAt"
+      ORDER BY "faturamento" DESC, c."updatedAt" DESC
+    `;
 
     const result = await query(sql, params);
     return NextResponse.json(sanitizeData(result));

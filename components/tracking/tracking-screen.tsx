@@ -37,7 +37,7 @@ export function TrackingScreen() {
   const [togglingVendaId, setTogglingVendaId] = useState<string | null>(null);
   const [expandedVisitors, setExpandedVisitors] = useState<Set<string>>(new Set());
   const [syncing, setSyncing] = useState(false);
-  const [dateFilter, setDateFilter] = useState<"today" | "yesterday" | "7days" | "30days" | "all">("today");
+  const [dateFilter, setDateFilter] = useState<"today" | "yesterday" | "7days" | "30days" | "thisMonth" | "all">("today");
   const [campaignFilter, setCampaignFilter] = useState<string>("all");
   const [ignoreBots, setIgnoreBots] = useState(true);
   const [syncResult, setSyncResult] = useState<{ matched: number; details: { visitor_id: string; phone: string; diff_seconds: number }[] } | null>(null);
@@ -47,6 +47,7 @@ export function TrackingScreen() {
   const [savingTemplate, setSavingTemplate] = useState(false);
   const [kwSort, setKwSort] = useState<{ col: "total" | "converted" | "rate"; dir: "desc" | "asc" }>({ col: "rate", dir: "desc" });
   const [copied, setCopied] = useState(false);
+  const [copiedAI, setCopiedAI] = useState(false);
 
   type AnalysisResult = {
     resumo: string;
@@ -204,6 +205,55 @@ export function TrackingScreen() {
     });
   };
 
+  const handleCopyForAI = () => {
+    const sessions = groupedVisitors.map(([visitorId, eventList]) => {
+      const first = eventList[0];
+      const scroll = [100, 75, 50, 35, 25, 10].find((d) => eventList.some((e) => e.event === `scroll_${d}`)) ?? 0;
+      const converteu = eventList.some((e) => e.event === "click" || e.event === "call");
+      return {
+        date: first?.created_at ? new Date(first.created_at).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" }) : "",
+        kw: first?.keyword || "",
+        conv: converteu,
+        venda: first?.venda || false,
+        scroll,
+        dev: first?.device === "m" ? "Mobile" : first?.device === "t" ? "Desktop" : first?.device === "c" ? "Tablet" : first?.device || "",
+        net: first?.network === "g" ? "Search" : first?.network === "s" ? "Partners" : first?.network === "d" ? "Display" : first?.network || "",
+        match: first?.matchtype === "e" ? "Exata" : first?.matchtype === "p" ? "Frase" : first?.matchtype === "b" ? "Ampla" : first?.matchtype || "",
+        camp: first?.gad_campaignid ? (CAMPAIGN_NAMES[first.gad_campaignid] || first.gad_campaignid) : "",
+        evts: eventList.length
+      };
+    });
+
+    const report = {
+      periodo: dateFilter,
+      estatisticas_gerais: {
+        total_eventos: stats.totalEvents,
+        visitantes_unicos: stats.uniqueVisitors,
+        bots_detectados: stats.totalBots,
+        fonte_principal: stats.topSource,
+        meio_principal: stats.topMediumLabel,
+        conversas_iniciadas: stats.conversationVisitors,
+        ligacoes: stats.callVisitors,
+      },
+      relatorios: {
+        tempo_medio_converteu: reports.avgConverted !== null ? reports.fmtTime(reports.avgConverted) : null,
+        tempo_medio_nao_converteu: reports.avgNotConverted !== null ? reports.fmtTime(reports.avgNotConverted) : null,
+        scroll_medio: `${reports.avgScroll}%`,
+        distribuicao_scroll: reports.scrollDist,
+        keywords: reports.keywords.map(k => ({ keyword: k.kw, total: k.total, conversoes: k.converted, taxa: `${k.rate}%` })),
+        devices: Object.entries(reports.deviceMap).map(([k, v]) => ({ device: k, ...v, taxa: v.total > 0 ? `${Math.round((v.converted/v.total)*100)}%` : "0%" })),
+        match_types: Object.entries(reports.matchMap).map(([k, v]) => ({ match_type: k, ...v, taxa: v.total > 0 ? `${Math.round((v.converted/v.total)*100)}%` : "0%" })),
+        networks: Object.entries(reports.networkMap).map(([k, v]) => ({ network: k, ...v, taxa: v.total > 0 ? `${Math.round((v.converted/v.total)*100)}%` : "0%" })),
+      },
+      sessoes: sessions
+    };
+
+    navigator.clipboard.writeText(JSON.stringify(report, null, 2)).then(() => {
+      setCopiedAI(true);
+      setTimeout(() => setCopiedAI(false), 2000);
+    });
+  };
+
   const handleSyncPhones = async () => {
     setSyncing(true);
     setSyncResult(null);
@@ -337,6 +387,7 @@ export function TrackingScreen() {
     const yesterdaySp = spDate(new Date(now.getTime() - 86400000));
     const sevenDaysAgoSp = spDate(new Date(now.getTime() - 7 * 86400000));
     const thirtyDaysAgoSp = spDate(new Date(now.getTime() - 30 * 86400000));
+    const thisMonthPrefix = todaySp.substring(0, 7);
 
     return events.filter((e) => {
       if (e.is_bot && !e.gclid && !e.fbclid && !e.msclkid) return false;
@@ -348,6 +399,7 @@ export function TrackingScreen() {
       if (dateFilter === "yesterday") return eventDateSp === yesterdaySp;
       if (dateFilter === "7days") return eventDateSp >= sevenDaysAgoSp;
       if (dateFilter === "30days") return eventDateSp >= thirtyDaysAgoSp;
+      if (dateFilter === "thisMonth") return eventDateSp.startsWith(thisMonthPrefix);
       return true;
     });
   }, [events, dateFilter, ignoreBots, campaignFilter]);
@@ -436,6 +488,7 @@ export function TrackingScreen() {
     const yesterdaySp = spDate(new Date(now.getTime() - 86400000));
     const sevenDaysAgoSp = spDate(new Date(now.getTime() - 7 * 86400000));
     const thirtyDaysAgoSp = spDate(new Date(now.getTime() - 30 * 86400000));
+    const thisMonthPrefix = todaySp.substring(0, 7);
 
     const inDateRange = (sessionCreatedAt: string | undefined) => {
       if (!sessionCreatedAt || dateFilter === "all") return true;
@@ -444,6 +497,7 @@ export function TrackingScreen() {
       if (dateFilter === "yesterday") return d === yesterdaySp;
       if (dateFilter === "7days") return d >= sevenDaysAgoSp;
       if (dateFilter === "30days") return d >= thirtyDaysAgoSp;
+      if (dateFilter === "thisMonth") return d.startsWith(thisMonthPrefix);
       return true;
     };
 
@@ -566,8 +620,8 @@ export function TrackingScreen() {
 
       {/* Date Filters */}
       <div className="flex flex-wrap items-center gap-2">
-        {(["today", "yesterday", "7days", "30days", "all"] as const).map((filter) => {
-          const labels = { today: "Hoje", yesterday: "Ontem", "7days": "7 dias", "30days": "30 dias", all: "Todos" };
+        {(["today", "yesterday", "7days", "30days", "thisMonth", "all"] as const).map((filter) => {
+          const labels = { today: "Hoje", yesterday: "Ontem", "7days": "7 dias", "30days": "30 dias", thisMonth: "Esse Mês", all: "Todos" };
           return (
             <button
               key={filter}
@@ -659,6 +713,14 @@ export function TrackingScreen() {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
           </svg>
           {copiedJson ? "Copiado!" : "Copiar JSON"}
+        </button>
+        <button
+          onClick={handleCopyForAI}
+          disabled={groupedVisitors.length === 0}
+          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-pink-600 text-white hover:bg-pink-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          title="Copiar relatório condensado para análise por IA"
+        >
+          🤖 {copiedAI ? "Copiado!" : "Copiar IA"}
         </button>
         <button
           onClick={handleCopyCSV}
