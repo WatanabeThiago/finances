@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useEffect, useMemo, useState } from "react";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import type { TrackingEvent } from "@/lib/tracking";
 import { formatTelefone } from "@/lib/phone";
 
@@ -599,6 +600,27 @@ export function TrackingScreen() {
     };
   }, [groupedVisitors, dateFilter]);
 
+  const visitsByHour = useMemo(() => {
+    const hours = Array.from({ length: 24 }, (_, i) => ({
+      hour: `${i.toString().padStart(2, '0')}:00`,
+      visits: 0,
+    }));
+    
+    groupedVisitors.forEach(([, eventList]) => {
+      const first = eventList[0];
+      if (!first?.created_at) return;
+      const d = new Date(first.created_at);
+      const localHourStr = d.toLocaleString("en-CA", { timeZone: "America/Sao_Paulo", hour: "numeric", hour12: false });
+      let h = parseInt(localHourStr, 10);
+      if (h === 24) h = 0;
+      if (h >= 0 && h < 24) {
+        hours[h].visits++;
+      }
+    });
+
+    return hours;
+  }, [groupedVisitors]);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -879,6 +901,24 @@ export function TrackingScreen() {
                   </div>
                 ))}
               </div>
+            </div>
+          </div>
+
+          {/* Chart: Visits by Hour */}
+          <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-4">
+            <h3 className="text-sm font-semibold text-zinc-900 dark:text-white mb-4">⏰ Visitas por Horário</h3>
+            <div className="h-64 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={visitsByHour}>
+                  <XAxis dataKey="hour" stroke="#888888" fontSize={12} tickLine={false} axisLine={false} />
+                  <YAxis stroke="#888888" fontSize={12} tickLine={false} axisLine={false} allowDecimals={false} />
+                  <Tooltip
+                    cursor={{ fill: 'rgba(0, 0, 0, 0.1)' }}
+                    contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', color: '#000' }}
+                  />
+                  <Bar dataKey="visits" fill="#3b82f6" radius={[4, 4, 0, 0]} name="Visitas" />
+                </BarChart>
+              </ResponsiveContainer>
             </div>
           </div>
 
