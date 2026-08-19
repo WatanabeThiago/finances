@@ -2,6 +2,7 @@
 
 import {
   ArrowDown,
+  ArrowRight,
   ArrowUp,
   ArrowUpDown,
   Pencil,
@@ -15,6 +16,7 @@ import {
   type DailyAdsRecord,
 } from "@/lib/daily-ads";
 import type { VendaLg } from "@/lib/venda-lg";
+import type { TrackingEvent } from "@/lib/tracking";
 
 const currencyFormatter = new Intl.NumberFormat("pt-BR", {
   style: "currency",
@@ -57,6 +59,7 @@ type DailyMetrics = {
   roas: number;
   clients: number;
   averageCommission: number;
+  conversations: number;
 };
 
 type DailyAdsDisplayRecord = DailyAdsRecord & DailyMetrics;
@@ -122,9 +125,106 @@ function dateToTimestamp(value: string) {
   return Date.UTC(year, month - 1, day);
 }
 
+function FunnelView({ item }: { item: DailyAdsDisplayRecord }) {
+  const conversations = item.conversations;
+
+  const ctr = item.impressions > 0 ? (item.clicks / item.impressions) * 100 : 0;
+  const clickToConv = item.clicks > 0 ? (conversations / item.clicks) * 100 : 0;
+  const convToSale = conversations > 0 ? (item.clients / conversations) * 100 : 0;
+
+  const cpm = item.impressions > 0 ? (item.spend / item.impressions) * 1000 : 0;
+  const cpc = item.clicks > 0 ? item.spend / item.clicks : 0;
+  const costPerConv = conversations > 0 ? item.spend / conversations : 0;
+  const cpa = item.clients > 0 ? item.spend / item.clients : 0;
+
+  return (
+    <div className="mb-6 rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800/60 dark:bg-zinc-950/50">
+      <div className="mb-5 flex items-center justify-between">
+        <h4 className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
+          Funil de Vendas
+        </h4>
+      </div>
+      
+      <div className="flex flex-col items-center gap-3 xl:flex-row xl:gap-4">
+        {/* Impressões */}
+        <div className="flex w-full flex-1 flex-col items-center rounded-xl border border-zinc-100 bg-zinc-50 p-4 dark:border-zinc-800/80 dark:bg-zinc-900/50">
+          <span className="text-xs font-medium uppercase tracking-wide text-zinc-500">Impressões</span>
+          <span className="mt-1 text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
+            {numberFormatter.format(item.impressions)}
+          </span>
+          <span className="mt-2 text-[10px] font-semibold text-zinc-400 dark:text-zinc-500">
+            CPM: {currencyFormatter.format(cpm)}
+          </span>
+        </div>
+
+        {/* CTR */}
+        <div className="flex flex-col items-center">
+          <span className="mb-1 rounded-md bg-blue-50 px-2 py-1 text-[10px] font-semibold text-blue-600 dark:bg-blue-900/30 dark:text-blue-400 sm:text-xs">
+            CTR: {ratioFormatter.format(ctr)}%
+          </span>
+          <ArrowRight className="hidden text-zinc-300 xl:block dark:text-zinc-700" size={20} />
+          <ArrowDown className="text-zinc-300 xl:hidden dark:text-zinc-700" size={20} />
+        </div>
+
+        {/* Cliques */}
+        <div className="flex w-full flex-1 flex-col items-center rounded-xl border border-zinc-100 bg-zinc-50 p-4 dark:border-zinc-800/80 dark:bg-zinc-900/50">
+          <span className="text-xs font-medium uppercase tracking-wide text-zinc-500">Cliques</span>
+          <span className="mt-1 text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
+            {numberFormatter.format(item.clicks)}
+          </span>
+          <span className="mt-2 text-[10px] font-semibold text-zinc-400 dark:text-zinc-500">
+            CPC: {currencyFormatter.format(cpc)}
+          </span>
+        </div>
+
+        {/* Click to Conv */}
+        <div className="flex flex-col items-center">
+          <span className="mb-1 rounded-md bg-purple-50 px-2 py-1 text-[10px] font-semibold text-purple-600 dark:bg-purple-900/30 dark:text-purple-400 sm:text-xs">
+            Tx. Conv: {ratioFormatter.format(clickToConv)}%
+          </span>
+          <ArrowRight className="hidden text-zinc-300 xl:block dark:text-zinc-700" size={20} />
+          <ArrowDown className="text-zinc-300 xl:hidden dark:text-zinc-700" size={20} />
+        </div>
+
+        {/* Conversas (Automático) */}
+        <div className="relative flex w-full flex-1 flex-col items-center rounded-xl border border-purple-100 bg-purple-50/50 p-4 dark:border-purple-900/30 dark:bg-purple-950/20">
+          <span className="text-xs font-medium uppercase tracking-wide text-purple-700 dark:text-purple-500">Conversas</span>
+          <span className="mt-1 text-2xl font-bold tracking-tight text-purple-900 dark:text-purple-50">
+            {numberFormatter.format(conversations)}
+          </span>
+          <span className="mt-2 text-[10px] font-semibold text-purple-600/70 dark:text-purple-500/70">
+            CPL: {currencyFormatter.format(costPerConv)}
+          </span>
+        </div>
+
+        {/* Conv to Sale */}
+        <div className="flex flex-col items-center">
+          <span className="mb-1 rounded-md bg-emerald-50 px-2 py-1 text-[10px] font-semibold text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400 sm:text-xs">
+            Tx. Venda: {ratioFormatter.format(convToSale)}%
+          </span>
+          <ArrowRight className="hidden text-zinc-300 xl:block dark:text-zinc-700" size={20} />
+          <ArrowDown className="text-zinc-300 xl:hidden dark:text-zinc-700" size={20} />
+        </div>
+
+        {/* Vendas */}
+        <div className="flex w-full flex-1 flex-col items-center rounded-xl border border-emerald-100 bg-emerald-50 p-4 dark:border-emerald-900/30 dark:bg-emerald-950/30">
+          <span className="text-xs font-medium uppercase tracking-wide text-emerald-700 dark:text-emerald-500">Vendas</span>
+          <span className="mt-1 text-2xl font-bold tracking-tight text-emerald-700 dark:text-emerald-400">
+            {numberFormatter.format(item.clients)}
+          </span>
+          <span className="mt-2 text-[10px] font-semibold text-emerald-600/70 dark:text-emerald-500/70">
+            CPA: {currencyFormatter.format(cpa)}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function DailyAdsScreen() {
   const [records, setRecords] = useState<DailyAdsRecord[]>([]);
   const [sales, setSales] = useState<VendaLg[]>([]);
+  const [tracking, setTracking] = useState<TrackingEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [formOpen, setFormOpen] = useState(false);
@@ -190,6 +290,24 @@ export function DailyAdsScreen() {
     return map;
   }, [sales]);
 
+  const trackingMetricsByDate = useMemo(() => {
+    const map = new Map<string, Set<string>>();
+    for (const event of tracking) {
+      if (event.event !== "click" && event.event !== "call") continue;
+      if (event.is_bot && !event.gclid && !event.fbclid && !event.msclkid) continue;
+      
+      const dateKey = campoGrandeDateFormatter.format(new Date(event.created_at));
+      if (!map.has(dateKey)) map.set(dateKey, new Set());
+      map.get(dateKey)!.add(event.visitor_id);
+    }
+    
+    const result = new Map<string, number>();
+    for (const [dateKey, visitors] of map.entries()) {
+      result.set(dateKey, visitors.size);
+    }
+    return result;
+  }, [tracking]);
+
   const filteredRecords = useMemo(() => {
     if (dateFilter === "all") return records;
 
@@ -221,9 +339,10 @@ export function DailyAdsScreen() {
           cpa: clients > 0 ? record.spend / clients : 0,
           roas: record.spend > 0 ? commission / record.spend : 0,
           averageCommission: clients > 0 ? commission / clients : 0,
+          conversations: trackingMetricsByDate.get(record.date) ?? 0,
         };
       }),
-    [filteredRecords, salesMetricsByDate],
+    [filteredRecords, salesMetricsByDate, trackingMetricsByDate],
   );
 
   const sortedRecords = useMemo(() => {
@@ -251,6 +370,7 @@ export function DailyAdsScreen() {
     let impressions = 0;
     let revenue = 0;
     let clients = 0;
+    let conversations = 0;
 
     for (const record of displayRecords) {
       result += record.result;
@@ -260,6 +380,7 @@ export function DailyAdsScreen() {
       impressions += record.impressions;
       revenue += record.revenue;
       clients += record.clients;
+      conversations += record.conversations;
     }
 
     const cpc = clicks > 0 ? spend / clicks : 0;
@@ -279,6 +400,7 @@ export function DailyAdsScreen() {
       roas,
       clients,
       averageCommission,
+      conversations,
     };
   }, [displayRecords]);
 
@@ -287,20 +409,23 @@ export function DailyAdsScreen() {
 
     async function loadRecords() {
       try {
-        const [adsResponse, salesResponse] = await Promise.all([
+        const [adsResponse, salesResponse, trackingResponse] = await Promise.all([
           fetch("/api/daily-ads"),
           fetch("/api/vendas-lg"),
+          fetch("/api/tracking"),
         ]);
         if (!adsResponse.ok || !salesResponse.ok) {
           throw new Error("Failed to load daily ads metrics");
         }
-        const [adsData, salesData] = (await Promise.all([
+        const [adsData, salesData, trackingData] = (await Promise.all([
           adsResponse.json(),
           salesResponse.json(),
-        ])) as [DailyAdsRecord[], VendaLg[]];
+          trackingResponse.ok ? trackingResponse.json() : Promise.resolve([]),
+        ])) as [DailyAdsRecord[], VendaLg[], TrackingEvent[]];
         if (active) {
           setRecords(adsData);
           setSales(salesData);
+          setTracking(trackingData);
         }
       } catch {
         if (active) setLoadError("Não foi possível carregar os registros.");
@@ -666,13 +791,15 @@ export function DailyAdsScreen() {
                     </div>
 
                     {isExpanded ? (
-                      <div className="border-t border-zinc-200 px-6 py-4 dark:border-zinc-800/80">
+                      <div className="border-t border-zinc-200 px-6 py-6 dark:border-zinc-800/80">
+                        <FunnelView item={item} />
+
                         {daySales.length === 0 ? (
                           <p className="text-sm text-zinc-500">Nenhuma venda registrada neste dia.</p>
                         ) : (
                           <div className="space-y-3">
                             <h4 className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
-                              Vendas do dia ({daySales.length})
+                              Lista de Vendas ({daySales.length})
                             </h4>
                             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                               {daySales.map((sale) => (
