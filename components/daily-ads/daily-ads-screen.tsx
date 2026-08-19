@@ -60,6 +60,7 @@ type DailyMetrics = {
   clients: number;
   averageCommission: number;
   conversations: number;
+  visitors: number;
 };
 
 type DailyAdsDisplayRecord = DailyAdsRecord & DailyMetrics;
@@ -127,13 +128,16 @@ function dateToTimestamp(value: string) {
 
 function FunnelView({ item }: { item: DailyAdsDisplayRecord }) {
   const conversations = item.conversations;
+  const visitors = item.visitors;
 
   const ctr = item.impressions > 0 ? (item.clicks / item.impressions) * 100 : 0;
-  const clickToConv = item.clicks > 0 ? (conversations / item.clicks) * 100 : 0;
+  const clickToVisitor = item.clicks > 0 ? (visitors / item.clicks) * 100 : 0;
+  const visitorToConv = visitors > 0 ? (conversations / visitors) * 100 : 0;
   const convToSale = conversations > 0 ? (item.clients / conversations) * 100 : 0;
 
   const cpm = item.impressions > 0 ? (item.spend / item.impressions) * 1000 : 0;
   const cpc = item.clicks > 0 ? item.spend / item.clicks : 0;
+  const costPerVisitor = visitors > 0 ? item.spend / visitors : 0;
   const costPerConv = conversations > 0 ? item.spend / conversations : 0;
   const cpa = item.clients > 0 ? item.spend / item.clients : 0;
 
@@ -177,10 +181,30 @@ function FunnelView({ item }: { item: DailyAdsDisplayRecord }) {
           </span>
         </div>
 
-        {/* Click to Conv */}
+        {/* Click to Visitor */}
+        <div className="flex flex-col items-center">
+          <span className="mb-1 rounded-md bg-orange-50 px-2 py-1 text-[10px] font-semibold text-orange-600 dark:bg-orange-900/30 dark:text-orange-400 sm:text-xs">
+            Chegaram: {ratioFormatter.format(clickToVisitor)}%
+          </span>
+          <ArrowRight className="hidden text-zinc-300 xl:block dark:text-zinc-700" size={20} />
+          <ArrowDown className="text-zinc-300 xl:hidden dark:text-zinc-700" size={20} />
+        </div>
+
+        {/* Visitantes */}
+        <div className="flex w-full flex-1 flex-col items-center rounded-xl border border-orange-100 bg-orange-50/50 p-4 dark:border-orange-900/30 dark:bg-orange-950/20">
+          <span className="text-xs font-medium uppercase tracking-wide text-orange-700 dark:text-orange-500">Visitantes</span>
+          <span className="mt-1 text-2xl font-bold tracking-tight text-orange-900 dark:text-orange-50">
+            {numberFormatter.format(visitors)}
+          </span>
+          <span className="mt-2 text-[10px] font-semibold text-orange-600/70 dark:text-orange-500/70">
+            CPV: {currencyFormatter.format(costPerVisitor)}
+          </span>
+        </div>
+
+        {/* Visitor to Conv */}
         <div className="flex flex-col items-center">
           <span className="mb-1 rounded-md bg-purple-50 px-2 py-1 text-[10px] font-semibold text-purple-600 dark:bg-purple-900/30 dark:text-purple-400 sm:text-xs">
-            Tx. Conv: {ratioFormatter.format(clickToConv)}%
+            Tx. Conv: {ratioFormatter.format(visitorToConv)}%
           </span>
           <ArrowRight className="hidden text-zinc-300 xl:block dark:text-zinc-700" size={20} />
           <ArrowDown className="text-zinc-300 xl:hidden dark:text-zinc-700" size={20} />
@@ -291,19 +315,28 @@ export function DailyAdsScreen() {
   }, [sales]);
 
   const trackingMetricsByDate = useMemo(() => {
-    const map = new Map<string, Set<string>>();
+    const visMap = new Map<string, Set<string>>();
+    const convMap = new Map<string, Set<string>>();
+    
     for (const event of tracking) {
-      if (event.event !== "click" && event.event !== "call") continue;
       if (event.is_bot && !event.gclid && !event.fbclid && !event.msclkid) continue;
       
       const dateKey = campoGrandeDateFormatter.format(new Date(event.created_at));
-      if (!map.has(dateKey)) map.set(dateKey, new Set());
-      map.get(dateKey)!.add(event.visitor_id);
+      if (!visMap.has(dateKey)) visMap.set(dateKey, new Set());
+      visMap.get(dateKey)!.add(event.visitor_id);
+
+      if (event.event === "click" || event.event === "call") {
+        if (!convMap.has(dateKey)) convMap.set(dateKey, new Set());
+        convMap.get(dateKey)!.add(event.visitor_id);
+      }
     }
     
-    const result = new Map<string, number>();
-    for (const [dateKey, visitors] of map.entries()) {
-      result.set(dateKey, visitors.size);
+    const result = new Map<string, { visitors: number; conversations: number }>();
+    for (const dateKey of visMap.keys()) {
+      result.set(dateKey, {
+        visitors: visMap.get(dateKey)?.size ?? 0,
+        conversations: convMap.get(dateKey)?.size ?? 0,
+      });
     }
     return result;
   }, [tracking]);
@@ -329,6 +362,8 @@ export function DailyAdsScreen() {
         const revenue = salesMetrics?.revenue ?? 0;
         const commission = salesMetrics?.commission ?? 0;
 
+        const trackingMetrics = trackingMetricsByDate.get(record.date) ?? { visitors: 0, conversations: 0 };
+
         return {
           ...record,
           clicks: calculateClicks(record.spend, record.cpc),
@@ -339,7 +374,8 @@ export function DailyAdsScreen() {
           cpa: clients > 0 ? record.spend / clients : 0,
           roas: record.spend > 0 ? commission / record.spend : 0,
           averageCommission: clients > 0 ? commission / clients : 0,
-          conversations: trackingMetricsByDate.get(record.date) ?? 0,
+          conversations: trackingMetrics.conversations,
+          visitors: trackingMetrics.visitors,
         };
       }),
     [filteredRecords, salesMetricsByDate, trackingMetricsByDate],
@@ -371,6 +407,7 @@ export function DailyAdsScreen() {
     let revenue = 0;
     let clients = 0;
     let conversations = 0;
+    let visitors = 0;
 
     for (const record of displayRecords) {
       result += record.result;
@@ -381,6 +418,7 @@ export function DailyAdsScreen() {
       revenue += record.revenue;
       clients += record.clients;
       conversations += record.conversations;
+      visitors += record.visitors;
     }
 
     const cpc = clicks > 0 ? spend / clicks : 0;
@@ -401,6 +439,7 @@ export function DailyAdsScreen() {
       clients,
       averageCommission,
       conversations,
+      visitors,
     };
   }, [displayRecords]);
 
