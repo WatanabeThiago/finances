@@ -1,5 +1,6 @@
 import { isBot } from "@/lib/tracking";
 import { query } from "@/lib/db";
+import { sendApiAlert } from "@/lib/apialerts";
 
 // Headers CORS para permitir requisições cross-origin
 const corsHeaders = {
@@ -83,6 +84,10 @@ export async function POST(request: Request) {
       group = null,
     } = body;
 
+    // Obter telefone se presente em qualquer formato
+    const effectivePhone =
+      phone || body.phone_number || body.phone_formatted || null;
+
     // Validar campos obrigatórios
     if (!event || !visitor_id || !user_agent) {
       return Response.json(
@@ -137,7 +142,7 @@ export async function POST(request: Request) {
         "updatedAt" = CURRENT_TIMESTAMP`,
       [
         visitor_id,
-        phone,
+        effectivePhone,
         utm_source,
         utm_medium,
         utm_campaign,
@@ -177,6 +182,105 @@ export async function POST(request: Request) {
 
     const trackingEvent = result[0];
     console.log("Evento de tracking registrado:", trackingEvent);
+
+    // Processar notificações push no celular via ApiAlerts (apenas visitantes reais)
+    if (!is_bot) {
+      const termDisplay = keyword || utm_term || "";
+      const deviceLabel =
+        device === "m"
+          ? "📱 Celular"
+          : device === "d" || device === "t"
+          ? "💻 Computador"
+          : device === "c"
+          ? "📱 Tablet"
+          : "";
+
+      const isAdLead = Boolean(
+        gclid || fbclid || msclkid || gad_source || keyword || utm_term
+      );
+
+      let shouldAlert = false;
+      let alertEventName = `lead.${event}`;
+      let alertTitle = "";
+      let alertMessage = "";
+      let alertTags: string[] = [];
+
+      if (event === "page_view" && isAdLead) {
+        // Verificar se já houve page_view deste visitante nos últimos 15 min para não duplicar notificação
+        const recentPageViews = await query(
+          `SELECT id FROM public."Tracking" 
+           WHERE "visitorId" = $1 AND event = 'page_view' 
+             AND "createdAt" >= NOW() - INTERVAL '15 minutes'
+             AND id != $2
+           LIMIT 1`,
+          [visitor_id, trackingEvent.id]
+        );
+
+        if (recentPageViews.length === 0) {
+          shouldAlert = true;
+          const termoText = termDisplay ? `"${termDisplay}"` : "Anúncio Google Ads";
+          alertTitle = `👀 Lead no Site: ${termDisplay || "Google Ads"}`;
+          alertMessage = `Novo visitante buscando ${termoText}. ${deviceLabel ? `(${deviceLabel}) ` : ""}Fique de prontidão, pode chamar a qualquer momento!`;
+          alertTags = ["visita", "google-ads", "lead"];
+        }
+      } else if (
+        event === "click" ||
+        event === "whatsapp_click" ||
+        event === "automotive_whatsapp_click" ||
+        event === "board_repair_whatsapp_click"
+      ) {
+        shouldAlert = true;
+        alertEventName = "lead.whatsapp";
+        alertTitle = "📲 Clique no WhatsApp!";
+        alertMessage = `Lead clicou no botão do WhatsApp! ${termDisplay ? `Busca: "${termDisplay}". ` : ""}${deviceLabel ? `Dispositivo: ${deviceLabel}. ` : ""}Prepare-se para atender!`;
+        alertTags = ["whatsapp", "lead", "conversao"];
+      } else if (
+        event === "call" ||
+        event === "call_click" ||
+        event === "automotive_call_click" ||
+        event === "board_repair_call_click"
+      ) {
+        shouldAlert = true;
+        alertEventName = "lead.call";
+        alertTitle = "📞 Clique para Ligar!";
+        alertMessage = `Lead clicou no telefone para ligar! ${termDisplay ? `Busca: "${termDisplay}". ` : ""}${deviceLabel ? `Dispositivo: ${deviceLabel}. ` : ""}O telefone pode tocar a qualquer segundo!`;
+        alertTags = ["ligacao", "lead", "conversao"];
+      } else if (
+        event === "submit_callback_request" ||
+        event === "callback_request"
+      ) {
+        shouldAlert = true;
+        alertEventName = "lead.callback";
+        alertTitle = "🔔 Pedido de Retorno (Me Ligue)!";
+        alertMessage = `Lead pediu retorno imediato! Telefone: ${effectivePhone || "Consulte o painel"}. ${termDisplay ? `Busca: "${termDisplay}".` : ""}`;
+        alertTags = ["callback", "lead", "urgente"];
+      } else if (event === "copy_phone_click") {
+        shouldAlert = true;
+        alertEventName = "lead.copy_phone";
+        alertTitle = "📋 Copiou Telefone!";
+        alertMessage = `Visitante copiou o número de telefone no site. ${termDisplay ? `Busca: "${termDisplay}".` : ""}`;
+        alertTags = ["telefone", "lead"];
+      }
+
+      if (shouldAlert) {
+        sendApiAlert({
+          event: alertEventName,
+          title: alertTitle,
+          message: alertMessage,
+          tags: alertTags,
+          link: "https://finances-beige.vercel.app/tracking",
+          data: {
+            visitor_id,
+            keyword: termDisplay || undefined,
+            device: device || undefined,
+            matchtype: matchtype || undefined,
+            phone: effectivePhone || undefined,
+          },
+        }).catch((err) => {
+          console.error("[ApiAlerts Tracking Error]:", err);
+        });
+      }
+    }
 
     return Response.json(trackingEvent, {
       status: 201,

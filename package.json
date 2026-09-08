@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
+    "apialerts": "^1.3.2",
     "date-fns": "^4.1.0",
     "html2pdf.js": "^0.14.0",
     "leaflet": "^1.9.4",

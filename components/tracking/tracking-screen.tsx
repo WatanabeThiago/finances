@@ -48,7 +48,10 @@ export function TrackingScreen() {
   const [savingTemplate, setSavingTemplate] = useState(false);
   const [kwSort, setKwSort] = useState<{ col: "total" | "converted" | "rate"; dir: "desc" | "asc" }>({ col: "rate", dir: "desc" });
   const [copied, setCopied] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
   const [copiedAI, setCopiedAI] = useState(false);
+  const [testingAlert, setTestingAlert] = useState(false);
+  const [alertSent, setAlertSent] = useState(false);
 
   type AnalysisResult = {
     resumo: string;
@@ -253,6 +256,21 @@ export function TrackingScreen() {
       setCopiedAI(true);
       setTimeout(() => setCopiedAI(false), 2000);
     });
+  };
+
+  const handleTestAlert = async () => {
+    setTestingAlert(true);
+    try {
+      const res = await fetch("/api/apialerts/test");
+      if (res.ok) {
+        setAlertSent(true);
+        setTimeout(() => setAlertSent(false), 3000);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setTestingAlert(false);
+    }
   };
 
   const handleSyncPhones = async () => {
@@ -724,6 +742,19 @@ export function TrackingScreen() {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
           </svg>
           {syncing ? "Sincronizando..." : "Sincronizar WhatsApp"}
+        </button>
+        <button
+          onClick={handleTestAlert}
+          disabled={testingAlert}
+          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-amber-600 text-white hover:bg-amber-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+          title="Disparar notificação push de teste no celular via ApiAlerts"
+        >
+          <span>🔔</span>
+          {testingAlert
+            ? "Enviando..."
+            : alertSent
+            ? "Enviado ao Celular!"
+            : "Testar Push"}
         </button>
         <button
           onClick={handleCopyJson}

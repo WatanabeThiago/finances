@@ -1,4 +1,5 @@
 import { query } from "@/lib/db";
+import { sendApiAlert } from "@/lib/apialerts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -58,6 +59,18 @@ export async function POST(request: Request) {
        VALUES ($1, CURRENT_TIMESTAMP)
        RETURNING id, phone, to_char(created_at AT TIME ZONE 'America/Sao_Paulo', 'YYYY-MM-DD HH24:MI:SS') as created_at`,
       [phone]
+    );
+
+    // Disparar notificação push no celular via ApiAlerts
+    sendApiAlert({
+      event: "lead.callback",
+      title: "🔔 Pedido de Contato!",
+      message: `Novo lead pediu ligação de volta: ${phone}. Ligue imediatamente!`,
+      tags: ["contato", "urgente", "lead"],
+      link: "https://finances-beige.vercel.app/tracking",
+      data: { phone },
+    }).catch((err) =>
+      console.error("[ApiAlerts Contact Request Error]:", err)
     );
 
     return Response.json(
