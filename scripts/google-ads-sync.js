@@ -1,4 +1,4 @@
-﻿/**
+/**
  * GOOGLE ADS SCRIPT: Sincronização Automática com /daily-ads
  * 
  * INSTRUÇÕES:
@@ -23,10 +23,10 @@ var CONFIG = {
   // Se não configurou DAILY_ADS_API_KEY, pode deixar em branco ""
   API_KEY: "",
 
-  // Quantidade de dias para sincronizar (recomendado: 2 -> Ontem e Anteontem)
-  // Como vocês são chaveiro 24h com cliques até 23h59, sincronizar D-1 e D-2
-  // garante que cliques tardios e filtros de cliques inválidos do Google sejam atualizados.
-  DAYS_TO_SYNC: 2,
+  // Quantidade de dias retroativos para sincronizar (7 dias)
+  // Sincroniza desde ontem (D-1) até 7 dias atrás (D-7),
+  // garantindo que toda a última semana esteja sempre atualizada com o Google Ads.
+  DAYS_TO_SYNC: 7,
 
   // Fuso horário preferido caso a conta não tenha timezone configurado
   DEFAULT_TIMEZONE: "America/Sao_Paulo"

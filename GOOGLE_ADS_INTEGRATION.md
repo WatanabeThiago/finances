@@ -1,14 +1,14 @@
-﻿# Integração Automática: Google Ads -> Finances (/daily-ads)
+# Integração Automática: Google Ads -> Finances (/daily-ads)
 
 Esta integração automatiza o registro diário de desempenho de anúncios (Gasto, CPC e Impressões) no painel `/daily-ads` através do recurso nativo **Google Ads Scripts**.
 
 ---
 
-## Por que às 10:00 da manhã?
+## Por que às 10:00 da manhã e últimos 7 dias?
 Como vocês são chaveiro 24h e recebem cliques até as 23:59, rodar o script às 10:00 da manhã garante que:
 1. O dia de ontem (D-1) já encerrou completamente.
 2. O Google Ads já teve tempo de consolidar cliques tardios e filtrar cliques inválidos.
-3. O script sincroniza os **últimos 2 dias** (ontem e anteontem), de modo que qualquer ajuste ou estorno feito pelo Google Ads é atualizado automaticamente no sistema.
+3. O script sincroniza os **últimos 7 dias** (desde ontem D-1 até 7 dias atrás D-7), de modo que qualquer ajuste ou estorno feito pelo Google Ads ao longo da semana é atualizado automaticamente no sistema sem intervenção manual.
 
 ---
 
