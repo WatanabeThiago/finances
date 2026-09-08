@@ -7,6 +7,9 @@ type DailyAdsRow = {
   spend: string | number;
   cpc: string | number;
   impressions: string | number;
+  revenue?: string | number | null;
+  commission?: string | number | null;
+  clients?: string | number | null;
   createdAt: Date | string;
 };
 
@@ -17,6 +20,9 @@ function serializeRecord(row: DailyAdsRow): DailyAdsRecord {
     spend: Number(row.spend),
     cpc: Number(row.cpc),
     impressions: Number(row.impressions),
+    revenue: row.revenue !== null && row.revenue !== undefined ? Number(row.revenue) : null,
+    commission: row.commission !== null && row.commission !== undefined ? Number(row.commission) : null,
+    clients: row.clients !== null && row.clients !== undefined ? Number(row.clients) : null,
     createdAt:
       row.createdAt instanceof Date
         ? row.createdAt.toISOString()
@@ -41,7 +47,7 @@ function hasDatabaseCode(error: unknown, code: string) {
 export async function GET() {
   try {
     const rows = (await query(
-      `SELECT id, date, spend, cpc, impressions, "createdAt"
+      `SELECT id, date, spend, cpc, impressions, revenue, commission, clients, "createdAt"
        FROM public."DailyAdsManual"
        ORDER BY "createdAt" DESC`,
     )) as DailyAdsRow[];
@@ -91,6 +97,9 @@ type ValidatedItem = {
   spend: number;
   cpc: number;
   impressions: number;
+  revenue?: number | null;
+  commission?: number | null;
+  clients?: number | null;
 };
 
 function validateDailyItem(item: unknown): ValidatedItem | null {
@@ -115,22 +124,52 @@ function validateDailyItem(item: unknown): ValidatedItem | null {
     return null;
   }
 
-  return { date, spend, cpc, impressions };
+  const revenue = obj.revenue !== undefined && obj.revenue !== null && obj.revenue !== ""
+    ? finiteNumber(obj.revenue)
+    : null;
+  const commission = obj.commission !== undefined && obj.commission !== null && obj.commission !== ""
+    ? finiteNumber(obj.commission)
+    : null;
+  const clients = obj.clients !== undefined && obj.clients !== null && obj.clients !== ""
+    ? finiteNumber(obj.clients)
+    : null;
+
+  return {
+    date,
+    spend,
+    cpc,
+    impressions,
+    revenue: revenue !== null && revenue >= 0 ? revenue : null,
+    commission: commission !== null && commission >= 0 ? commission : null,
+    clients: clients !== null && Number.isInteger(clients) && clients >= 0 ? clients : null,
+  };
 }
 
 async function upsertRecord(item: ValidatedItem): Promise<DailyAdsRow> {
   const rows = (await query(
     `INSERT INTO public."DailyAdsManual"
-      (id, date, spend, cpc, impressions, "createdAt")
-     VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)
+      (id, date, spend, cpc, impressions, revenue, commission, clients, "createdAt")
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP)
      ON CONFLICT (date) DO UPDATE
      SET
        spend = EXCLUDED.spend,
        cpc = EXCLUDED.cpc,
        impressions = EXCLUDED.impressions,
+       revenue = COALESCE(EXCLUDED.revenue, public."DailyAdsManual".revenue),
+       commission = COALESCE(EXCLUDED.commission, public."DailyAdsManual".commission),
+       clients = COALESCE(EXCLUDED.clients, public."DailyAdsManual".clients),
        "createdAt" = CURRENT_TIMESTAMP
-     RETURNING id, date, spend, cpc, impressions, "createdAt"`,
-    [crypto.randomUUID(), item.date, item.spend, item.cpc, item.impressions],
+     RETURNING id, date, spend, cpc, impressions, revenue, commission, clients, "createdAt"`,
+    [
+      crypto.randomUUID(),
+      item.date,
+      item.spend,
+      item.cpc,
+      item.impressions,
+      item.revenue ?? null,
+      item.commission ?? null,
+      item.clients ?? null,
+    ],
   )) as DailyAdsRow[];
 
   return rows[0];

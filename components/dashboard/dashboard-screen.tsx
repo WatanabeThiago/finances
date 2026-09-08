@@ -2,6 +2,7 @@
 
 import { formatBRL } from "@/lib/money";
 import type { VendaLg } from "@/lib/venda-lg";
+import type { DailyAdsRecord } from "@/lib/daily-ads";
 import {
   useEffect,
   useMemo,
@@ -10,6 +11,7 @@ import {
 
 type DashboardData = {
   vendas: VendaLg[];
+  dailyAds: DailyAdsRecord[];
 };
 
 type RawVendaLgLine = Omit<
@@ -143,6 +145,7 @@ const SimpleChart = ({ data, maxValue }: { data: number[]; maxValue: number }) =
 export function DashboardScreen() {
   const [data, setData] = useState<DashboardData>({
     vendas: [],
+    dailyAds: [],
   });
   const [loading, setLoading] = useState(true);
   const [dateFilter, setDateFilter] = useState<DateFilter>("7d");
@@ -151,9 +154,13 @@ export function DashboardScreen() {
     const fetchData = async () => {
       try {
         setLoading(true);
-        const vendasRes = await fetch("/api/vendas-lg");
+        const [vendasRes, dailyAdsRes] = await Promise.all([
+          fetch("/api/vendas-lg"),
+          fetch("/api/daily-ads"),
+        ]);
 
         const vendas: RawVendaLg[] = vendasRes.ok ? await vendasRes.json() : [];
+        const dailyAds: DailyAdsRecord[] = dailyAdsRes.ok ? await dailyAdsRes.json() : [];
 
         // Normalize numeric values
         const normalizedVendas: VendaLg[] = vendas.map((v) => ({
@@ -169,6 +176,7 @@ export function DashboardScreen() {
 
         setData({
           vendas: normalizedVendas,
+          dailyAds,
         });
       } catch (err) {
         console.error("Error fetching dashboard data:", err);
@@ -186,19 +194,17 @@ export function DashboardScreen() {
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     
     let cutoffDate: Date;
+    let isYesterday = false;
+    let endOfYesterday: Date | null = null;
+
     if (dateFilter === "today") {
       cutoffDate = startOfToday;
     } else if (dateFilter === "yesterday") {
+      isYesterday = true;
       cutoffDate = new Date(startOfToday);
       cutoffDate.setDate(cutoffDate.getDate() - 1);
-      const endOfYesterday = new Date(cutoffDate);
+      endOfYesterday = new Date(cutoffDate);
       endOfYesterday.setDate(endOfYesterday.getDate() + 1);
-      const filteredVendas = data.vendas.filter((v) => {
-        if (!v.dataVenda) return false;
-        const vendaDate = new Date(v.dataVenda);
-        return vendaDate >= cutoffDate && vendaDate < endOfYesterday;
-      });
-      return { vendas: filteredVendas };
     } else if (dateFilter === "month") {
       cutoffDate = new Date(now.getFullYear(), now.getMonth(), 1);
     } else if (dateFilter === "7d") {
@@ -213,10 +219,34 @@ export function DashboardScreen() {
     const filteredVendas = data.vendas.filter((v) => {
       if (!v.dataVenda) return false;
       const vendaDate = new Date(v.dataVenda);
+      if (isYesterday && endOfYesterday) {
+        return vendaDate >= cutoffDate && vendaDate < endOfYesterday;
+      }
       return vendaDate >= cutoffDate;
     });
 
-    return { vendas: filteredVendas };
+    const datesWithVendas = new Set(
+      data.vendas.map((v) => {
+        if (!v.dataVenda) return "";
+        const d = new Date(v.dataVenda);
+        return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
+      })
+    );
+
+    const fallbackDailyAds = data.dailyAds.filter((ad) => {
+      if (datesWithVendas.has(ad.date)) return false;
+      if (!ad.revenue && !ad.clients) return false;
+
+      const [day, month, year] = ad.date.split("/").map(Number);
+      const adDate = new Date(year, month - 1, day, 12, 0, 0);
+
+      if (isYesterday && endOfYesterday) {
+        return adDate >= cutoffDate && adDate < endOfYesterday;
+      }
+      return adDate >= cutoffDate;
+    });
+
+    return { vendas: filteredVendas, fallbackDailyAds };
   }, [data, dateFilter]);
 
   const fixedExpenseSummary = useMemo(() => {
@@ -236,26 +266,46 @@ export function DashboardScreen() {
   }, []);
 
   const stats = useMemo(() => {
-    const totalVendas = filteredData.vendas.reduce((acc, v) => {
+    const totalVendasReais = filteredData.vendas.reduce((acc, v) => {
       const subtotal = v.linhas.reduce((s, l) => s + l.preco * l.quantidade, 0);
       return acc + subtotal;
     }, 0);
 
-    const totalComissao = filteredData.vendas.reduce((acc, v) => acc + (v.comissao || 0), 0);
+    const fallbackRevenue = filteredData.fallbackDailyAds.reduce(
+      (acc, ad) => acc + (ad.revenue || 0),
+      0,
+    );
+    const fallbackCommission = filteredData.fallbackDailyAds.reduce(
+      (acc, ad) => acc + (ad.commission ?? ad.revenue ?? 0),
+      0,
+    );
+    const fallbackClients = filteredData.fallbackDailyAds.reduce(
+      (acc, ad) => acc + (ad.clients ?? 1),
+      0,
+    );
+
+    const totalVendas = totalVendasReais + fallbackRevenue;
+    const totalComissao =
+      filteredData.vendas.reduce((acc, v) => acc + (v.comissao || 0), 0) +
+      fallbackCommission;
+    const totalVendidas = filteredData.vendas.length + fallbackClients;
+
     // Additional metrics
-    const vendaComComissao = filteredData.vendas.filter((v) => v.comissao && v.comissao > 0);
-    const comissaoMedia = vendaComComissao.length > 0 
-      ? vendaComComissao.reduce((acc, v) => acc + (v.comissao || 0), 0) / vendaComComissao.length
-      : 0;
-    
+    const vendaComComissao = filteredData.vendas.filter(
+      (v) => v.comissao && v.comissao > 0,
+    );
+    const comissaoMedia =
+      totalVendidas > 0 ? totalComissao / totalVendidas : 0;
+
     const comissaoPaga = filteredData.vendas
       .filter((v) => v.comissaoPaga && v.comissao)
       .reduce((acc, v) => acc + (v.comissao || 0), 0);
-    
+
     const comissaoNaoPaga = totalComissao - comissaoPaga;
-    
-    const ticketMedio = filteredData.vendas.length > 0 ? totalVendas / filteredData.vendas.length : 0;
-    
+
+    const ticketMedio =
+      totalVendidas > 0 ? totalVendas / totalVendidas : 0;
+
     const faturamentoParceiro = vendaComComissao.reduce((acc, v) => {
       const subtotal = v.linhas.reduce((s, l) => s + l.preco * l.quantidade, 0);
       return acc + (subtotal - (v.comissao || 0));
@@ -263,14 +313,15 @@ export function DashboardScreen() {
 
     return {
       totalVendas,
-      totalVendidas: filteredData.vendas.length,
+      totalVendidas,
       totalComissao,
       comissaoMedia,
       comissaoPaga,
       comissaoNaoPaga,
       ticketMedio,
       faturamentoParceiro,
-      vendaComComissaoCount: vendaComComissao.length,
+      vendaComComissaoCount:
+        vendaComComissao.length + (fallbackCommission > 0 ? fallbackClients : 0),
     };
   }, [filteredData]);
 

@@ -256,6 +256,9 @@ export function DailyAdsScreen() {
   const [spend, setSpend] = useState("");
   const [cpc, setCpc] = useState("");
   const [impressions, setImpressions] = useState("");
+  const [manualRevenue, setManualRevenue] = useState("");
+  const [manualCommission, setManualCommission] = useState("");
+  const [manualClients, setManualClients] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [editingRecord, setEditingRecord] = useState<DailyAdsRecord | null>(null);
@@ -358,9 +361,17 @@ export function DailyAdsScreen() {
     () =>
       filteredRecords.map((record) => {
         const salesMetrics = salesMetricsByDate.get(record.date);
-        const clients = salesMetrics?.clients ?? 0;
-        const revenue = salesMetrics?.revenue ?? 0;
-        const commission = salesMetrics?.commission ?? 0;
+        const hasRealSales = salesMetrics !== undefined && salesMetrics.clients > 0;
+
+        const clients = hasRealSales
+          ? salesMetrics.clients
+          : (record.clients ?? 0);
+        const revenue = hasRealSales
+          ? salesMetrics.revenue
+          : (record.revenue ?? 0);
+        const commission = hasRealSales
+          ? salesMetrics.commission
+          : (record.commission ?? record.revenue ?? 0);
 
         const trackingMetrics = trackingMetricsByDate.get(record.date) ?? { visitors: 0, conversations: 0 };
 
@@ -483,6 +494,13 @@ export function DailyAdsScreen() {
     setFormOpen(false);
     setError("");
     setEditingRecord(null);
+    setDate("");
+    setSpend("");
+    setCpc("");
+    setImpressions("");
+    setManualRevenue("");
+    setManualCommission("");
+    setManualClients("");
   }
 
   function openCreateForm() {
@@ -491,6 +509,9 @@ export function DailyAdsScreen() {
     setSpend("");
     setCpc("");
     setImpressions("");
+    setManualRevenue("");
+    setManualCommission("");
+    setManualClients("");
     setError("");
     setFormOpen(true);
   }
@@ -501,6 +522,9 @@ export function DailyAdsScreen() {
     setSpend(String(record.spend).replace(".", ","));
     setCpc(String(record.cpc).replace(".", ","));
     setImpressions(String(record.impressions));
+    setManualRevenue(record.revenue != null ? String(record.revenue).replace(".", ",") : "");
+    setManualCommission(record.commission != null ? String(record.commission).replace(".", ",") : "");
+    setManualClients(record.clients != null ? String(record.clients) : "");
     setError("");
     setFormOpen(true);
   }
@@ -552,6 +576,10 @@ export function DailyAdsScreen() {
     const parsedCpc = parseDecimal(cpc);
     const parsedImpressions = Number(impressions);
 
+    const parsedRevenue = manualRevenue.trim() ? parseDecimal(manualRevenue) : null;
+    const parsedCommission = manualCommission.trim() ? parseDecimal(manualCommission) : null;
+    const parsedClients = manualClients.trim() ? Number(manualClients) : null;
+
     if (!isValidBrazilianDate(date)) {
       setError("Informe uma data válida no formato DD/MM/AAAA.");
       return;
@@ -566,6 +594,19 @@ export function DailyAdsScreen() {
       parsedImpressions < 0
     ) {
       setError("Preencha gasto, CPC e impressões com valores válidos.");
+      return;
+    }
+
+    if (parsedRevenue !== null && (!Number.isFinite(parsedRevenue) || parsedRevenue < 0)) {
+      setError("Faturamento manual deve ser um valor numérico válido.");
+      return;
+    }
+    if (parsedCommission !== null && (!Number.isFinite(parsedCommission) || parsedCommission < 0)) {
+      setError("Comissão manual deve ser um valor numérico válido.");
+      return;
+    }
+    if (parsedClients !== null && (!Number.isInteger(parsedClients) || parsedClients < 0)) {
+      setError("Quantidade de clientes deve ser um número inteiro positivo.");
       return;
     }
 
@@ -584,6 +625,9 @@ export function DailyAdsScreen() {
           spend: parsedSpend,
           cpc: parsedCpc,
           impressions: parsedImpressions,
+          revenue: parsedRevenue,
+          commission: parsedCommission,
+          clients: parsedClients,
         }),
       });
       const data = (await response.json()) as DailyAdsRecord | { error?: string };
@@ -601,10 +645,6 @@ export function DailyAdsScreen() {
             )
           : [savedRecord, ...current],
       );
-      setDate("");
-      setSpend("");
-      setCpc("");
-      setImpressions("");
       closeForm();
     } catch {
       setError("Não foi possível conectar ao servidor.");
@@ -957,6 +997,53 @@ export function DailyAdsScreen() {
                   className="mt-1.5 min-h-11 w-full rounded-xl border border-zinc-300 bg-white px-3.5 text-zinc-950 outline-none transition focus:border-blue-500 focus:ring-3 focus:ring-blue-500/15 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
                 />
               </label>
+
+              <div className="rounded-2xl border border-zinc-200 bg-zinc-50/70 p-4 dark:border-zinc-800 dark:bg-zinc-900/40">
+                <p className="text-xs font-semibold uppercase tracking-wider text-zinc-600 dark:text-zinc-400">
+                  Faturamento e Vendas do Dia (Opcional)
+                </p>
+                <p className="mt-0.5 text-[11px] text-zinc-500">
+                  Preencha para dias sem vendas detalhadas cadastradas.
+                </p>
+
+                <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                  <label className="block text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                    Faturamento (R$)
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={manualRevenue}
+                      onChange={(event) => setManualRevenue(event.target.value)}
+                      placeholder="0,00"
+                      className="mt-1 min-h-9 w-full rounded-lg border border-zinc-300 bg-white px-2.5 text-sm text-zinc-950 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/15 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+                    />
+                  </label>
+
+                  <label className="block text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                    Comissão / Caixa (R$)
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={manualCommission}
+                      onChange={(event) => setManualCommission(event.target.value)}
+                      placeholder="0,00"
+                      className="mt-1 min-h-9 w-full rounded-lg border border-zinc-300 bg-white px-2.5 text-sm text-zinc-950 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/15 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+                    />
+                  </label>
+
+                  <label className="block text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                    Clientes
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={manualClients}
+                      onChange={(event) => setManualClients(event.target.value.replace(/\D/g, ""))}
+                      placeholder="0"
+                      className="mt-1 min-h-9 w-full rounded-lg border border-zinc-300 bg-white px-2.5 text-sm text-zinc-950 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/15 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+                    />
+                  </label>
+                </div>
+              </div>
 
               {error ? <p className="text-sm font-medium text-red-600 dark:text-red-400">{error}</p> : null}
 

@@ -4,13 +4,20 @@ export type DailyAdsRecord = {
   spend: number;
   cpc: number;
   impressions: number;
+  revenue?: number | null;
+  commission?: number | null;
+  clients?: number | null;
   createdAt: string;
 };
 
 export type DailyAdsInput = Pick<
   DailyAdsRecord,
   "date" | "spend" | "cpc" | "impressions"
->;
+> & {
+  revenue?: number | null;
+  commission?: number | null;
+  clients?: number | null;
+};
 
 export function isValidBrazilianDate(value: string) {
   const match = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(value);

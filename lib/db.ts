@@ -301,14 +301,45 @@ export async function initializeDatabase() {
       )`
     );
 
-    // Seeds iniciais
+    // Daily Ads
     await query(
-      `INSERT INTO public.whatsapp_templates (text) VALUES
-        ('Oi, estou precisando de um chaveiro 24h. Você está disponivel?'),
-        ('Olá, preciso de um chaveiro 24H. Vocês estão disponiveis?'),
-        ('Preciso de um chaveiro 24h. Voce está disponivel?'),
-        ('Preciso de chaveiro 24h. Voce está disponivel agora?')
-       ON CONFLICT (text) DO NOTHING`
+      `CREATE TABLE IF NOT EXISTS public."DailyAdsManual" (
+        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        date TEXT NOT NULL UNIQUE CHECK (date ~ '^\\d{2}/\\d{2}/\\d{4}$'),
+        spend NUMERIC(12, 2) NOT NULL DEFAULT 0 CHECK (spend >= 0),
+        cpc NUMERIC(12, 2) NOT NULL DEFAULT 0 CHECK (cpc >= 0),
+        impressions INTEGER NOT NULL DEFAULT 0 CHECK (impressions >= 0),
+        revenue NUMERIC(12, 2) DEFAULT NULL,
+        commission NUMERIC(12, 2) DEFAULT NULL,
+        clients INTEGER DEFAULT NULL,
+        "createdAt" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )`
+    );
+
+    await query(
+      `ALTER TABLE public."DailyAdsManual"
+       ADD COLUMN IF NOT EXISTS revenue NUMERIC(12, 2) DEFAULT NULL,
+       ADD COLUMN IF NOT EXISTS commission NUMERIC(12, 2) DEFAULT NULL,
+       ADD COLUMN IF NOT EXISTS clients INTEGER DEFAULT NULL`
+    );
+
+    // Dados consolidados retroativos de 01/09 a 08/09
+    await query(
+      `INSERT INTO public."DailyAdsManual" (id, date, spend, cpc, impressions, revenue, commission, clients, "createdAt")
+       VALUES
+         (gen_random_uuid()::text, '01/09/2026', 0, 0, 0, 145.00, 145.00, 1, CURRENT_TIMESTAMP),
+         (gen_random_uuid()::text, '02/09/2026', 0, 0, 0, 660.00, 660.00, 4, CURRENT_TIMESTAMP),
+         (gen_random_uuid()::text, '03/09/2026', 0, 0, 0, 255.00, 255.00, 2, CURRENT_TIMESTAMP),
+         (gen_random_uuid()::text, '04/09/2026', 0, 0, 0, 200.00, 200.00, 2, CURRENT_TIMESTAMP),
+         (gen_random_uuid()::text, '05/09/2026', 0, 0, 0, 260.00, 260.00, 2, CURRENT_TIMESTAMP),
+         (gen_random_uuid()::text, '06/09/2026', 0, 0, 0, 360.00, 360.00, 3, CURRENT_TIMESTAMP),
+         (gen_random_uuid()::text, '07/09/2026', 0, 0, 0, 430.00, 430.00, 3, CURRENT_TIMESTAMP),
+         (gen_random_uuid()::text, '08/09/2026', 0, 0, 0, 0.00, 0.00, 0, CURRENT_TIMESTAMP)
+       ON CONFLICT (date) DO UPDATE
+       SET
+         revenue = EXCLUDED.revenue,
+         commission = EXCLUDED.commission,
+         clients = EXCLUDED.clients`
     );
 
     console.log("Database initialized successfully!");

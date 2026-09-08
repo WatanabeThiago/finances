@@ -9,6 +9,9 @@ type DailyAdsRow = {
   spend: string | number;
   cpc: string | number;
   impressions: string | number;
+  revenue?: string | number | null;
+  commission?: string | number | null;
+  clients?: string | number | null;
   createdAt: Date | string;
 };
 
@@ -19,6 +22,9 @@ function serializeRecord(row: DailyAdsRow): DailyAdsRecord {
     spend: Number(row.spend),
     cpc: Number(row.cpc),
     impressions: Number(row.impressions),
+    revenue: row.revenue !== null && row.revenue !== undefined ? Number(row.revenue) : null,
+    commission: row.commission !== null && row.commission !== undefined ? Number(row.commission) : null,
+    clients: row.clients !== null && row.clients !== undefined ? Number(row.clients) : null,
     createdAt:
       row.createdAt instanceof Date
         ? row.createdAt.toISOString()
@@ -67,13 +73,38 @@ export async function PATCH(request: Request, { params }: RouteParams) {
     );
   }
 
+  const revenue = body?.revenue !== undefined && body?.revenue !== null && body?.revenue !== ""
+    ? finiteNumber(body?.revenue)
+    : null;
+  const commission = body?.commission !== undefined && body?.commission !== null && body?.commission !== ""
+    ? finiteNumber(body?.commission)
+    : null;
+  const clients = body?.clients !== undefined && body?.clients !== null && body?.clients !== ""
+    ? finiteNumber(body?.clients)
+    : null;
+
   try {
     const rows = (await query(
       `UPDATE public."DailyAdsManual"
-       SET date = $2, spend = $3, cpc = $4, impressions = $5
+       SET date = $2,
+           spend = $3,
+           cpc = $4,
+           impressions = $5,
+           revenue = $6,
+           commission = $7,
+           clients = $8
        WHERE id = $1
-       RETURNING id, date, spend, cpc, impressions, "createdAt"`,
-      [id, date, spend, cpc, impressions],
+       RETURNING id, date, spend, cpc, impressions, revenue, commission, clients, "createdAt"`,
+      [
+        id,
+        date,
+        spend,
+        cpc,
+        impressions,
+        revenue !== null && revenue >= 0 ? revenue : null,
+        commission !== null && commission >= 0 ? commission : null,
+        clients !== null && Number.isInteger(clients) && clients >= 0 ? clients : null,
+      ],
     )) as DailyAdsRow[];
 
     if (!rows[0]) {
