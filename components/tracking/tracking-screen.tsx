@@ -48,7 +48,6 @@ export function TrackingScreen() {
   const [savingTemplate, setSavingTemplate] = useState(false);
   const [kwSort, setKwSort] = useState<{ col: "total" | "converted" | "rate"; dir: "desc" | "asc" }>({ col: "rate", dir: "desc" });
   const [copied, setCopied] = useState(false);
-  const [copiedJson, setCopiedJson] = useState(false);
   const [copiedAI, setCopiedAI] = useState(false);
   const [testingAlert, setTestingAlert] = useState(false);
   const [alertSent, setAlertSent] = useState(false);
