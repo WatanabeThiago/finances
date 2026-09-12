@@ -342,6 +342,35 @@ export async function initializeDatabase() {
          clients = EXCLUDED.clients`
     );
 
+    // Tabela de Usuários para Autenticação
+    await query(
+      `CREATE TABLE IF NOT EXISTS public."User" (
+        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        username TEXT NOT NULL UNIQUE,
+        password_hash TEXT NOT NULL,
+        name TEXT DEFAULT '',
+        "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        "updatedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )`
+    );
+
+    // Seed do usuário único 'thiago' se ainda não existir
+    const existingUser = await query(
+      `SELECT id FROM public."User" WHERE username = $1`,
+      ["thiago"]
+    );
+
+    if (existingUser.length === 0) {
+      const bcrypt = await import("bcryptjs");
+      const hash = await bcrypt.hash("u7v$8N8e@", 10);
+      await query(
+        `INSERT INTO public."User" (username, password_hash, name)
+         VALUES ($1, $2, $3)`,
+        ["thiago", hash, "Thiago Watanabe"]
+      );
+      console.log("✓ Usuário 'thiago' criado com sucesso no banco!");
+    }
+
     console.log("Database initialized successfully!");
   } catch (error) {
     console.error("Error initializing database:", error);

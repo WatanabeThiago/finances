@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { formatBRL } from "@/lib/money";
 import type { VendaLg } from "@/lib/venda-lg";
 import type { DailyAdsRecord } from "@/lib/daily-ads";
@@ -37,7 +38,19 @@ const FIXED_EXPENSES = [
   },
 ];
 
-const QuickStats = ({ label, value, change, color = "sky" }: { label: string; value: string; change?: string; color?: string }) => {
+const QuickStats = ({
+  label,
+  value,
+  change,
+  color = "sky",
+  href,
+}: {
+  label: string;
+  value: string;
+  change?: string;
+  color?: string;
+  href?: string;
+}) => {
   const colorClasses = {
     sky: "bg-sky-50 dark:bg-sky-950/30 border-sky-200 dark:border-sky-800",
     green: "bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-800",
@@ -48,11 +61,22 @@ const QuickStats = ({ label, value, change, color = "sky" }: { label: string; va
     blue: "bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800",
   };
 
-  return (
-    <div className={`rounded-xl border p-4 ${colorClasses[color as keyof typeof colorClasses]}`}>
-      <p className="text-sm font-medium text-zinc-600 dark:text-zinc-400">
-        {label}
-      </p>
+  const cardContent = (
+    <div
+      className={`rounded-xl border p-4 ${colorClasses[color as keyof typeof colorClasses]} ${
+        href ? "transition-all duration-200 hover:shadow-md hover:scale-[1.02] cursor-pointer group" : ""
+      }`}
+    >
+      <div className="flex items-center justify-between">
+        <p className="text-sm font-medium text-zinc-600 dark:text-zinc-400">
+          {label}
+        </p>
+        {href && (
+          <span className="text-xs font-semibold text-zinc-400 group-hover:text-zinc-700 dark:group-hover:text-zinc-200 transition-colors">
+            Ver ↗
+          </span>
+        )}
+      </div>
       <p className="mt-2 text-3xl font-bold text-zinc-900 dark:text-white">
         {value}
       </p>
@@ -63,6 +87,16 @@ const QuickStats = ({ label, value, change, color = "sky" }: { label: string; va
       )}
     </div>
   );
+
+  if (href) {
+    return (
+      <Link href={href} className="block no-underline">
+        {cardContent}
+      </Link>
+    );
+  }
+
+  return cardContent;
 };
 
 const FixedExpenseCard = ({
@@ -458,6 +492,7 @@ export function DashboardScreen() {
             value={formatBRL(stats.totalVendas)}
             change={`${stats.totalVendidas} venda${stats.totalVendidas !== 1 ? "s" : ""}`}
             color="green"
+            href={`/vendas-lg?data=${dateFilter === "month" ? "30d" : dateFilter}`}
           />
           <QuickStats
             label="Ticket Médio"
@@ -480,14 +515,16 @@ export function DashboardScreen() {
           <QuickStats
             label="Comissões Pagas"
             value={formatBRL(stats.comissaoPaga)}
-            change="Pendentes de pagamento"
+            change="Comissões quitadas"
             color="emerald"
+            href={`/vendas-lg?comissao=pago&data=${dateFilter === "month" ? "30d" : dateFilter}`}
           />
           <QuickStats
             label="Comissões Não Pagas"
             value={formatBRL(stats.comissaoNaoPaga)}
             change="Aguardando pagamento"
             color="amber"
+            href={`/vendas-lg?comissao=nao-pago&data=${dateFilter === "month" ? "30d" : dateFilter}`}
           />
           <QuickStats
             label="Faturamento do Parceiro"

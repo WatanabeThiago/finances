@@ -17,7 +17,7 @@ import { generateReceiptHTML } from "@/lib/pdf-receipt";
 import { VendaDetailModal } from "@/components/vendas-lg/venda-detail-modal";
 import { SingleLocationMap } from "@/components/locations/single-location-map";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   useCallback,
   useEffect,
@@ -297,10 +297,44 @@ function VendasLgWorkspace({ mode }: { mode: VendasLgWorkspaceMode }) {
   const [vendas, setVendas] = useState<VendaLg[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const searchParams = useSearchParams();
+
+  const urlComissao = searchParams.get("comissao") || searchParams.get("commission");
+  const initialComissao: VendaLgCommissionFilter =
+    urlComissao === "nao-pago" || urlComissao === "nao_pago" || urlComissao === "unpaid"
+      ? "nao-pago"
+      : urlComissao === "pago" || urlComissao === "paid"
+      ? "pago"
+      : "all";
+
+  const urlDataRange = searchParams.get("data") || searchParams.get("date") || searchParams.get("range");
+  const initialDataRange: VendaLgDateRange =
+    urlDataRange && ["today", "yesterday", "7d", "30d", "all", "upcoming"].includes(urlDataRange)
+      ? (urlDataRange as VendaLgDateRange)
+      : (urlComissao === "nao-pago" ? "all" : "today");
+
   const [filterParceiro, setFilterParceiro] = useState<string>("");
-  const [filterComissao, setFilterComissao] = useState<VendaLgCommissionFilter>("all");
-  const [filterDataRange, setFilterDataRange] = useState<VendaLgDateRange>("today");
+  const [filterComissao, setFilterComissao] = useState<VendaLgCommissionFilter>(initialComissao);
+  const [filterDataRange, setFilterDataRange] = useState<VendaLgDateRange>(initialDataRange);
   const [filterParceiroOpen, setFilterParceiroOpen] = useState(false);
+
+  useEffect(() => {
+    const comissaoParam = searchParams.get("comissao") || searchParams.get("commission");
+    if (comissaoParam === "nao-pago" || comissaoParam === "nao_pago" || comissaoParam === "unpaid") {
+      setFilterComissao("nao-pago");
+    } else if (comissaoParam === "pago" || comissaoParam === "paid") {
+      setFilterComissao("pago");
+    } else if (comissaoParam === "all") {
+      setFilterComissao("all");
+    }
+
+    const dataParam = searchParams.get("data") || searchParams.get("date") || searchParams.get("range");
+    if (dataParam && ["today", "yesterday", "7d", "30d", "all", "upcoming"].includes(dataParam)) {
+      setFilterDataRange(dataParam as VendaLgDateRange);
+    } else if (comissaoParam === "nao-pago" && !dataParam) {
+      setFilterDataRange("all");
+    }
+  }, [searchParams]);
   const [filterParceiroQuery, setFilterParceiroQuery] = useState("");
   const filterParceiroComboboxRef = useRef<HTMLDivElement>(null);
   const filterParceiroListId = useId();

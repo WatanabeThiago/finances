@@ -16,6 +16,7 @@ import {
   Inbox,
   MessageCircle,
   Handshake,
+  LogOut,
 } from "lucide-react";
 
 function HamburgerIcon({ className }: { className?: string }) {
@@ -111,6 +112,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   const currentTitle = titleForPathname(pathname);
 
+  const handleLogout = async () => {
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } finally {
+      window.location.href = "/login";
+    }
+  };
+
+  if (pathname === "/login") {
+    return <main className="min-h-screen bg-background">{children}</main>;
+  }
+
   const NavigationList = ({ onItemClick }: { onItemClick?: () => void }) => (
     <ul className="flex flex-1 flex-col gap-1.5 overflow-y-auto px-4 py-3">
       {NAV_ITEMS.map((item) => {
@@ -180,6 +193,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 Administrador
               </p>
             </div>
+            <button
+              type="button"
+              onClick={handleLogout}
+              title="Sair do sistema"
+              aria-label="Sair do sistema"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-zinc-400 transition-colors hover:bg-rose-50 hover:text-rose-600 dark:text-zinc-500 dark:hover:bg-rose-950/40 dark:hover:text-rose-400"
+            >
+              <LogOut className="h-4 w-4" />
+            </button>
           </div>
         </div>
       </aside>
@@ -263,6 +285,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   Administrador
                 </p>
               </div>
+              <button
+                type="button"
+                onClick={handleLogout}
+                title="Sair do sistema"
+                aria-label="Sair do sistema"
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-zinc-400 transition-colors hover:bg-rose-50 hover:text-rose-600 dark:text-zinc-500 dark:hover:bg-rose-950/40 dark:hover:text-rose-400"
+              >
+                <LogOut className="h-4 w-4" />
+              </button>
             </div>
           </div>
         </nav>
