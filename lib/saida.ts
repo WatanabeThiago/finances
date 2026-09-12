@@ -6,6 +6,7 @@ export type SaidaCategoria =
   | "Alimentação"
   | "Máquina"
   | "Combustível"
+  | "Contador/Tributos"
   | "Outros";
 
 export type FormaPagamentoSaida =
@@ -97,6 +98,15 @@ export const CATEGORIAS_PADRAO: Array<{
     bg: "bg-emerald-500/10 dark:bg-emerald-500/20",
     border: "border-emerald-500/30",
     text: "text-emerald-700 dark:text-emerald-300",
+  },
+  {
+    id: "Contador/Tributos",
+    label: "Contador/Tributos",
+    icone: "📑",
+    cor: "teal",
+    bg: "bg-teal-500/10 dark:bg-teal-500/20",
+    border: "border-teal-500/30",
+    text: "text-teal-700 dark:text-teal-300",
   },
   {
     id: "Outros",
