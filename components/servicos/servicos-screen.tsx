@@ -17,6 +17,7 @@ import type { Service } from "@/lib/service";
 import {
   parseServicesJson,
 } from "@/lib/service";
+import { SkeletonList, SkeletonTableRow } from "@/components/ui/skeleton";
 import {
   Fragment,
   useCallback,
@@ -504,7 +505,11 @@ export function ServicosScreen() {
             </tr>
           </thead>
           <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/60">
-            {filteredServices.map((s, index) => {
+            {loading ? (
+              Array.from({ length: 6 }).map((_, i) => (
+                <SkeletonTableRow key={i} columns={6} />
+              ))
+            ) : filteredServices.map((s, index) => {
               const isEven = index % 2 === 0;
               const isExpanded = !!expandedServiceIds[s.id];
               return (
@@ -655,6 +660,13 @@ export function ServicosScreen() {
 
   /* ── MOBILE LIST ────────────────────────────────────────────────── */
   function renderMobileList() {
+    if (loading) {
+      return (
+        <div className="md:hidden">
+          <SkeletonList count={5} />
+        </div>
+      );
+    }
     return (
       <ul className="flex flex-col gap-2 md:hidden">
         {filteredServices.map((s) => {

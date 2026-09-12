@@ -1,6 +1,7 @@
 "use client";
 import { Search as SearchIcon } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+import { SkeletonList } from "@/components/ui/skeleton";
 
 type SearchTerm = {
   id: string;
@@ -175,7 +176,7 @@ export default function SearchTermsScreen() {
 
       {/* List */}
       {loading ? (
-        <div className="text-center text-gray-400 py-10">Carregando...</div>
+        <SkeletonList count={6} />
       ) : terms.length === 0 ? (
         <div className="text-center text-gray-400 py-10">
           Nenhum termo {TAB_LABELS[tab].toLowerCase()}.

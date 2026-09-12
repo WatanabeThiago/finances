@@ -4,6 +4,7 @@ import { Fragment, useEffect, useMemo, useState } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import type { TrackingEvent } from "@/lib/tracking";
 import { formatTelefone } from "@/lib/phone";
+import { Skeleton, SkeletonList } from "@/components/ui/skeleton";
 
 const StatCard = ({ label, value, change, color = "sky" }: { label: string; value: string; change?: string; color?: string }) => {
   const colorClasses = {
@@ -640,8 +641,25 @@ export function TrackingScreen() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <p className="text-zinc-500">Carregando dados...</p>
+      <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 pb-28">
+        <div className="space-y-2">
+          <Skeleton className="h-10 w-64" />
+          <Skeleton className="h-4 w-96" />
+        </div>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="rounded-xl border border-zinc-200/60 p-4 dark:border-zinc-800/60">
+              <Skeleton className="h-4 w-24 mb-3" />
+              <Skeleton className="h-8 w-28 mb-2" />
+              <Skeleton className="h-3 w-16" />
+            </div>
+          ))}
+        </div>
+        <Skeleton className="h-72 rounded-xl" />
+        <div className="space-y-3">
+          <Skeleton className="h-5 w-48" />
+          <SkeletonList count={6} />
+        </div>
       </div>
     );
   }

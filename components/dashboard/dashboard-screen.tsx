@@ -10,6 +10,7 @@ import {
   useMemo,
   useState,
 } from "react";
+import { Skeleton, SkeletonStatsCards, SkeletonList } from "@/components/ui/skeleton";
 
 type DashboardData = {
   vendas: VendaLg[];
@@ -408,8 +409,31 @@ export function DashboardScreen() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <p className="text-zinc-500">Carregando dashboard...</p>
+      <div className="min-h-screen bg-gradient-to-br from-white to-zinc-50 p-4 dark:from-zinc-950 dark:to-zinc-900">
+        <div className="mx-auto max-w-7xl space-y-8">
+          <div className="space-y-2">
+            <Skeleton className="h-9 w-48" />
+            <Skeleton className="h-4 w-72" />
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <Skeleton className="h-28 rounded-2xl" />
+            <Skeleton className="h-28 rounded-2xl" />
+            <Skeleton className="h-28 rounded-2xl" />
+          </div>
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="rounded-xl border border-zinc-200/70 p-4 dark:border-zinc-800/70">
+                <Skeleton className="h-4 w-28 mb-3" />
+                <Skeleton className="h-8 w-36 mb-2" />
+                <Skeleton className="h-3 w-20" />
+              </div>
+            ))}
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <Skeleton className="h-80 rounded-xl" />
+            <Skeleton className="h-80 rounded-xl" />
+          </div>
+        </div>
       </div>
     );
   }

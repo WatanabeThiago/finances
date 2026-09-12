@@ -21,6 +21,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
+import { SkeletonList } from "@/components/ui/skeleton";
 
 function newId(): string {
   return crypto.randomUUID();
@@ -688,11 +689,7 @@ export function ParceirosScreen() {
       </div>
 
       {loading ? (
-        <div className="rounded-2xl border border-dashed border-zinc-300 bg-zinc-50/80 px-4 py-10 text-center dark:border-zinc-700 dark:bg-zinc-900/40">
-          <p className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-            Carregando parceiros...
-          </p>
-        </div>
+        <SkeletonList count={5} />
       ) : error ? (
         <div className="rounded-2xl border border-dashed border-yellow-300 bg-yellow-50/80 px-4 py-4 dark:border-yellow-700 dark:bg-yellow-900/40">
           <p className="text-sm font-medium text-yellow-700 dark:text-yellow-300">

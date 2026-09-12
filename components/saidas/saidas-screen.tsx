@@ -23,6 +23,7 @@ import {
   TrendingDown,
   X,
 } from "lucide-react";
+import { SkeletonList } from "@/components/ui/skeleton";
 import { useEffect, useMemo, useState } from "react";
 
 type DateFilterType = "today" | "yesterday" | "7d" | "month" | "30d" | "all";
@@ -549,8 +550,8 @@ export function SaidasScreen() {
         </div>
 
         {loading ? (
-          <div className="p-8 text-center text-sm text-zinc-500">
-            Carregando saídas...
+          <div className="p-4">
+            <SkeletonList count={5} />
           </div>
         ) : filteredSaidas.length === 0 ? (
           <div className="p-8 text-center">

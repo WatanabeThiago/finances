@@ -20,6 +20,7 @@ import {
   Clock
 } from "lucide-react";
 import { formatBRL } from "@/lib/money";
+import { Skeleton, SkeletonTableRow } from "@/components/ui/skeleton";
 
 type Cliente = {
   telefone: string;
@@ -171,12 +172,9 @@ export function ClientesScreen() {
             </thead>
             <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
               {loading ? (
-                <tr>
-                  <td colSpan={7} className="px-6 py-12 text-center">
-                    <Loader2 className="mx-auto h-6 w-6 animate-spin text-sky-500" />
-                    <p className="mt-2 text-zinc-500">Buscando clientes...</p>
-                  </td>
-                </tr>
+                Array.from({ length: 6 }).map((_, i) => (
+                  <SkeletonTableRow key={i} columns={7} />
+                ))
               ) : clientes.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="px-6 py-12 text-center text-zinc-500">

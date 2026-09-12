@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { Phone, X, Loader } from 'lucide-react';
+import { SkeletonList } from '@/components/ui/skeleton';
 
 interface ContactRequestRecord {
   id: string;
@@ -60,8 +61,8 @@ export function ContactRequestsScreen() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-96">
-        <Loader className="w-8 h-8 animate-spin text-blue-600" />
+      <div className="py-2">
+        <SkeletonList count={4} />
       </div>
     );
   }

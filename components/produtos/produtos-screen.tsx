@@ -3,6 +3,7 @@
 import { formatBRL } from "@/lib/money";
 import type { Produto, ProdutoLink } from "@/lib/produto";
 import { parseProdutosJson } from "@/lib/produto";
+import { SkeletonList, SkeletonTableRow } from "@/components/ui/skeleton";
 import {
   Fragment,
   useCallback,
@@ -733,7 +734,11 @@ export function ProdutosScreen() {
             </tr>
           </thead>
           <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/60">
-            {filteredProdutos.map((p, index) => {
+            {loading ? (
+              Array.from({ length: 6 }).map((_, i) => (
+                <SkeletonTableRow key={i} columns={5} />
+              ))
+            ) : filteredProdutos.map((p, index) => {
               const isEven = index % 2 === 0;
               const isExpanded = !!expandedProdutoIds[p.id];
               const linksData = expandedLinks[p.id];
@@ -917,6 +922,13 @@ export function ProdutosScreen() {
 
   /* ── MOBILE LIST ────────────────────────────────────────────────── */
   function renderMobileList() {
+    if (loading) {
+      return (
+        <div className="md:hidden">
+          <SkeletonList count={5} />
+        </div>
+      );
+    }
     return (
       <ul className="flex flex-col gap-2 md:hidden">
         {filteredProdutos.map((p) => {

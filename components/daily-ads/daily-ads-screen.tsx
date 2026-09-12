@@ -17,6 +17,7 @@ import {
 } from "@/lib/daily-ads";
 import type { VendaLg } from "@/lib/venda-lg";
 import type { TrackingEvent } from "@/lib/tracking";
+import { SkeletonList } from "@/components/ui/skeleton";
 
 const currencyFormatter = new Intl.NumberFormat("pt-BR", {
   style: "currency",
@@ -858,7 +859,9 @@ export function DailyAdsScreen() {
             ) : null}
 
             {loading ? (
-              <p className="py-12 text-center text-sm text-zinc-500">Carregando registros...</p>
+              <div className="py-4">
+                <SkeletonList count={5} />
+              </div>
             ) : loadError ? (
               <p className="py-12 text-center text-sm font-medium text-red-600 dark:text-red-400">{loadError}</p>
             ) : records.length === 0 ? (

@@ -18,6 +18,7 @@ import { VendaDetailModal } from "@/components/vendas-lg/venda-detail-modal";
 import { SingleLocationMap } from "@/components/locations/single-location-map";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { SkeletonList, Skeleton } from "@/components/ui/skeleton";
 import {
   useCallback,
   useEffect,
@@ -803,6 +804,18 @@ function VendasLgWorkspace({ mode }: { mode: VendasLgWorkspaceMode }) {
   }, [vendas, filterParceiro, filterComissao, filterDataRange]);
 
   const listContent = useMemo(() => {
+    if (loading) {
+      return (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between px-1">
+            <Skeleton className="h-4 w-28" />
+            <Skeleton className="h-4 w-16" />
+          </div>
+          <SkeletonList count={6} />
+        </div>
+      );
+    }
+
     // Filter vendas based on filters
     let filteredVendas = vendas;
 
