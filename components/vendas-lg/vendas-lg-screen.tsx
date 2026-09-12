@@ -19,6 +19,8 @@ import { SingleLocationMap } from "@/components/locations/single-location-map";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { SkeletonList, Skeleton } from "@/components/ui/skeleton";
+import { matchesPhoneSearch } from "@/lib/phone";
+import { Search as SearchIcon, X as ClearIcon } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -317,6 +319,7 @@ function VendasLgWorkspace({ mode }: { mode: VendasLgWorkspaceMode }) {
   const [filterParceiro, setFilterParceiro] = useState<string>("");
   const [filterComissao, setFilterComissao] = useState<VendaLgCommissionFilter>(initialComissao);
   const [filterDataRange, setFilterDataRange] = useState<VendaLgDateRange>(initialDataRange);
+  const [filterPhone, setFilterPhone] = useState<string>("");
   const [filterParceiroOpen, setFilterParceiroOpen] = useState(false);
 
   useEffect(() => {
@@ -778,6 +781,13 @@ function VendasLgWorkspace({ mode }: { mode: VendasLgWorkspaceMode }) {
       filteredVendas = filteredVendas.filter((v) => v.comissao && !v.comissaoPaga);
     }
 
+    // Filter by telefone com correspondencia inteligente
+    if (filterPhone.trim()) {
+      filteredVendas = filteredVendas.filter((v) =>
+        matchesPhoneSearch(v.clienteTelefone || "", filterPhone)
+      );
+    }
+
     const comissoes = filteredVendas.filter((v) => v.comissao && v.comissao > 0);
     const comissaoMedia = comissoes.length > 0 
       ? comissoes.reduce((acc, v) => acc + (v.comissao || 0), 0) / comissoes.length 
@@ -801,7 +811,7 @@ function VendasLgWorkspace({ mode }: { mode: VendasLgWorkspaceMode }) {
       .reduce((acc, v) => acc + totalVendaLg(v), 0);
 
     return { comissaoMedia, totalVendas: filteredVendas.length, comissaoPaga, comissaoNaoPaga, comissaoTotal, faturamentoParceiro, faturamentoTotal };
-  }, [vendas, filterParceiro, filterComissao, filterDataRange]);
+  }, [vendas, filterParceiro, filterComissao, filterDataRange, filterPhone]);
 
   const listContent = useMemo(() => {
     if (loading) {
@@ -873,6 +883,13 @@ function VendasLgWorkspace({ mode }: { mode: VendasLgWorkspaceMode }) {
       filteredVendas = filteredVendas.filter((v) => v.comissaoPaga === true);
     } else if (filterComissao === "nao-pago") {
       filteredVendas = filteredVendas.filter((v) => v.comissao && !v.comissaoPaga);
+    }
+
+    // Filter by telefone com correspondencia inteligente
+    if (filterPhone.trim()) {
+      filteredVendas = filteredVendas.filter((v) =>
+        matchesPhoneSearch(v.clienteTelefone || "", filterPhone)
+      );
     }
 
     if (filteredVendas.length === 0) {
@@ -1087,7 +1104,7 @@ function VendasLgWorkspace({ mode }: { mode: VendasLgWorkspaceMode }) {
         })}
       </ul>
     );
-  }, [vendas, servicoById, parceiros, filterParceiro, filterComissao, filterDataRange]);
+  }, [vendas, servicoById, parceiros, filterParceiro, filterComissao, filterDataRange, filterPhone]);
 
   const sortedParceiros = useMemo(() => {
     const refLat = form.latitude ? parseFloat(form.latitude) : undefined;
@@ -1561,6 +1578,32 @@ function VendasLgWorkspace({ mode }: { mode: VendasLgWorkspaceMode }) {
             >
               Não Pagas
             </button>
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold uppercase tracking-wide text-zinc-600 dark:text-zinc-400 mb-2">
+            Buscar por Telefone
+          </label>
+          <div className="relative flex items-center">
+            <SearchIcon className="absolute left-3 h-4 w-4 text-zinc-400 pointer-events-none" />
+            <input
+              type="text"
+              value={filterPhone}
+              onChange={(e) => setFilterPhone(e.target.value)}
+              placeholder="Digite o número (ex: 9667, 0905, 48 9 9667)..."
+              className="w-full rounded-lg border border-zinc-300 bg-white py-2 pl-9 pr-9 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/20 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:placeholder:text-zinc-500 dark:focus:border-sky-500"
+            />
+            {filterPhone ? (
+              <button
+                type="button"
+                onClick={() => setFilterPhone("")}
+                className="absolute right-2.5 rounded p-1 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors"
+                title="Limpar busca"
+              >
+                <ClearIcon className="h-4 w-4" />
+              </button>
+            ) : null}
           </div>
         </div>
       </div>
