@@ -17,6 +17,7 @@ import {
   MessageCircle,
   Handshake,
   LogOut,
+  TrendingDown,
 } from "lucide-react";
 
 function HamburgerIcon({ className }: { className?: string }) {
@@ -70,6 +71,8 @@ function getIconForHref(href: string) {
       return <Users {...props} />;
     case "/vendas-lg":
       return <Target {...props} />;
+    case "/saidas":
+      return <TrendingDown {...props} />;
     case "/daily-ads":
       return <Megaphone {...props} />;
     case "/tracking":

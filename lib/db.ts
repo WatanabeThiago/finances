@@ -371,6 +371,27 @@ export async function initializeDatabase() {
       console.log("✓ Usuário 'thiago' criado com sucesso no banco!");
     }
 
+    // Tabela de Saídas (Despesas)
+    await query(
+      `CREATE TABLE IF NOT EXISTS public."Saida" (
+        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        valor DECIMAL(10, 2) NOT NULL,
+        categoria TEXT NOT NULL,
+        descricao TEXT DEFAULT '',
+        "formaPagamento" TEXT DEFAULT 'Pix',
+        "dataSaida" TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        "createdAt" TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        "updatedAt" TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      )`
+    );
+
+    await query(
+      `CREATE INDEX IF NOT EXISTS idx_saida_data ON public."Saida" ("dataSaida" DESC)`
+    );
+    await query(
+      `CREATE INDEX IF NOT EXISTS idx_saida_categoria ON public."Saida" (categoria)`
+    );
+
     console.log("Database initialized successfully!");
   } catch (error) {
     console.error("Error initializing database:", error);

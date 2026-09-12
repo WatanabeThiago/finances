@@ -12,6 +12,11 @@ export const NAV_ITEMS: NavItem[] = [
     description: "Captação e venda do serviço",
   },
   {
+    href: "/saidas",
+    label: "Saídas",
+    description: "Gastos, ferramentas e custos",
+  },
+  {
     href: "/servicos",
     label: "Serviços",
     description: "Catálogo e gestão dos serviços",
@@ -58,6 +63,9 @@ export function navItemActive(pathname: string, href: string): boolean {
   if (href === "/") return pathname === "/";
   if (href === "/vendas-lg") {
     return pathname === "/vendas-lg" || pathname.startsWith("/vendas-lg/");
+  }
+  if (href === "/saidas") {
+    return pathname === "/saidas" || pathname.startsWith("/saidas/");
   }
   if (href === "/daily-ads") {
     return pathname === "/daily-ads" || pathname.startsWith("/daily-ads/");

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { formatBRL } from "@/lib/money";
 import type { VendaLg } from "@/lib/venda-lg";
 import type { DailyAdsRecord } from "@/lib/daily-ads";
+import type { Saida } from "@/lib/saida";
 import {
   useEffect,
   useMemo,
@@ -13,6 +14,7 @@ import {
 type DashboardData = {
   vendas: VendaLg[];
   dailyAds: DailyAdsRecord[];
+  saidas: Saida[];
 };
 
 type RawVendaLgLine = Omit<
@@ -180,6 +182,7 @@ export function DashboardScreen() {
   const [data, setData] = useState<DashboardData>({
     vendas: [],
     dailyAds: [],
+    saidas: [],
   });
   const [loading, setLoading] = useState(true);
   const [dateFilter, setDateFilter] = useState<DateFilter>("7d");
@@ -188,13 +191,15 @@ export function DashboardScreen() {
     const fetchData = async () => {
       try {
         setLoading(true);
-        const [vendasRes, dailyAdsRes] = await Promise.all([
+        const [vendasRes, dailyAdsRes, saidasRes] = await Promise.all([
           fetch("/api/vendas-lg"),
           fetch("/api/daily-ads"),
+          fetch("/api/saidas"),
         ]);
 
         const vendas: RawVendaLg[] = vendasRes.ok ? await vendasRes.json() : [];
         const dailyAds: DailyAdsRecord[] = dailyAdsRes.ok ? await dailyAdsRes.json() : [];
+        const saidasRaw: any[] = saidasRes.ok ? await saidasRes.json() : [];
 
         // Normalize numeric values
         const normalizedVendas: VendaLg[] = vendas.map((v) => ({
@@ -208,9 +213,15 @@ export function DashboardScreen() {
           })) : [],
         }));
 
+        const normalizedSaidas: Saida[] = saidasRaw.map((s) => ({
+          ...s,
+          valor: typeof s.valor === "string" ? parseFloat(s.valor) : s.valor,
+        }));
+
         setData({
           vendas: normalizedVendas,
           dailyAds,
+          saidas: normalizedSaidas,
         });
       } catch (err) {
         console.error("Error fetching dashboard data:", err);
@@ -280,7 +291,16 @@ export function DashboardScreen() {
       return adDate >= cutoffDate;
     });
 
-    return { vendas: filteredVendas, fallbackDailyAds };
+    const filteredSaidas = (data.saidas || []).filter((s) => {
+      if (!s.dataSaida) return false;
+      const saidaDate = new Date(s.dataSaida);
+      if (isYesterday && endOfYesterday) {
+        return saidaDate >= cutoffDate && saidaDate < endOfYesterday;
+      }
+      return saidaDate >= cutoffDate;
+    });
+
+    return { vendas: filteredVendas, fallbackDailyAds, saidas: filteredSaidas };
   }, [data, dateFilter]);
 
   const fixedExpenseSummary = useMemo(() => {
@@ -345,6 +365,14 @@ export function DashboardScreen() {
       return acc + (subtotal - (v.comissao || 0));
     }, 0);
 
+    const totalSaidas = (filteredData.saidas || []).reduce(
+      (acc, s) => acc + (s.valor || 0),
+      0
+    );
+
+    const totalSaidasCount = (filteredData.saidas || []).length;
+    const resultadoLiquido = totalComissao - totalSaidas;
+
     return {
       totalVendas,
       totalVendidas,
@@ -354,6 +382,9 @@ export function DashboardScreen() {
       comissaoNaoPaga,
       ticketMedio,
       faturamentoParceiro,
+      totalSaidas,
+      totalSaidasCount,
+      resultadoLiquido,
       vendaComComissaoCount:
         vendaComComissao.length + (fallbackCommission > 0 ? fallbackClients : 0),
     };
@@ -495,6 +526,19 @@ export function DashboardScreen() {
             href={`/vendas-lg?data=${dateFilter === "month" ? "30d" : dateFilter}`}
           />
           <QuickStats
+            label="Total de Saídas"
+            value={formatBRL(stats.totalSaidas)}
+            change={`${stats.totalSaidasCount} despesa${stats.totalSaidasCount !== 1 ? "s" : ""}`}
+            color="red"
+            href="/saidas"
+          />
+          <QuickStats
+            label="Resultado Líquido"
+            value={formatBRL(stats.resultadoLiquido)}
+            change="Comissões - Saídas"
+            color={stats.resultadoLiquido >= 0 ? "emerald" : "red"}
+          />
+          <QuickStats
             label="Ticket Médio"
             value={formatBRL(stats.ticketMedio)}
             change={`${stats.totalVendidas} vendas`}
@@ -615,7 +659,18 @@ export function DashboardScreen() {
         </div>
 
         {/* Quick Links */}
-        <div className="mt-8 grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+        <div className="mt-8 grid gap-4 md:grid-cols-2 lg:grid-cols-6">
+          <a
+            href="/saidas"
+            className="rounded-xl border border-rose-200 bg-rose-50/50 p-4 transition-all hover:shadow-lg dark:border-rose-900/40 dark:bg-rose-950/20 dark:hover:border-rose-800"
+          >
+            <p className="text-2xl mb-2">💸</p>
+            <p className="font-semibold text-rose-700 dark:text-rose-300">Saídas & Custos</p>
+            <p className="text-sm text-rose-600/80 dark:text-rose-400 mt-1">
+              Registrar despesa
+            </p>
+          </a>
+
           <a
             href="/vendas-lg"
             className="rounded-xl border border-zinc-200 bg-white p-4 transition-all hover:shadow-lg dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-zinc-700"
