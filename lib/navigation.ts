@@ -76,11 +76,17 @@ export function navItemActive(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-/** Resolve o título do header para rotas atuais e futuras aninhadas. */
+/** Resolve o título do header e da aba para rotas atuais e futuras aninhadas. */
 export function titleForPathname(pathname: string): string {
+  if (pathname === "/") return "Início";
+  if (pathname === "/login") return "Login";
+  if (pathname === "/locations") return "Mapa de Calor";
+  if (pathname === "/search-terms") return "Termos de Busca";
+  if (pathname === "/vendas-lg/nova") return "Nova Venda";
+
   const ordered = [...NAV_ITEMS].sort((a, b) => b.href.length - a.href.length);
   for (const item of ordered) {
     if (navItemActive(pathname, item.href)) return item.label;
   }
-  return "Negócio";
+  return "Gestão";
 }

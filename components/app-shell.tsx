@@ -115,6 +115,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   const currentTitle = titleForPathname(pathname);
 
+  // Atualizar título da aba dinamicamente de acordo com a rota
+  useEffect(() => {
+    if (currentTitle) {
+      document.title = `${currentTitle} · Gestão`;
+    }
+  }, [currentTitle]);
+
   const handleLogout = async () => {
     try {
       await fetch("/api/auth/logout", { method: "POST" });

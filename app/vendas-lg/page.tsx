@@ -3,7 +3,7 @@ import { Suspense } from "react";
 import { VendasLgScreen } from "@/components/vendas-lg";
 
 export const metadata: Metadata = {
-  title: "Lead generation",
+  title: "Vendas",
 };
 
 export default function LeadGenerationPage() {
