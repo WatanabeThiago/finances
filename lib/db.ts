@@ -388,8 +388,17 @@ export async function initializeDatabase() {
     await query(
       `CREATE INDEX IF NOT EXISTS idx_saida_data ON public."Saida" ("dataSaida" DESC)`
     );
+    // Tabela de Rate Limit para Login
     await query(
-      `CREATE INDEX IF NOT EXISTS idx_saida_categoria ON public."Saida" (categoria)`
+      `CREATE TABLE IF NOT EXISTS public."login_attempts" (
+        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        ip TEXT NOT NULL,
+        "attemptedAt" TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      )`
+    );
+
+    await query(
+      `CREATE INDEX IF NOT EXISTS idx_login_attempts_ip_time ON public."login_attempts" (ip, "attemptedAt" DESC)`
     );
 
     console.log("Database initialized successfully!");
