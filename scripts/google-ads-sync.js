@@ -60,17 +60,57 @@ function main() {
     var clicks = stats.getClicks();
     var cpc = clicks > 0 ? (spend / clicks) : 0;
 
+    // Segmentação por tipo de clique (URL do site, Chamada direta, WhatsApp/Mensagem)
+    var dateHyphen = Utilities.formatDate(targetDate, timeZone, "yyyy-MM-dd");
+    var urlClicks = 0;
+    var callClicks = 0;
+    var msgClicks = 0;
+
+    try {
+      // Consulta GAQL no Google Ads Scripts moderno
+      var query = "SELECT segments.click_type, metrics.clicks " +
+                  "FROM customer " +
+                  "WHERE segments.date = '" + dateHyphen + "'";
+      var report = AdsApp.search(query);
+      while (report.hasNext()) {
+        var row = report.next();
+        var clickType = row.segments.clickType;
+        var typeClicks = parseInt(row.metrics.clicks || 0, 10);
+
+        if (clickType === "URL_CLICKS") {
+          urlClicks += typeClicks;
+        } else if (clickType === "CALLS" || clickType === "CALL_TRACKING" || clickType === "PHONE_CALL") {
+          callClicks += typeClicks;
+        } else if (clickType === "MESSAGE" || clickType === "LEAD_FORM") {
+          msgClicks += typeClicks;
+        }
+      }
+    } catch (queryErr) {
+      Logger.log("Aviso ao buscar segmentação de cliques para " + dateString + ": " + queryErr.toString());
+      // Se não conseguir segmentar via GAQL (ex: conta não suportar ou permissão), deixa urlClicks = clicks
+      urlClicks = clicks;
+    }
+
+    // Se a consulta não encontrou segmentações explícitas ou a conta teve cliques simples no site:
+    if (urlClicks === 0 && callClicks === 0 && msgClicks === 0 && clicks > 0) {
+      urlClicks = clicks;
+    }
+
     Logger.log("Data: " + dateString + 
                " | Gasto: R$ " + spend.toFixed(2) + 
                " | CPC: R$ " + cpc.toFixed(2) + 
                " | Impressões: " + impressions + 
-               " | Cliques: " + clicks);
+               " | Cliques Totais: " + clicks +
+               " (Site: " + urlClicks + " | Ligações: " + callClicks + " | Whats: " + msgClicks + ")");
 
     records.push({
       date: dateString,
       spend: Number(spend.toFixed(2)),
       cpc: Number(cpc.toFixed(2)),
-      impressions: impressions
+      impressions: impressions,
+      urlClicks: urlClicks,
+      callClicks: callClicks,
+      msgClicks: msgClicks
     });
   }
 

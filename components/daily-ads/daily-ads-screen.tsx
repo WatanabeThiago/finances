@@ -130,23 +130,53 @@ function FunnelView({ item }: { item: DailyAdsDisplayRecord }) {
   const conversations = item.conversations;
   const visitors = item.visitors;
 
+  // Cliques segmentados (se informado via Google Ads ou formulário)
+  // Caso não tenha segmentação registrada, assume que os cliques totais foram no site
+  const hasSegmentation = item.urlClicks != null || item.callClicks != null || item.msgClicks != null;
+  const siteClicks = item.urlClicks != null ? item.urlClicks : item.clicks;
+  const directCalls = item.callClicks ?? 0;
+  const directMsgs = item.msgClicks ?? 0;
+  const directContacts = directCalls + directMsgs;
+
   const ctr = item.impressions > 0 ? (item.clicks / item.impressions) * 100 : 0;
-  const clickToVisitor = item.clicks > 0 ? (visitors / item.clicks) * 100 : 0;
+  // Agora calcula taxa de chegada usando os cliques no site, eliminando distorção das chamadas/msgs diretas
+  const clickToVisitor = siteClicks > 0 ? (visitors / siteClicks) * 100 : 0;
   const visitorToConv = visitors > 0 ? (conversations / visitors) * 100 : 0;
   const convToSale = conversations > 0 ? (item.clients / conversations) * 100 : 0;
 
   const cpm = item.impressions > 0 ? (item.spend / item.impressions) * 1000 : 0;
   const cpc = item.clicks > 0 ? item.spend / item.clicks : 0;
+  const cpcSite = siteClicks > 0 ? item.spend / siteClicks : 0;
   const costPerVisitor = visitors > 0 ? item.spend / visitors : 0;
   const costPerConv = conversations > 0 ? item.spend / conversations : 0;
   const cpa = item.clients > 0 ? item.spend / item.clients : 0;
 
   return (
     <div className="mb-6 rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800/60 dark:bg-zinc-950/50">
-      <div className="mb-5 flex items-center justify-between">
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-2">
         <h4 className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
           Funil de Vendas
         </h4>
+        {hasSegmentation && (
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <span className="rounded-lg bg-zinc-100 px-2.5 py-1 font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
+              Total: <strong>{numberFormatter.format(item.clicks)}</strong> cliques
+            </span>
+            <span className="rounded-lg bg-blue-50 px-2.5 py-1 font-semibold text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
+              🌐 Site: {numberFormatter.format(siteClicks)}
+            </span>
+            {directCalls > 0 && (
+              <span className="rounded-lg bg-emerald-50 px-2.5 py-1 font-semibold text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">
+                📞 Ligação direta: {numberFormatter.format(directCalls)}
+              </span>
+            )}
+            {directMsgs > 0 && (
+              <span className="rounded-lg bg-green-50 px-2.5 py-1 font-semibold text-green-700 dark:bg-green-900/30 dark:text-green-300">
+                💬 Whats direto: {numberFormatter.format(directMsgs)}
+              </span>
+            )}
+          </div>
+        )}
       </div>
       
       <div className="flex flex-col items-center gap-3 xl:flex-row xl:gap-4">
@@ -170,14 +200,18 @@ function FunnelView({ item }: { item: DailyAdsDisplayRecord }) {
           <ArrowDown className="text-zinc-300 xl:hidden dark:text-zinc-700" size={20} />
         </div>
 
-        {/* Cliques */}
-        <div className="flex w-full flex-1 flex-col items-center rounded-xl border border-zinc-100 bg-zinc-50 p-4 dark:border-zinc-800/80 dark:bg-zinc-900/50">
-          <span className="text-xs font-medium uppercase tracking-wide text-zinc-500">Cliques</span>
-          <span className="mt-1 text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
-            {numberFormatter.format(item.clicks)}
+        {/* Cliques no Site */}
+        <div className="flex w-full flex-1 flex-col items-center rounded-xl border border-blue-100 bg-blue-50/40 p-4 dark:border-blue-900/30 dark:bg-blue-950/20">
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs font-medium uppercase tracking-wide text-blue-700 dark:text-blue-400">
+              {hasSegmentation ? "Cliques no Site" : "Cliques"}
+            </span>
+          </div>
+          <span className="mt-1 text-2xl font-bold tracking-tight text-blue-950 dark:text-blue-50">
+            {numberFormatter.format(siteClicks)}
           </span>
-          <span className="mt-2 text-[10px] font-semibold text-zinc-400 dark:text-zinc-500">
-            CPC: {currencyFormatter.format(cpc)}
+          <span className="mt-2 text-[10px] font-semibold text-blue-600/80 dark:text-blue-400/80">
+            {hasSegmentation ? `Total: ${numberFormatter.format(item.clicks)} | CPC: ${currencyFormatter.format(cpc)}` : `CPC: ${currencyFormatter.format(cpc)}`}
           </span>
         </div>
 
@@ -241,6 +275,39 @@ function FunnelView({ item }: { item: DailyAdsDisplayRecord }) {
           </span>
         </div>
       </div>
+
+      {/* Box de Contatos Diretos (Ligações e WhatsApp do Anúncio) */}
+      {directContacts > 0 && (
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-200/70 bg-gradient-to-r from-emerald-50/80 to-teal-50/50 p-3.5 dark:border-emerald-900/40 dark:from-emerald-950/20 dark:to-teal-950/10">
+          <div className="flex items-center gap-2.5">
+            <span className="flex size-7 items-center justify-center rounded-lg bg-emerald-600 text-sm font-bold text-white shadow-sm">
+              ⚡
+            </span>
+            <div>
+              <p className="text-xs font-semibold text-emerald-900 dark:text-emerald-300">
+                {directContacts} {directContacts === 1 ? "Contato Direto" : "Contatos Diretos"} pelo Anúncio (sem passar pelo site)
+              </p>
+              <p className="text-[11px] text-emerald-700/80 dark:text-emerald-400/80">
+                Cliques diretos que ligaram ou chamaram no WhatsApp imediatamente ao ver o anúncio no Google.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            {directCalls > 0 && (
+              <div className="text-right">
+                <span className="text-[10px] uppercase tracking-wider text-emerald-700 font-semibold dark:text-emerald-400">Ligações</span>
+                <p className="text-base font-bold text-emerald-900 dark:text-emerald-200">{directCalls}</p>
+              </div>
+            )}
+            {directMsgs > 0 && (
+              <div className="text-right">
+                <span className="text-[10px] uppercase tracking-wider text-emerald-700 font-semibold dark:text-emerald-400">WhatsApp</span>
+                <p className="text-base font-bold text-emerald-900 dark:text-emerald-200">{directMsgs}</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -259,6 +326,9 @@ export function DailyAdsScreen() {
   const [manualRevenue, setManualRevenue] = useState("");
   const [manualCommission, setManualCommission] = useState("");
   const [manualClients, setManualClients] = useState("");
+  const [manualUrlClicks, setManualUrlClicks] = useState("");
+  const [manualCallClicks, setManualCallClicks] = useState("");
+  const [manualMsgClicks, setManualMsgClicks] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [editingRecord, setEditingRecord] = useState<DailyAdsRecord | null>(null);
@@ -501,6 +571,9 @@ export function DailyAdsScreen() {
     setManualRevenue("");
     setManualCommission("");
     setManualClients("");
+    setManualUrlClicks("");
+    setManualCallClicks("");
+    setManualMsgClicks("");
   }
 
   function openCreateForm() {
@@ -512,6 +585,9 @@ export function DailyAdsScreen() {
     setManualRevenue("");
     setManualCommission("");
     setManualClients("");
+    setManualUrlClicks("");
+    setManualCallClicks("");
+    setManualMsgClicks("");
     setError("");
     setFormOpen(true);
   }
@@ -525,6 +601,9 @@ export function DailyAdsScreen() {
     setManualRevenue(record.revenue != null ? String(record.revenue).replace(".", ",") : "");
     setManualCommission(record.commission != null ? String(record.commission).replace(".", ",") : "");
     setManualClients(record.clients != null ? String(record.clients) : "");
+    setManualUrlClicks(record.urlClicks != null ? String(record.urlClicks) : "");
+    setManualCallClicks(record.callClicks != null ? String(record.callClicks) : "");
+    setManualMsgClicks(record.msgClicks != null ? String(record.msgClicks) : "");
     setError("");
     setFormOpen(true);
   }
@@ -579,6 +658,9 @@ export function DailyAdsScreen() {
     const parsedRevenue = manualRevenue.trim() ? parseDecimal(manualRevenue) : null;
     const parsedCommission = manualCommission.trim() ? parseDecimal(manualCommission) : null;
     const parsedClients = manualClients.trim() ? Number(manualClients) : null;
+    const parsedUrlClicks = manualUrlClicks.trim() ? Number(manualUrlClicks) : null;
+    const parsedCallClicks = manualCallClicks.trim() ? Number(manualCallClicks) : null;
+    const parsedMsgClicks = manualMsgClicks.trim() ? Number(manualMsgClicks) : null;
 
     if (!isValidBrazilianDate(date)) {
       setError("Informe uma data válida no formato DD/MM/AAAA.");
@@ -625,6 +707,9 @@ export function DailyAdsScreen() {
           spend: parsedSpend,
           cpc: parsedCpc,
           impressions: parsedImpressions,
+          urlClicks: parsedUrlClicks,
+          callClicks: parsedCallClicks,
+          msgClicks: parsedMsgClicks,
           revenue: parsedRevenue,
           commission: parsedCommission,
           clients: parsedClients,
@@ -826,7 +911,14 @@ export function DailyAdsScreen() {
                       {currencyFormatter.format(item.cpc)}
                     </span>
                     <span className="px-3 text-right text-sm font-medium tabular-nums text-zinc-700 dark:text-zinc-300">
-                      {numberFormatter.format(item.clicks)}
+                      <div>{numberFormatter.format(item.clicks)}</div>
+                      {(item.urlClicks != null || item.callClicks != null || item.msgClicks != null) && (
+                        <div className="text-[10px] font-normal text-zinc-400 dark:text-zinc-500">
+                          {item.urlClicks != null ? `${item.urlClicks} site` : ""}
+                          {item.callClicks ? ` • ${item.callClicks} tel` : ""}
+                          {item.msgClicks ? ` • ${item.msgClicks} wpp` : ""}
+                        </div>
+                      )}
                     </span>
                     <span className="px-3 text-right text-sm tabular-nums text-zinc-500 dark:text-zinc-400">
                       {numberFormatter.format(item.impressions)}
@@ -997,6 +1089,53 @@ export function DailyAdsScreen() {
                   className="mt-1.5 min-h-11 w-full rounded-xl border border-zinc-300 bg-white px-3.5 text-zinc-950 outline-none transition focus:border-blue-500 focus:ring-3 focus:ring-blue-500/15 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
                 />
               </label>
+
+              <div className="rounded-2xl border border-zinc-200 bg-zinc-50/70 p-4 dark:border-zinc-800 dark:bg-zinc-900/40">
+                <p className="text-xs font-semibold uppercase tracking-wider text-zinc-600 dark:text-zinc-400">
+                  Segmentação de Cliques (Opcional)
+                </p>
+                <p className="mt-0.5 text-[11px] text-zinc-500">
+                  Preenchido automaticamente pelo Script do Google Ads ou manualmente aqui.
+                </p>
+
+                <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                  <label className="block text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                    Cliques no Site
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={manualUrlClicks}
+                      onChange={(event) => setManualUrlClicks(event.target.value.replace(/\D/g, ""))}
+                      placeholder="Ex: 35"
+                      className="mt-1 min-h-9 w-full rounded-lg border border-zinc-300 bg-white px-2.5 text-sm text-zinc-950 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/15 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+                    />
+                  </label>
+
+                  <label className="block text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                    Ligações Diretas
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={manualCallClicks}
+                      onChange={(event) => setManualCallClicks(event.target.value.replace(/\D/g, ""))}
+                      placeholder="Ex: 8"
+                      className="mt-1 min-h-9 w-full rounded-lg border border-zinc-300 bg-white px-2.5 text-sm text-zinc-950 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/15 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+                    />
+                  </label>
+
+                  <label className="block text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                    WhatsApp Direto
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={manualMsgClicks}
+                      onChange={(event) => setManualMsgClicks(event.target.value.replace(/\D/g, ""))}
+                      placeholder="Ex: 5"
+                      className="mt-1 min-h-9 w-full rounded-lg border border-zinc-300 bg-white px-2.5 text-sm text-zinc-950 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/15 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+                    />
+                  </label>
+                </div>
+              </div>
 
               <div className="rounded-2xl border border-zinc-200 bg-zinc-50/70 p-4 dark:border-zinc-800 dark:bg-zinc-900/40">
                 <p className="text-xs font-semibold uppercase tracking-wider text-zinc-600 dark:text-zinc-400">

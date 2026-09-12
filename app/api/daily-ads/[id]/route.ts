@@ -9,6 +9,9 @@ type DailyAdsRow = {
   spend: string | number;
   cpc: string | number;
   impressions: string | number;
+  url_clicks?: string | number | null;
+  call_clicks?: string | number | null;
+  msg_clicks?: string | number | null;
   revenue?: string | number | null;
   commission?: string | number | null;
   clients?: string | number | null;
@@ -22,6 +25,9 @@ function serializeRecord(row: DailyAdsRow): DailyAdsRecord {
     spend: Number(row.spend),
     cpc: Number(row.cpc),
     impressions: Number(row.impressions),
+    urlClicks: row.url_clicks !== null && row.url_clicks !== undefined ? Number(row.url_clicks) : null,
+    callClicks: row.call_clicks !== null && row.call_clicks !== undefined ? Number(row.call_clicks) : null,
+    msgClicks: row.msg_clicks !== null && row.msg_clicks !== undefined ? Number(row.msg_clicks) : null,
     revenue: row.revenue !== null && row.revenue !== undefined ? Number(row.revenue) : null,
     commission: row.commission !== null && row.commission !== undefined ? Number(row.commission) : null,
     clients: row.clients !== null && row.clients !== undefined ? Number(row.clients) : null,
@@ -73,6 +79,20 @@ export async function PATCH(request: Request, { params }: RouteParams) {
     );
   }
 
+  const rawUrlClicks = body?.urlClicks ?? body?.url_clicks;
+  const rawCallClicks = body?.callClicks ?? body?.call_clicks;
+  const rawMsgClicks = body?.msgClicks ?? body?.msg_clicks;
+
+  const urlClicks = rawUrlClicks !== undefined && rawUrlClicks !== null && rawUrlClicks !== ""
+    ? finiteNumber(rawUrlClicks)
+    : null;
+  const callClicks = rawCallClicks !== undefined && rawCallClicks !== null && rawCallClicks !== ""
+    ? finiteNumber(rawCallClicks)
+    : null;
+  const msgClicks = rawMsgClicks !== undefined && rawMsgClicks !== null && rawMsgClicks !== ""
+    ? finiteNumber(rawMsgClicks)
+    : null;
+
   const revenue = body?.revenue !== undefined && body?.revenue !== null && body?.revenue !== ""
     ? finiteNumber(body?.revenue)
     : null;
@@ -90,17 +110,23 @@ export async function PATCH(request: Request, { params }: RouteParams) {
            spend = $3,
            cpc = $4,
            impressions = $5,
-           revenue = $6,
-           commission = $7,
-           clients = $8
+           url_clicks = $6,
+           call_clicks = $7,
+           msg_clicks = $8,
+           revenue = $9,
+           commission = $10,
+           clients = $11
        WHERE id = $1
-       RETURNING id, date, spend, cpc, impressions, revenue, commission, clients, "createdAt"`,
+       RETURNING id, date, spend, cpc, impressions, url_clicks, call_clicks, msg_clicks, revenue, commission, clients, "createdAt"`,
       [
         id,
         date,
         spend,
         cpc,
         impressions,
+        urlClicks !== null && Number.isInteger(urlClicks) && urlClicks >= 0 ? urlClicks : null,
+        callClicks !== null && Number.isInteger(callClicks) && callClicks >= 0 ? callClicks : null,
+        msgClicks !== null && Number.isInteger(msgClicks) && msgClicks >= 0 ? msgClicks : null,
         revenue !== null && revenue >= 0 ? revenue : null,
         commission !== null && commission >= 0 ? commission : null,
         clients !== null && Number.isInteger(clients) && clients >= 0 ? clients : null,

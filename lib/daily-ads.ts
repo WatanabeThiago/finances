@@ -4,6 +4,9 @@ export type DailyAdsRecord = {
   spend: number;
   cpc: number;
   impressions: number;
+  urlClicks?: number | null;
+  callClicks?: number | null;
+  msgClicks?: number | null;
   revenue?: number | null;
   commission?: number | null;
   clients?: number | null;
@@ -14,6 +17,9 @@ export type DailyAdsInput = Pick<
   DailyAdsRecord,
   "date" | "spend" | "cpc" | "impressions"
 > & {
+  urlClicks?: number | null;
+  callClicks?: number | null;
+  msgClicks?: number | null;
   revenue?: number | null;
   commission?: number | null;
   clients?: number | null;

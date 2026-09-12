@@ -320,7 +320,10 @@ export async function initializeDatabase() {
       `ALTER TABLE public."DailyAdsManual"
        ADD COLUMN IF NOT EXISTS revenue NUMERIC(12, 2) DEFAULT NULL,
        ADD COLUMN IF NOT EXISTS commission NUMERIC(12, 2) DEFAULT NULL,
-       ADD COLUMN IF NOT EXISTS clients INTEGER DEFAULT NULL`
+       ADD COLUMN IF NOT EXISTS clients INTEGER DEFAULT NULL,
+       ADD COLUMN IF NOT EXISTS url_clicks INTEGER DEFAULT NULL,
+       ADD COLUMN IF NOT EXISTS call_clicks INTEGER DEFAULT NULL,
+       ADD COLUMN IF NOT EXISTS msg_clicks INTEGER DEFAULT NULL`
     );
 
     // Dados consolidados retroativos de 01/09 a 08/09
