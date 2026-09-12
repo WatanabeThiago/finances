@@ -2,13 +2,14 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { verifyAuthToken, AUTH_COOKIE_NAME } from "@/lib/auth";
 
-// Rotas públicas que não requerem autenticação
+// Rotas públicas que não requerem autenticação por cookie JWT
 const PUBLIC_PATHS = [
   "/login",
   "/api/auth/login",
   "/api/auth/logout",
   "/api/tracking",
   "/api/contact-requests",
+  "/api/daily-ads",
 ];
 
 export async function middleware(request: NextRequest) {
