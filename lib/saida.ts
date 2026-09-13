@@ -17,13 +17,32 @@ export type FormaPagamentoSaida =
   | "Cartão de Débito"
   | "Transferência";
 
+export type SaidaStatus = "pago" | "pendente";
+
 export interface Saida {
   id: string;
   valor: number;
   categoria: string;
   descricao: string;
   formaPagamento: string;
+  status: SaidaStatus;
+  dataVencimento?: string | null;
+  dataPagamento?: string | null;
+  fornecedor?: string;
+  isFixa?: boolean;
   dataSaida: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface ContaFixa {
+  id: string;
+  nome: string;
+  valor: number;
+  categoria: string;
+  diaVencimento: number;
+  ativo: boolean;
+  observacoes?: string;
   createdAt?: string;
   updatedAt?: string;
 }

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { formatBRL } from "@/lib/money";
 import type { VendaLg } from "@/lib/venda-lg";
 import type { DailyAdsRecord } from "@/lib/daily-ads";
-import type { Saida } from "@/lib/saida";
+import type { ContaFixa, Saida } from "@/lib/saida";
 import {
   useEffect,
   useMemo,
@@ -16,6 +16,7 @@ type DashboardData = {
   vendas: VendaLg[];
   dailyAds: DailyAdsRecord[];
   saidas: Saida[];
+  contasFixas: ContaFixa[];
 };
 
 type RawVendaLgLine = Omit<
@@ -184,6 +185,7 @@ export function DashboardScreen() {
     vendas: [],
     dailyAds: [],
     saidas: [],
+    contasFixas: [],
   });
   const [loading, setLoading] = useState(true);
   const [dateFilter, setDateFilter] = useState<DateFilter>("7d");
@@ -192,15 +194,17 @@ export function DashboardScreen() {
     const fetchData = async () => {
       try {
         setLoading(true);
-        const [vendasRes, dailyAdsRes, saidasRes] = await Promise.all([
+        const [vendasRes, dailyAdsRes, saidasRes, fixasRes] = await Promise.all([
           fetch("/api/vendas-lg"),
           fetch("/api/daily-ads"),
           fetch("/api/saidas"),
+          fetch("/api/contas-fixas"),
         ]);
 
         const vendas: RawVendaLg[] = vendasRes.ok ? await vendasRes.json() : [];
         const dailyAds: DailyAdsRecord[] = dailyAdsRes.ok ? await dailyAdsRes.json() : [];
         const saidasRaw: any[] = saidasRes.ok ? await saidasRes.json() : [];
+        const fixasRaw: any[] = fixasRes.ok ? await fixasRes.json() : [];
 
         // Normalize numeric values
         const normalizedVendas: VendaLg[] = vendas.map((v) => ({
@@ -219,10 +223,16 @@ export function DashboardScreen() {
           valor: typeof s.valor === "string" ? parseFloat(s.valor) : s.valor,
         }));
 
+        const normalizedFixas: ContaFixa[] = fixasRaw.map((f) => ({
+          ...f,
+          valor: typeof f.valor === "string" ? parseFloat(f.valor) : f.valor,
+        }));
+
         setData({
           vendas: normalizedVendas,
           dailyAds,
           saidas: normalizedSaidas,
+          contasFixas: normalizedFixas,
         });
       } catch (err) {
         console.error("Error fetching dashboard data:", err);
@@ -308,7 +318,19 @@ export function DashboardScreen() {
     const now = new Date();
     const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
     const currentDay = now.getDate();
-    const monthlyTotal = FIXED_EXPENSES.reduce((acc, expense) => acc + expense.monthlyAmount, 0);
+
+    const activeFixas = (data.contasFixas && data.contasFixas.length > 0)
+      ? data.contasFixas.filter((c) => c.ativo)
+      : FIXED_EXPENSES.map((fe, idx) => ({
+          id: `fallback-${idx}`,
+          nome: fe.label,
+          valor: fe.monthlyAmount,
+          categoria: "Outros",
+          diaVencimento: 10,
+          ativo: true,
+        }));
+
+    const monthlyTotal = activeFixas.reduce((acc, c) => acc + c.valor, 0);
     const dailyTotal = monthlyTotal / daysInMonth;
 
     return {
@@ -317,8 +339,9 @@ export function DashboardScreen() {
       monthlyTotal,
       dailyTotal,
       accruedTotal: dailyTotal * currentDay,
+      contas: activeFixas,
     };
-  }, []);
+  }, [data.contasFixas]);
 
   const stats = useMemo(() => {
     const totalVendasReais = filteredData.vendas.reduce((acc, v) => {
@@ -374,6 +397,13 @@ export function DashboardScreen() {
     const totalSaidasCount = (filteredData.saidas || []).length;
     const resultadoLiquido = totalComissao - totalSaidas;
 
+    // Contas a pagar pendentes
+    const totalContasAPagar = (data.saidas || [])
+      .filter((s) => s.status === "pendente")
+      .reduce((acc, s) => acc + (s.valor || 0), 0);
+
+    const countContasAPagar = (data.saidas || []).filter((s) => s.status === "pendente").length;
+
     return {
       totalVendas,
       totalVendidas,
@@ -386,10 +416,12 @@ export function DashboardScreen() {
       totalSaidas,
       totalSaidasCount,
       resultadoLiquido,
+      totalContasAPagar,
+      countContasAPagar,
       vendaComComissaoCount:
         vendaComComissao.length + (fallbackCommission > 0 ? fallbackClients : 0),
     };
-  }, [filteredData]);
+  }, [filteredData, data.saidas]);
 
   const recentEvents = useMemo(() => {
     const events: Array<{ type: "venda"; date: string; description: string; value: number }> = [];
@@ -453,11 +485,11 @@ export function DashboardScreen() {
 
         {/* Fixed Expenses */}
         <div className="mb-6 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          {FIXED_EXPENSES.map((expense) => (
+          {fixedExpenseSummary.contas.map((expense) => (
             <FixedExpenseCard
-              key={expense.label}
-              label={expense.label}
-              monthlyAmount={expense.monthlyAmount}
+              key={expense.id}
+              label={expense.nome}
+              monthlyAmount={expense.valor}
               daysInMonth={fixedExpenseSummary.daysInMonth}
               currentDay={fixedExpenseSummary.currentDay}
             />
@@ -554,6 +586,13 @@ export function DashboardScreen() {
             value={formatBRL(stats.totalSaidas)}
             change={`${stats.totalSaidasCount} despesa${stats.totalSaidasCount !== 1 ? "s" : ""}`}
             color="red"
+            href="/saidas"
+          />
+          <QuickStats
+            label="Contas a Pagar"
+            value={formatBRL(stats.totalContasAPagar)}
+            change={`${stats.countContasAPagar} pendente${stats.countContasAPagar !== 1 ? "s" : ""}`}
+            color={stats.totalContasAPagar > 0 ? "amber" : "green"}
             href="/saidas"
           />
           <QuickStats

@@ -8,7 +8,7 @@ export async function GET(
   try {
     const { id } = await params;
     const rows = await query(
-      `SELECT id, valor, categoria, descricao, "formaPagamento", "dataSaida", "createdAt", "updatedAt"
+      `SELECT id, valor, categoria, descricao, "formaPagamento", status, "dataVencimento", "dataPagamento", fornecedor, "isFixa", "dataSaida", "createdAt", "updatedAt"
        FROM public."Saida" WHERE id = $1`,
       [id]
     );
@@ -34,7 +34,18 @@ export async function PUT(
   try {
     const { id } = await params;
     const body = await request.json();
-    const { valor, categoria, descricao, formaPagamento, dataSaida } = body;
+    const {
+      valor,
+      categoria,
+      descricao,
+      formaPagamento,
+      status,
+      dataVencimento,
+      dataPagamento,
+      fornecedor,
+      isFixa,
+      dataSaida,
+    } = body;
 
     const parsedValor = typeof valor === "string" ? parseFloat(valor.replace(",", ".")) : Number(valor);
 
@@ -55,6 +66,11 @@ export async function PUT(
     const cleanCategoria = categoria.trim();
     const cleanDescricao = (descricao || "").trim();
     const cleanFormaPagamento = (formaPagamento || "Pix").trim();
+    const cleanStatus = status === "pendente" ? "pendente" : "pago";
+    const cleanFornecedor = (fornecedor || "").trim();
+    const cleanIsFixa = isFixa !== undefined ? Boolean(isFixa) : false;
+    const finalDataVencimento = dataVencimento ? new Date(dataVencimento) : null;
+    const finalDataPagamento = cleanStatus === "pago" ? (dataPagamento ? new Date(dataPagamento) : new Date()) : null;
     const finalDataSaida = dataSaida ? new Date(dataSaida) : new Date();
 
     const updateSql = `
@@ -63,10 +79,15 @@ export async function PUT(
           categoria = $2,
           descricao = $3,
           "formaPagamento" = $4,
-          "dataSaida" = $5,
+          status = $5,
+          "dataVencimento" = $6,
+          "dataPagamento" = $7,
+          fornecedor = $8,
+          "isFixa" = $9,
+          "dataSaida" = $10,
           "updatedAt" = CURRENT_TIMESTAMP
-      WHERE id = $6
-      RETURNING id, valor, categoria, descricao, "formaPagamento", "dataSaida", "createdAt", "updatedAt"
+      WHERE id = $11
+      RETURNING id, valor, categoria, descricao, "formaPagamento", status, "dataVencimento", "dataPagamento", fornecedor, "isFixa", "dataSaida", "createdAt", "updatedAt"
     `;
 
     const rows = await query(updateSql, [
@@ -74,6 +95,11 @@ export async function PUT(
       cleanCategoria,
       cleanDescricao,
       cleanFormaPagamento,
+      cleanStatus,
+      finalDataVencimento,
+      finalDataPagamento,
+      cleanFornecedor,
+      cleanIsFixa,
       finalDataSaida,
       id,
     ]);

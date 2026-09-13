@@ -5,16 +5,22 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const categoria = searchParams.get("categoria");
+    const status = searchParams.get("status"); // 'pago', 'pendente', 'all'
     const de = searchParams.get("de"); // data inicial ISO ou YYYY-MM-DD
     const ate = searchParams.get("ate"); // data final ISO ou YYYY-MM-DD
 
-    let sql = `SELECT id, valor, categoria, descricao, "formaPagamento", "dataSaida", "createdAt", "updatedAt" FROM public."Saida" WHERE 1=1`;
+    let sql = `SELECT id, valor, categoria, descricao, "formaPagamento", status, "dataVencimento", "dataPagamento", fornecedor, "isFixa", "dataSaida", "createdAt", "updatedAt" FROM public."Saida" WHERE 1=1`;
     const params: unknown[] = [];
     let pIdx = 1;
 
     if (categoria && categoria !== "all") {
       sql += ` AND categoria = $${pIdx++}`;
       params.push(categoria);
+    }
+
+    if (status && status !== "all") {
+      sql += ` AND status = $${pIdx++}`;
+      params.push(status);
     }
 
     if (de) {
@@ -33,8 +39,8 @@ export async function GET(request: NextRequest) {
       const rows = await query(sql, params);
       return NextResponse.json(sanitizeData(rows));
     } catch (queryErr: any) {
-      // Se a tabela ainda não existir por algum motivo, inicializa e tenta de novo
-      if (queryErr.message?.includes("does not exist")) {
+      // Se a tabela ou colunas ainda não existirem, inicializa e tenta de novo
+      if (queryErr.message?.includes("does not exist") || queryErr.message?.includes("column")) {
         await initializeDatabase();
         const rows = await query(sql, params);
         return NextResponse.json(sanitizeData(rows));
@@ -53,7 +59,18 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { valor, categoria, descricao, formaPagamento, dataSaida } = body;
+    const {
+      valor,
+      categoria,
+      descricao,
+      formaPagamento,
+      status,
+      dataVencimento,
+      dataPagamento,
+      fornecedor,
+      isFixa,
+      dataSaida,
+    } = body;
 
     const parsedValor = typeof valor === "string" ? parseFloat(valor.replace(",", ".")) : Number(valor);
 
@@ -74,12 +91,20 @@ export async function POST(request: NextRequest) {
     const cleanCategoria = categoria.trim();
     const cleanDescricao = (descricao || "").trim();
     const cleanFormaPagamento = (formaPagamento || "Pix").trim();
+    const cleanStatus = status === "pendente" ? "pendente" : "pago";
+    const cleanFornecedor = (fornecedor || "").trim();
+    const cleanIsFixa = Boolean(isFixa);
+    const finalDataVencimento = dataVencimento ? new Date(dataVencimento) : null;
+    const finalDataPagamento = cleanStatus === "pago" ? (dataPagamento ? new Date(dataPagamento) : new Date()) : null;
     const finalDataSaida = dataSaida ? new Date(dataSaida) : new Date();
 
     const insertSql = `
-      INSERT INTO public."Saida" (valor, categoria, descricao, "formaPagamento", "dataSaida")
-      VALUES ($1, $2, $3, $4, $5)
-      RETURNING id, valor, categoria, descricao, "formaPagamento", "dataSaida", "createdAt", "updatedAt"
+      INSERT INTO public."Saida" (
+        valor, categoria, descricao, "formaPagamento", status,
+        "dataVencimento", "dataPagamento", fornecedor, "isFixa", "dataSaida"
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      RETURNING id, valor, categoria, descricao, "formaPagamento", status, "dataVencimento", "dataPagamento", fornecedor, "isFixa", "dataSaida", "createdAt", "updatedAt"
     `;
 
     try {
@@ -88,17 +113,27 @@ export async function POST(request: NextRequest) {
         cleanCategoria,
         cleanDescricao,
         cleanFormaPagamento,
+        cleanStatus,
+        finalDataVencimento,
+        finalDataPagamento,
+        cleanFornecedor,
+        cleanIsFixa,
         finalDataSaida,
       ]);
       return NextResponse.json(sanitizeData(rows[0]), { status: 201 });
     } catch (insertErr: any) {
-      if (insertErr.message?.includes("does not exist")) {
+      if (insertErr.message?.includes("does not exist") || insertErr.message?.includes("column")) {
         await initializeDatabase();
         const rows = await query(insertSql, [
           parsedValor,
           cleanCategoria,
           cleanDescricao,
           cleanFormaPagamento,
+          cleanStatus,
+          finalDataVencimento,
+          finalDataPagamento,
+          cleanFornecedor,
+          cleanIsFixa,
           finalDataSaida,
         ]);
         return NextResponse.json(sanitizeData(rows[0]), { status: 201 });

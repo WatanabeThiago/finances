@@ -382,14 +382,56 @@ export async function initializeDatabase() {
         categoria TEXT NOT NULL,
         descricao TEXT DEFAULT '',
         "formaPagamento" TEXT DEFAULT 'Pix',
+        status TEXT NOT NULL DEFAULT 'pago',
+        "dataVencimento" TIMESTAMP WITH TIME ZONE,
+        "dataPagamento" TIMESTAMP WITH TIME ZONE,
+        fornecedor TEXT DEFAULT '',
+        "isFixa" BOOLEAN NOT NULL DEFAULT false,
         "dataSaida" TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
         "createdAt" TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
         "updatedAt" TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       )`
     );
 
+    // Migração de colunas caso a tabela Saida já exista
+    await query(
+      `ALTER TABLE public."Saida"
+       ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'pago',
+       ADD COLUMN IF NOT EXISTS "dataVencimento" TIMESTAMP WITH TIME ZONE,
+       ADD COLUMN IF NOT EXISTS "dataPagamento" TIMESTAMP WITH TIME ZONE,
+       ADD COLUMN IF NOT EXISTS fornecedor TEXT DEFAULT '',
+       ADD COLUMN IF NOT EXISTS "isFixa" BOOLEAN NOT NULL DEFAULT false`
+    );
+
     await query(
       `CREATE INDEX IF NOT EXISTS idx_saida_data ON public."Saida" ("dataSaida" DESC)`
+    );
+    await query(
+      `CREATE INDEX IF NOT EXISTS idx_saida_status ON public."Saida" (status)`
+    );
+
+    // Tabela de Contas Fixas Recorrentes
+    await query(
+      `CREATE TABLE IF NOT EXISTS public."ContaFixa" (
+        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        nome TEXT NOT NULL,
+        valor DECIMAL(10, 2) NOT NULL,
+        categoria TEXT NOT NULL DEFAULT 'Outros',
+        "diaVencimento" INTEGER NOT NULL DEFAULT 10,
+        ativo BOOLEAN NOT NULL DEFAULT true,
+        observacoes TEXT DEFAULT '',
+        "createdAt" TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        "updatedAt" TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      )`
+    );
+
+    // Seed de Apartamento se não existir
+    await query(
+      `INSERT INTO public."ContaFixa" (nome, valor, categoria, "diaVencimento", ativo)
+       SELECT 'Apartamento', 2000.00, 'Outros', 10, true
+       WHERE NOT EXISTS (
+         SELECT 1 FROM public."ContaFixa" WHERE LOWER(nome) = 'apartamento'
+       )`
     );
     // Tabela de Rate Limit para Login
     await query(
