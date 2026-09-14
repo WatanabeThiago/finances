@@ -472,6 +472,9 @@ export function SaidasScreen() {
       // Filtro por Aba ou Filtro de Status
       if (activeTab === "contas-a-pagar") {
         if (s.status !== "pendente") return false;
+      } else if (activeTab === "saidas") {
+        // "Todas as Saídas" exibe APENAS saídas pagas — pendentes ficam em Contas a Pagar
+        if (s.status === "pendente") return false;
       } else if (statusFilter !== "all") {
         if ((s.status || "pago") !== statusFilter) return false;
       }
@@ -1095,33 +1098,11 @@ export function SaidasScreen() {
                 ))}
               </div>
 
-              {/* Filtro Status (se não estiver na aba fixa de a pagar) */}
+              {/* Filtro Status (apenas na aba saídas — e somente "Pagas" pois pendentes vão para Contas a Pagar) */}
               {activeTab === "saidas" && (
-                <div className="flex items-center gap-1 bg-zinc-100 dark:bg-zinc-800 rounded-lg p-1">
-                  <button
-                    onClick={() => setStatusFilter("all")}
-                    className={`px-2.5 py-1 text-xs font-bold rounded-md transition ${
-                      statusFilter === "all" ? "bg-white dark:bg-zinc-900 shadow text-zinc-900 dark:text-white" : "text-zinc-500"
-                    }`}
-                  >
-                    Todos Status
-                  </button>
-                  <button
-                    onClick={() => setStatusFilter("pago")}
-                    className={`px-2.5 py-1 text-xs font-bold rounded-md transition ${
-                      statusFilter === "pago" ? "bg-emerald-600 text-white shadow" : "text-zinc-500"
-                    }`}
-                  >
-                    Pagas ✓
-                  </button>
-                  <button
-                    onClick={() => setStatusFilter("pendente")}
-                    className={`px-2.5 py-1 text-xs font-bold rounded-md transition ${
-                      statusFilter === "pendente" ? "bg-amber-600 text-white shadow" : "text-zinc-500"
-                    }`}
-                  >
-                    A Pagar ⏳
-                  </button>
+                <div className="flex items-center gap-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 px-2.5 py-1 border border-emerald-200/50 dark:border-emerald-800/40">
+                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                  <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-300">Apenas saídas pagas</span>
                 </div>
               )}
 
@@ -1275,7 +1256,7 @@ export function SaidasScreen() {
                         }}
                       >
                         <div className="flex items-center gap-1">
-                          <span>Vencimento</span>
+                          <span>{activeTab === "saidas" ? "Data Pagamento" : "Vencimento"}</span>
                           {sortField === "vencimento" ? (
                             sortOrder === "asc" ? <ArrowUp className="h-3 w-3 text-rose-600" /> : <ArrowDown className="h-3 w-3 text-rose-600" />
                           ) : (
@@ -1371,32 +1352,53 @@ export function SaidasScreen() {
                           key={s.id}
                           className="hover:bg-zinc-50/80 dark:hover:bg-zinc-800/40 transition group"
                         >
-                          {/* Vencimento */}
+                          {/* Data: contextual por aba */}
                           <td className="py-3.5 px-4 whitespace-nowrap">
-                            <div className="flex items-center gap-1.5">
-                              <span className={`font-semibold ${
-                                isVencida
-                                  ? "text-rose-600 font-bold dark:text-rose-400"
-                                  : isVenceHoje
-                                  ? "text-amber-600 font-bold dark:text-amber-400"
-                                  : "text-zinc-800 dark:text-zinc-200"
-                              }`}>
-                                {vencimentoFormatado}
-                              </span>
-                              {isVencida && (
-                                <span className="rounded bg-rose-100 dark:bg-rose-950/60 px-1.5 py-0.2 text-[10px] font-bold text-rose-700 dark:text-rose-300">
-                                  Atrasada
+                            {activeTab === "saidas" ? (
+                              /* Aba "Todas as Saídas" — exibe data de pagamento/lançamento */
+                              <div>
+                                <span className="font-semibold text-zinc-800 dark:text-zinc-200">
+                                  {new Date(s.dataSaida).toLocaleDateString("pt-BR", {
+                                    day: "2-digit",
+                                    month: "2-digit",
+                                    year: "numeric",
+                                  })}
                                 </span>
-                              )}
-                              {isVenceHoje && (
-                                <span className="rounded bg-amber-100 dark:bg-amber-950/60 px-1.5 py-0.2 text-[10px] font-bold text-amber-700 dark:text-amber-300">
-                                  Hoje
+                                {s.formaPagamento && (
+                                  <span className="text-[10px] text-zinc-400 block mt-0.5">
+                                    via {s.formaPagamento}
+                                  </span>
+                                )}
+                              </div>
+                            ) : (
+                              /* Aba "Contas a Pagar" — exibe vencimento com badges */
+                              <div>
+                                <div className="flex items-center gap-1.5">
+                                  <span className={`font-semibold ${
+                                    isVencida
+                                      ? "text-rose-600 font-bold dark:text-rose-400"
+                                      : isVenceHoje
+                                      ? "text-amber-600 font-bold dark:text-amber-400"
+                                      : "text-zinc-800 dark:text-zinc-200"
+                                  }`}>
+                                    {vencimentoFormatado}
+                                  </span>
+                                  {isVencida && (
+                                    <span className="rounded bg-rose-100 dark:bg-rose-950/60 px-1.5 py-0.2 text-[10px] font-bold text-rose-700 dark:text-rose-300">
+                                      Atrasada
+                                    </span>
+                                  )}
+                                  {isVenceHoje && (
+                                    <span className="rounded bg-amber-100 dark:bg-amber-950/60 px-1.5 py-0.2 text-[10px] font-bold text-amber-700 dark:text-amber-300">
+                                      Hoje
+                                    </span>
+                                  )}
+                                </div>
+                                <span className="text-[10px] text-zinc-400 block mt-0.5">
+                                  Lançado {new Date(s.dataSaida).toLocaleDateString("pt-BR")}
                                 </span>
-                              )}
-                            </div>
-                            <span className="text-[10px] text-zinc-400 block mt-0.5">
-                              Lançado {new Date(s.dataSaida).toLocaleDateString("pt-BR")}
-                            </span>
+                              </div>
+                            )}
                           </td>
 
                           {/* Fornecedor / Descrição */}
