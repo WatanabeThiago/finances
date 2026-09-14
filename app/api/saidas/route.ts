@@ -98,7 +98,15 @@ export async function POST(request: NextRequest) {
     const cleanStatus = status === "pendente" ? "pendente" : "pago";
     const cleanFornecedor = (fornecedor || "").trim();
     const cleanIsFixa = Boolean(isFixa);
-    const finalDataVencimento = dataVencimento ? new Date(dataVencimento) : null;
+    let finalDataVencimento: Date | null = null;
+    if (dataVencimento) {
+      if (typeof dataVencimento === "string" && /^\d{4}-\d{2}-\d{2}$/.test(dataVencimento.trim())) {
+        const [y, m, d] = dataVencimento.trim().split("-").map(Number);
+        finalDataVencimento = new Date(Date.UTC(y, m - 1, d, 12, 0, 0));
+      } else {
+        finalDataVencimento = new Date(dataVencimento);
+      }
+    }
     const finalDataPagamento = cleanStatus === "pago" ? (dataPagamento ? new Date(dataPagamento) : new Date()) : null;
     const finalDataSaida = dataSaida ? new Date(dataSaida) : new Date();
 

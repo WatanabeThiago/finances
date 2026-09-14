@@ -4,6 +4,9 @@ import {
   CATEGORIAS_PADRAO,
   FORMAS_PAGAMENTO,
   getCategoriaInfo,
+  formatVencimentoBR,
+  parseDateInputToISO,
+  formatDateForInput,
   type ContaFixa,
   type Saida,
   type SaidaCategoria,
@@ -155,7 +158,7 @@ export function SaidasScreen() {
           formaPagamento: formaPagamentoInput,
           status: statusInput,
           fornecedor: fornecedorInput,
-          dataVencimento: dataVencimentoInput ? new Date(dataVencimentoInput).toISOString() : null,
+          dataVencimento: parseDateInputToISO(dataVencimentoInput),
           dataSaida: new Date(dataSaidaInput).toISOString(),
         }),
       });
@@ -401,7 +404,7 @@ export function SaidasScreen() {
           descricao: editingSaida.descricao,
           formaPagamento: editingSaida.formaPagamento,
           status: editingSaida.status || "pago",
-          dataVencimento: editingSaida.dataVencimento ? new Date(editingSaida.dataVencimento).toISOString() : null,
+          dataVencimento: parseDateInputToISO(editingSaida.dataVencimento),
           dataPagamento: editingSaida.dataPagamento ? new Date(editingSaida.dataPagamento).toISOString() : null,
           fornecedor: editingSaida.fornecedor || "",
           isFixa: Boolean(editingSaida.isFixa),
@@ -1329,16 +1332,19 @@ export function SaidasScreen() {
                       const catInfo = getCategoriaInfo(s.categoria);
                       const isPendente = s.status === "pendente";
 
-                      const vencimentoDate = s.dataVencimento ? new Date(s.dataVencimento) : null;
-                      const vencimentoFormatado = vencimentoDate
-                        ? vencimentoDate.toLocaleDateString("pt-BR")
-                        : new Date(s.dataSaida).toLocaleDateString("pt-BR");
+                      const vencimentoFormatado = s.dataVencimento
+                        ? formatVencimentoBR(s.dataVencimento)
+                        : formatVencimentoBR(s.dataSaida);
 
-                      // Calcular se está vencida hoje ou em atraso
-                      const hoje = new Date();
-                      hoje.setHours(0, 0, 0, 0);
-                      const isVencida = isPendente && vencimentoDate && vencimentoDate.getTime() < hoje.getTime();
-                      const isVenceHoje = isPendente && vencimentoDate && vencimentoDate.toDateString() === hoje.toDateString();
+                      // Calcular se está vencida hoje ou em atraso com timezone local
+                      let isVencida = false;
+                      let isVenceHoje = false;
+                      if (isPendente && s.dataVencimento) {
+                        const vStr = s.dataVencimento.split("T")[0]; // "YYYY-MM-DD"
+                        const hojeStr = new Date().toLocaleDateString("en-CA"); // "YYYY-MM-DD" local
+                        if (vStr < hojeStr) isVencida = true;
+                        else if (vStr === hojeStr) isVenceHoje = true;
+                      }
 
                       return (
                         <tr
@@ -1482,7 +1488,7 @@ export function SaidasScreen() {
                   });
 
                   const vencimentoFormatado = s.dataVencimento
-                    ? new Date(s.dataVencimento).toLocaleDateString("pt-BR")
+                    ? formatVencimentoBR(s.dataVencimento)
                     : null;
 
                   return (
@@ -1888,11 +1894,7 @@ export function SaidasScreen() {
                   </label>
                   <input
                     type="date"
-                    value={
-                      editingSaida.dataVencimento
-                        ? new Date(editingSaida.dataVencimento).toISOString().split("T")[0]
-                        : ""
-                    }
+                    value={formatDateForInput(editingSaida.dataVencimento)}
                     onChange={(e) =>
                       setEditingSaida({
                         ...editingSaida,

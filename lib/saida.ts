@@ -214,6 +214,60 @@ export function getCategoriaInfo(categoriaNome: string) {
 }
 
 /**
+ * Formata com segurança uma string ou data ISO para formato brasileiro dd/mm/aaaa,
+ * evitando problemas de fuso horário UTC (onde 2026-10-15T00:00:00Z vira 14/10/2026 no Brasil UTC-3).
+ */
+export function formatVencimentoBR(dateStr: string | Date | null | undefined): string {
+  if (!dateStr) return "";
+  if (typeof dateStr === "string") {
+    // Se vier no formato "YYYY-MM-DD" ou comecar com "YYYY-MM-DD"
+    const match = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (match) {
+      const [, y, m, d] = match;
+      return `${d}/${m}/${y}`;
+    }
+  }
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return "";
+  return d.toLocaleDateString("pt-BR", { timeZone: "UTC" });
+}
+
+/**
+ * Normaliza um valor de data digitado em input type="date" (YYYY-MM-DD)
+ * para salvar com hora do meio-dia (12:00:00) UTC, prevenindo que shifts de timezone
+ * joguem a data para o dia anterior.
+ */
+export function parseDateInputToISO(dateString: string | null | undefined): string | null {
+  if (!dateString) return null;
+  const match = dateString.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (match) {
+    const [, y, m, d] = match;
+    return new Date(Date.UTC(parseInt(y, 10), parseInt(m, 10) - 1, parseInt(d, 10), 12, 0, 0)).toISOString();
+  }
+  return new Date(dateString).toISOString();
+}
+
+/**
+ * Formata uma data para o input HTML type="date" (YYYY-MM-DD)
+ * sem sofrer deslocamento de fuso horário.
+ */
+export function formatDateForInput(dateStr: string | Date | null | undefined): string {
+  if (!dateStr) return "";
+  if (typeof dateStr === "string") {
+    const match = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (match) {
+      return `${match[1]}-${match[2]}-${match[3]}`;
+    }
+  }
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return "";
+  const year = d.getUTCFullYear();
+  const month = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(d.getUTCDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+/**
  * Sincroniza as contas fixas ativas com a tabela de Saídas do mês corrente.
  * Se uma conta fixa ativa ainda não tiver sido lançada neste mês (nem pendente nem paga),
  * ela é automaticamente criada como 'pendente', ficando disponível em 'Contas a Pagar'.
