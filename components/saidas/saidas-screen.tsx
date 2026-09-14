@@ -531,45 +531,55 @@ export function SaidasScreen() {
 
   // Estatísticas calculadas
   const stats = useMemo(() => {
+    // Total Geral Filtrado
     const total = filteredSaidas.reduce((acc, s) => acc + (s.valor || 0), 0);
     const count = filteredSaidas.length;
     const media = count > 0 ? total / count : 0;
 
-    // Totais de Contas a Pagar no geral
+    // Saídas Efetivamente PAGAS no filtro
+    const saidasPagas = filteredSaidas.filter((s) => s.status !== "pendente");
+    const totalPagas = saidasPagas.reduce((acc, s) => acc + (s.valor || 0), 0);
+    const countPagas = saidasPagas.length;
+
+    // Contas a Pagar (Pendentes) no filtro
+    const saidasPendentes = filteredSaidas.filter((s) => s.status === "pendente");
+    const totalPendentesFiltro = saidasPendentes.reduce((acc, s) => acc + (s.valor || 0), 0);
+    const countPendentesFiltro = saidasPendentes.length;
+
+    // Totais de Contas a Pagar no geral (banco inteiro)
     const totalPendente = saidas
       .filter((s) => s.status === "pendente")
       .reduce((acc, s) => acc + (s.valor || 0), 0);
     const countPendente = saidas.filter((s) => s.status === "pendente").length;
+
+    // Contas Vencidas (status = pendente e dataVencimento < hoje)
+    const hojeStr = new Date().toLocaleDateString("en-CA"); // "YYYY-MM-DD" local
+    const contasVencidas = saidas.filter((s) => {
+      if (s.status !== "pendente" || !s.dataVencimento) return false;
+      const vStr = s.dataVencimento.split("T")[0];
+      return vStr < hojeStr;
+    });
+    const totalVencidas = contasVencidas.reduce((acc, s) => acc + (s.valor || 0), 0);
+    const countVencidas = contasVencidas.length;
 
     // Total de Contas Fixas ativas
     const totalContasFixas = contasFixas
       .filter((c) => c.ativo)
       .reduce((acc, c) => acc + (c.valor || 0), 0);
 
-    // Agrupamento por categoria
-    const categoryTotals: Record<string, number> = {};
-    filteredSaidas.forEach((s) => {
-      categoryTotals[s.categoria] = (categoryTotals[s.categoria] || 0) + (s.valor || 0);
-    });
-
-    let topCategory = "Nenhuma";
-    let topCategoryVal = 0;
-    Object.entries(categoryTotals).forEach(([cat, val]) => {
-      if (val > topCategoryVal) {
-        topCategoryVal = val;
-        topCategory = cat;
-      }
-    });
-
     return {
       total,
       count,
       media,
-      topCategory,
-      topCategoryVal,
-      categoryTotals,
+      saidasPagas,
+      totalPagas,
+      countPagas,
+      totalPendentesFiltro,
+      countPendentesFiltro,
       totalPendente,
       countPendente,
+      totalVencidas,
+      countVencidas,
       totalContasFixas,
     };
   }, [filteredSaidas, saidas, contasFixas]);
@@ -1000,13 +1010,15 @@ export function SaidasScreen() {
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <div className="rounded-xl border border-rose-200 bg-rose-50/50 p-4 dark:border-rose-900/40 dark:bg-rose-950/20">
               <p className="text-xs font-semibold uppercase tracking-wider text-rose-600 dark:text-rose-400">
-                {activeTab === "contas-a-pagar" ? "Total a Pagar" : "Total de Saídas"}
+                {activeTab === "contas-a-pagar" ? "Total a Pagar" : "Total Saídas Pagas"}
               </p>
               <p className="mt-1 text-2xl font-black text-rose-700 dark:text-rose-300">
-                {formatBRL(stats.total)}
+                {formatBRL(activeTab === "contas-a-pagar" ? stats.totalPendentesFiltro : stats.totalPagas)}
               </p>
               <p className="mt-1 text-xs text-rose-500/80">
-                {stats.count} registro{stats.count !== 1 ? "s" : ""}
+                {activeTab === "contas-a-pagar"
+                  ? `${stats.countPendentesFiltro} conta(s) no filtro`
+                  : `${stats.countPagas} saída(s) paga(s)`}
               </p>
             </div>
 
@@ -1034,20 +1046,22 @@ export function SaidasScreen() {
               </p>
             </div>
 
-            <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-              <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
-                Maior Categoria
-              </p>
-              <div className="mt-1 flex items-center gap-1.5">
-                <span className="text-lg">
-                  {getCategoriaInfo(stats.topCategory).icone}
-                </span>
-                <p className="text-xl font-bold text-zinc-900 dark:text-white truncate">
-                  {stats.topCategory}
+            <div className="rounded-xl border border-rose-200 bg-rose-50/60 p-4 shadow-sm dark:border-rose-900/50 dark:bg-rose-950/30">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-semibold uppercase tracking-wider text-rose-600 dark:text-rose-400">
+                  Contas Vencidas
                 </p>
+                {stats.countVencidas > 0 && (
+                  <span className="flex h-2 w-2 rounded-full bg-rose-600 animate-ping" />
+                )}
               </div>
-              <p className="mt-1 text-xs text-zinc-400">
-                {stats.topCategoryVal > 0 ? formatBRL(stats.topCategoryVal) : "Sem dados"}
+              <p className="mt-1 text-2xl font-black text-rose-800 dark:text-rose-300">
+                {formatBRL(stats.totalVencidas)}
+              </p>
+              <p className="mt-1 text-xs font-medium text-rose-600/90 dark:text-rose-400/80">
+                {stats.countVencidas > 0
+                  ? `${stats.countVencidas} conta(s) em atraso!`
+                  : "Nenhuma conta em atraso"}
               </p>
             </div>
           </div>
@@ -1153,7 +1167,13 @@ export function SaidasScreen() {
                     : `Registros Encontrados (${filteredSaidas.length})`}
                 </h3>
                 <span className="text-xs font-semibold text-rose-600 dark:text-rose-400">
-                  Total: -{formatBRL(stats.total)}
+                  {activeTab === "contas-a-pagar"
+                    ? `Total a Pagar: ${formatBRL(stats.totalPendentesFiltro)}`
+                    : statusFilter === "pendente"
+                    ? `Total a Pagar: ${formatBRL(stats.totalPendentesFiltro)}`
+                    : statusFilter === "pago"
+                    ? `Total Pago: ${formatBRL(stats.totalPagas)}`
+                    : `Total Pago: ${formatBRL(stats.totalPagas)}`}
                 </span>
               </div>
 

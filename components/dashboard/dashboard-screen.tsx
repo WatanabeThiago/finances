@@ -389,12 +389,16 @@ export function DashboardScreen() {
       return acc + (subtotal - (v.comissao || 0));
     }, 0);
 
-    const totalSaidas = (filteredData.saidas || []).reduce(
+    const saidasEfetivas = (filteredData.saidas || []).filter(
+      (s) => s.status !== "pendente"
+    );
+
+    const totalSaidas = saidasEfetivas.reduce(
       (acc, s) => acc + (s.valor || 0),
       0
     );
 
-    const totalSaidasCount = (filteredData.saidas || []).length;
+    const totalSaidasCount = saidasEfetivas.length;
     const resultadoLiquido = totalComissao - totalSaidas;
 
     // Contas a pagar pendentes
