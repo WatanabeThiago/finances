@@ -1370,6 +1370,216 @@ export function SaidasScreen() {
         </div>
       )}
 
+      {/* Modal de Edição de Saída / Conta a Pagar */}
+      {editingSaida && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-lg rounded-2xl border border-zinc-200 bg-white p-6 shadow-2xl dark:border-zinc-800 dark:bg-zinc-900 max-h-[90vh] overflow-y-auto">
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-base font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
+                <Edit2 className="h-4 w-4 text-rose-600" />
+                {editingSaida.status === "pendente" ? "Editar Conta a Pagar" : "Editar Saída"}
+              </h3>
+              <button
+                onClick={() => setEditingSaida(null)}
+                className="rounded-lg p-1 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600 dark:hover:bg-zinc-800"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdate} className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="mb-1 block text-xs font-bold uppercase text-zinc-600 dark:text-zinc-400">
+                    Valor (R$) <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={
+                      typeof editingSaida.valor === "number"
+                        ? editingSaida.valor.toFixed(2).replace(".", ",")
+                        : editingSaida.valor
+                    }
+                    onChange={(e) =>
+                      setEditingSaida({
+                        ...editingSaida,
+                        valor: e.target.value as any,
+                      })
+                    }
+                    className="w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm font-bold text-zinc-900 dark:border-zinc-700 dark:bg-zinc-950 dark:text-white"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-xs font-bold uppercase text-zinc-600 dark:text-zinc-400">
+                    Status
+                  </label>
+                  <select
+                    value={editingSaida.status || "pago"}
+                    onChange={(e) =>
+                      setEditingSaida({
+                        ...editingSaida,
+                        status: e.target.value as SaidaStatus,
+                      })
+                    }
+                    className="w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm font-semibold text-zinc-800 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
+                  >
+                    <option value="pago">Pago ✓</option>
+                    <option value="pendente">A Pagar (Pendente) ⏳</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-bold uppercase text-zinc-600 dark:text-zinc-400">
+                  Categoria <span className="text-rose-500">*</span>
+                </label>
+                <select
+                  value={editingSaida.categoria}
+                  onChange={(e) =>
+                    setEditingSaida({
+                      ...editingSaida,
+                      categoria: e.target.value,
+                    })
+                  }
+                  className="w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm font-semibold text-zinc-800 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-200"
+                >
+                  {CATEGORIAS_PADRAO.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.icone} {c.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="mb-1 block text-xs font-bold uppercase text-zinc-600 dark:text-zinc-400">
+                    Fornecedor / Favorecido
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Ex.: Distribuidora, Posto, etc."
+                    value={editingSaida.fornecedor || ""}
+                    onChange={(e) =>
+                      setEditingSaida({
+                        ...editingSaida,
+                        fornecedor: e.target.value,
+                      })
+                    }
+                    className="w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-700 dark:bg-zinc-950 dark:text-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-xs font-bold uppercase text-zinc-600 dark:text-zinc-400">
+                    Forma de Pagamento
+                  </label>
+                  <select
+                    value={editingSaida.formaPagamento || "Pix"}
+                    onChange={(e) =>
+                      setEditingSaida({
+                        ...editingSaida,
+                        formaPagamento: e.target.value,
+                      })
+                    }
+                    className="w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm font-semibold text-zinc-800 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
+                  >
+                    {FORMAS_PAGAMENTO.map((f) => (
+                      <option key={f} value={f}>
+                        {f}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="mb-1 block text-xs font-bold uppercase text-zinc-600 dark:text-zinc-400">
+                    Data do Vencimento
+                  </label>
+                  <input
+                    type="date"
+                    value={
+                      editingSaida.dataVencimento
+                        ? new Date(editingSaida.dataVencimento).toISOString().split("T")[0]
+                        : ""
+                    }
+                    onChange={(e) =>
+                      setEditingSaida({
+                        ...editingSaida,
+                        dataVencimento: e.target.value || null,
+                      })
+                    }
+                    className="w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-700 dark:bg-zinc-950 dark:text-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-xs font-bold uppercase text-zinc-600 dark:text-zinc-400">
+                    Data do Registro
+                  </label>
+                  <input
+                    type="datetime-local"
+                    value={
+                      editingSaida.dataSaida
+                        ? new Date(new Date(editingSaida.dataSaida).getTime() - new Date().getTimezoneOffset() * 60000)
+                            .toISOString()
+                            .slice(0, 16)
+                        : ""
+                    }
+                    onChange={(e) =>
+                      setEditingSaida({
+                        ...editingSaida,
+                        dataSaida: e.target.value ? new Date(e.target.value).toISOString() : editingSaida.dataSaida,
+                      })
+                    }
+                    className="w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-700 dark:bg-zinc-950 dark:text-white"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-bold uppercase text-zinc-600 dark:text-zinc-400">
+                  Descrição (opcional)
+                </label>
+                <input
+                  type="text"
+                  placeholder="Ex.: Chaves virgens pantográficas, troca de óleo..."
+                  value={editingSaida.descricao || ""}
+                  onChange={(e) =>
+                    setEditingSaida({
+                      ...editingSaida,
+                      descricao: e.target.value,
+                    })
+                  }
+                  className="w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-700 dark:bg-zinc-950 dark:text-white"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-zinc-200 dark:border-zinc-800">
+                <button
+                  type="button"
+                  onClick={() => setEditingSaida(null)}
+                  className="rounded-xl px-4 py-2 text-sm font-medium text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="rounded-xl bg-rose-600 px-4 py-2 text-sm font-bold text-white shadow hover:bg-rose-500"
+                >
+                  Salvar Alterações
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
