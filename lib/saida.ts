@@ -1,13 +1,16 @@
 export type SaidaCategoria =
+  | "Crédito/Empréstimo"
   | "Imóvel"
-  | "Internet"
-  | "Contador/Tributos"
+  | "Veículo/Oficina"
+  | "Combustível"
   | "Ferramentas"
   | "Materiais"
   | "Produtos"
   | "Chips"
   | "Máquina"
-  | "Combustível"
+  | "Contador/Tributos"
+  | "Internet/Telefonia"
+  | "Marketing/Anúncios"
   | "Alimentação"
   | "Outros";
 
@@ -58,6 +61,15 @@ export const CATEGORIAS_PADRAO: Array<{
   text: string;
 }> = [
   {
+    id: "Crédito/Empréstimo",
+    label: "Crédito/Empréstimo",
+    icone: "💳",
+    cor: "red",
+    bg: "bg-red-500/10 dark:bg-red-500/20",
+    border: "border-red-500/30",
+    text: "text-red-700 dark:text-red-300",
+  },
+  {
     id: "Imóvel",
     label: "Imóvel",
     icone: "🏠",
@@ -67,22 +79,22 @@ export const CATEGORIAS_PADRAO: Array<{
     text: "text-rose-700 dark:text-rose-300",
   },
   {
-    id: "Internet",
-    label: "Internet",
-    icone: "🌐",
-    cor: "cyan",
-    bg: "bg-cyan-500/10 dark:bg-cyan-500/20",
-    border: "border-cyan-500/30",
-    text: "text-cyan-700 dark:text-cyan-300",
+    id: "Veículo/Oficina",
+    label: "Veículo/Oficina",
+    icone: "🚗",
+    cor: "blue",
+    bg: "bg-blue-500/10 dark:bg-blue-500/20",
+    border: "border-blue-500/30",
+    text: "text-blue-700 dark:text-blue-300",
   },
   {
-    id: "Contador/Tributos",
-    label: "Contador/Tributos",
-    icone: "📑",
-    cor: "teal",
-    bg: "bg-teal-500/10 dark:bg-teal-500/20",
-    border: "border-teal-500/30",
-    text: "text-teal-700 dark:text-teal-300",
+    id: "Combustível",
+    label: "Combustível",
+    icone: "⛽",
+    cor: "emerald",
+    bg: "bg-emerald-500/10 dark:bg-emerald-500/20",
+    border: "border-emerald-500/30",
+    text: "text-emerald-700 dark:text-emerald-300",
   },
   {
     id: "Ferramentas",
@@ -106,10 +118,10 @@ export const CATEGORIAS_PADRAO: Array<{
     id: "Produtos",
     label: "Produtos",
     icone: "📦",
-    cor: "blue",
-    bg: "bg-blue-500/10 dark:bg-blue-500/20",
-    border: "border-blue-500/30",
-    text: "text-blue-700 dark:text-blue-300",
+    cor: "sky",
+    bg: "bg-sky-500/10 dark:bg-sky-500/20",
+    border: "border-sky-500/30",
+    text: "text-sky-700 dark:text-sky-300",
   },
   {
     id: "Chips",
@@ -130,13 +142,31 @@ export const CATEGORIAS_PADRAO: Array<{
     text: "text-purple-700 dark:text-purple-300",
   },
   {
-    id: "Combustível",
-    label: "Combustível",
-    icone: "⛽",
-    cor: "emerald",
-    bg: "bg-emerald-500/10 dark:bg-emerald-500/20",
-    border: "border-emerald-500/30",
-    text: "text-emerald-700 dark:text-emerald-300",
+    id: "Contador/Tributos",
+    label: "Contador/Tributos",
+    icone: "📑",
+    cor: "teal",
+    bg: "bg-teal-500/10 dark:bg-teal-500/20",
+    border: "border-teal-500/30",
+    text: "text-teal-700 dark:text-teal-300",
+  },
+  {
+    id: "Internet/Telefonia",
+    label: "Internet/Telefonia",
+    icone: "🌐",
+    cor: "cyan",
+    bg: "bg-cyan-500/10 dark:bg-cyan-500/20",
+    border: "border-cyan-500/30",
+    text: "text-cyan-700 dark:text-cyan-300",
+  },
+  {
+    id: "Marketing/Anúncios",
+    label: "Marketing/Anúncios",
+    icone: "📢",
+    cor: "pink",
+    bg: "bg-pink-500/10 dark:bg-pink-500/20",
+    border: "border-pink-500/30",
+    text: "text-pink-700 dark:text-pink-300",
   },
   {
     id: "Alimentação",
