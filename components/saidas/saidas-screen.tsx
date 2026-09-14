@@ -213,35 +213,74 @@ export function SaidasScreen() {
     }
   };
 
-  // Lançar Conta Fixa como Saída (1 clique)
+  // Lançar Conta Fixa como Saída / Pagar Conta Fixa
   const handleLancarContaFixa = async (cf: ContaFixa) => {
     if (!confirm(`Deseja registrar o pagamento de "${cf.nome}" no valor de ${formatBRL(cf.valor)}?`)) return;
 
     try {
-      const res = await fetch("/api/saidas", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          valor: cf.valor,
-          categoria: cf.categoria || "Outros",
-          descricao: `Conta Fixa: ${cf.nome}`,
-          formaPagamento: "Pix",
-          status: "pago",
-          isFixa: true,
-          dataSaida: new Date().toISOString(),
-        }),
+      // Verificar se já existe uma saída pendente desta conta fixa neste mês
+      const pendente = saidas.find((s) => {
+        if (s.status !== "pendente") return false;
+        const d = (s.descricao || "").toLowerCase();
+        const n = cf.nome.toLowerCase();
+        return d === `conta fixa: ${n}` || d === n || s.fornecedor?.toLowerCase() === n;
       });
 
+      let res;
+      if (pendente) {
+        // Dá baixa diretamente na saída pendente
+        res = await fetch(`/api/saidas/${pendente.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            ...pendente,
+            status: "pago",
+            formaPagamento: "Pix",
+            dataPagamento: new Date().toISOString(),
+          }),
+        });
+      } else {
+        // Cria diretamente como paga
+        res = await fetch("/api/saidas", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            valor: cf.valor,
+            categoria: cf.categoria || "Outros",
+            descricao: `Conta Fixa: ${cf.nome}`,
+            formaPagamento: "Pix",
+            status: "pago",
+            isFixa: true,
+            fornecedor: cf.nome,
+            dataSaida: new Date().toISOString(),
+          }),
+        });
+      }
+
       if (res.ok) {
-        const nova = await res.json();
-        setSaidas((prev) => [
-          {
-            ...nova,
-            valor: typeof nova.valor === "string" ? parseFloat(nova.valor) : nova.valor,
-          },
-          ...prev,
-        ]);
-        alert(`Conta fixa "${cf.nome}" registrada com sucesso nas saídas!`);
+        const itemAtualizado = await res.json();
+        setSaidas((prev) => {
+          const exists = prev.some((s) => s.id === itemAtualizado.id);
+          if (exists) {
+            return prev.map((s) =>
+              s.id === itemAtualizado.id
+                ? {
+                    ...itemAtualizado,
+                    valor: typeof itemAtualizado.valor === "string" ? parseFloat(itemAtualizado.valor) : itemAtualizado.valor,
+                  }
+                : s
+            );
+          } else {
+            return [
+              {
+                ...itemAtualizado,
+                valor: typeof itemAtualizado.valor === "string" ? parseFloat(itemAtualizado.valor) : itemAtualizado.valor,
+              },
+              ...prev,
+            ];
+          }
+        });
+        alert(`Conta fixa "${cf.nome}" registrada como paga com sucesso!`);
       }
     } catch (err) {
       console.error("Erro ao lançar conta fixa:", err);

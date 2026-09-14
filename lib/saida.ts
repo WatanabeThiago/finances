@@ -212,3 +212,85 @@ export function getCategoriaInfo(categoriaNome: string) {
     text: "text-zinc-700 dark:text-zinc-300",
   };
 }
+
+/**
+ * Sincroniza as contas fixas ativas com a tabela de Saídas do mês corrente.
+ * Se uma conta fixa ativa ainda não tiver sido lançada neste mês (nem pendente nem paga),
+ * ela é automaticamente criada como 'pendente', ficando disponível em 'Contas a Pagar'.
+ */
+export async function syncContasFixasDoMes(queryFn: (text: string, params?: unknown[]) => Promise<any[]>): Promise<void> {
+  try {
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth(); // 0-indexed
+
+    // 1. Buscar todas as contas fixas ativas
+    const fixas = await queryFn(
+      `SELECT id, nome, valor, categoria, "diaVencimento", ativo
+       FROM public."ContaFixa"
+       WHERE ativo = true`
+    );
+
+    if (!fixas || fixas.length === 0) {
+      return;
+    }
+
+    // Início e fim do mês corrente em UTC
+    const startOfMonth = new Date(Date.UTC(currentYear, currentMonth, 1, 0, 0, 0));
+    const endOfMonth = new Date(Date.UTC(currentYear, currentMonth + 1, 0, 23, 59, 59, 999));
+
+    // 2. Buscar saídas fixas já existentes para este mês
+    const existingSaidasFixas = await queryFn(
+      `SELECT id, descricao, valor, categoria, status, "isFixa", "dataVencimento", "dataSaida"
+       FROM public."Saida"
+       WHERE "isFixa" = true
+         AND (
+           ("dataSaida" >= $1 AND "dataSaida" <= $2)
+           OR ("dataVencimento" >= $1 AND "dataVencimento" <= $2)
+         )`,
+      [startOfMonth, endOfMonth]
+    );
+
+    for (const fixa of fixas) {
+      const nomeLower = (fixa.nome || "").trim().toLowerCase();
+
+      const jaExiste = existingSaidasFixas.some((s: any) => {
+        const descLower = (s.descricao || "").trim().toLowerCase();
+        return (
+          descLower === `conta fixa: ${nomeLower}` ||
+          descLower === nomeLower ||
+          descLower.startsWith(`conta fixa: ${nomeLower}`)
+        );
+      });
+
+      if (!jaExiste) {
+        const maxDaysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+        const diaVenc = Math.min(Math.max(1, fixa.diaVencimento || 10), maxDaysInMonth);
+        const dataVencimento = new Date(Date.UTC(currentYear, currentMonth, diaVenc, 12, 0, 0));
+
+        await queryFn(
+          `INSERT INTO public."Saida" (
+             valor, categoria, descricao, "formaPagamento", status,
+             "dataVencimento", "dataPagamento", fornecedor, "isFixa", "dataSaida"
+           )
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+          [
+            Number(fixa.valor),
+            fixa.categoria || "Outros",
+            `Conta Fixa: ${fixa.nome.trim()}`,
+            "Pix",
+            "pendente",
+            dataVencimento,
+            null,
+            fixa.nome.trim(),
+            true,
+            dataVencimento,
+          ]
+        );
+      }
+    }
+  } catch (err) {
+    console.error("Erro ao sincronizar contas fixas:", err);
+  }
+}
+

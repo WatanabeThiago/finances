@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { query, sanitizeData, initializeDatabase } from "@/lib/db";
+import { syncContasFixasDoMes } from "@/lib/saida";
 
 export async function GET(request: NextRequest) {
   try {
+    // Sincronizar contas fixas ativas para o mês atual antes de retornar as saídas
+    await syncContasFixasDoMes(query);
+
     const { searchParams } = new URL(request.url);
     const categoria = searchParams.get("categoria");
     const status = searchParams.get("status"); // 'pago', 'pendente', 'all'
