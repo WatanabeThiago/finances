@@ -1,13 +1,14 @@
 export type SaidaCategoria =
+  | "Imóvel"
+  | "Internet"
+  | "Contador/Tributos"
   | "Ferramentas"
   | "Materiais"
   | "Produtos"
   | "Chips"
-  | "Alimentação"
   | "Máquina"
   | "Combustível"
-  | "Contador/Tributos"
-  | "Internet"
+  | "Alimentação"
   | "Outros";
 
 export type FormaPagamentoSaida =
@@ -57,6 +58,33 @@ export const CATEGORIAS_PADRAO: Array<{
   text: string;
 }> = [
   {
+    id: "Imóvel",
+    label: "Imóvel",
+    icone: "🏠",
+    cor: "rose",
+    bg: "bg-rose-500/10 dark:bg-rose-500/20",
+    border: "border-rose-500/30",
+    text: "text-rose-700 dark:text-rose-300",
+  },
+  {
+    id: "Internet",
+    label: "Internet",
+    icone: "🌐",
+    cor: "cyan",
+    bg: "bg-cyan-500/10 dark:bg-cyan-500/20",
+    border: "border-cyan-500/30",
+    text: "text-cyan-700 dark:text-cyan-300",
+  },
+  {
+    id: "Contador/Tributos",
+    label: "Contador/Tributos",
+    icone: "📑",
+    cor: "teal",
+    bg: "bg-teal-500/10 dark:bg-teal-500/20",
+    border: "border-teal-500/30",
+    text: "text-teal-700 dark:text-teal-300",
+  },
+  {
     id: "Ferramentas",
     label: "Ferramentas",
     icone: "🔧",
@@ -102,15 +130,6 @@ export const CATEGORIAS_PADRAO: Array<{
     text: "text-purple-700 dark:text-purple-300",
   },
   {
-    id: "Alimentação",
-    label: "Alimentação",
-    icone: "🍔",
-    cor: "orange",
-    bg: "bg-orange-500/10 dark:bg-orange-500/20",
-    border: "border-orange-500/30",
-    text: "text-orange-700 dark:text-orange-300",
-  },
-  {
     id: "Combustível",
     label: "Combustível",
     icone: "⛽",
@@ -120,22 +139,13 @@ export const CATEGORIAS_PADRAO: Array<{
     text: "text-emerald-700 dark:text-emerald-300",
   },
   {
-    id: "Contador/Tributos",
-    label: "Contador/Tributos",
-    icone: "📑",
-    cor: "teal",
-    bg: "bg-teal-500/10 dark:bg-teal-500/20",
-    border: "border-teal-500/30",
-    text: "text-teal-700 dark:text-teal-300",
-  },
-  {
-    id: "Internet",
-    label: "Internet",
-    icone: "🌐",
-    cor: "cyan",
-    bg: "bg-cyan-500/10 dark:bg-cyan-500/20",
-    border: "border-cyan-500/30",
-    text: "text-cyan-700 dark:text-cyan-300",
+    id: "Alimentação",
+    label: "Alimentação",
+    icone: "🍔",
+    cor: "orange",
+    bg: "bg-orange-500/10 dark:bg-orange-500/20",
+    border: "border-orange-500/30",
+    text: "text-orange-700 dark:text-orange-300",
   },
   {
     id: "Outros",
