@@ -12,6 +12,9 @@ import {
 import { formatBRL, parseMoney } from "@/lib/money";
 import {
   AlertCircle,
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
   Calendar,
   Check,
   CheckCircle2,
@@ -20,11 +23,13 @@ import {
   CreditCard,
   Edit2,
   Filter,
+  LayoutList,
   Plus,
   Receipt,
   RefreshCw,
   Repeat,
   Search,
+  Table as TableIcon,
   Tag,
   Trash2,
   TrendingDown,
@@ -50,6 +55,11 @@ export function SaidasScreen() {
   const [statusFilter, setStatusFilter] = useState<"all" | "pago" | "pendente">("all");
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>("all");
   const [searchDesc, setSearchDesc] = useState("");
+
+  // Visualização e Ordenação (especialmente para Contas a Pagar e Saídas)
+  const [viewMode, setViewMode] = useState<"table" | "list">("table");
+  const [sortField, setSortField] = useState<"vencimento" | "valor" | "dataSaida" | "categoria" | "fornecedor">("vencimento");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
 
   // Formulário de Registro Rápido
   const [valorInput, setValorInput] = useState("");
@@ -445,7 +455,7 @@ export function SaidasScreen() {
       cutoffDate.setDate(cutoffDate.getDate() - 30);
     }
 
-    return saidas.filter((s) => {
+    const result = saidas.filter((s) => {
       // Filtro de data
       if (cutoffDate) {
         const sDate = new Date(s.dataSaida);
@@ -479,7 +489,42 @@ export function SaidasScreen() {
 
       return true;
     });
-  }, [saidas, dateFilter, activeTab, statusFilter, selectedCategoryFilter, searchDesc]);
+
+    // Ordenação dos resultados
+    return [...result].sort((a, b) => {
+      let comparison = 0;
+
+      if (sortField === "valor") {
+        comparison = (a.valor || 0) - (b.valor || 0);
+      } else if (sortField === "vencimento") {
+        const dateA = a.dataVencimento ? new Date(a.dataVencimento).getTime() : a.dataSaida ? new Date(a.dataSaida).getTime() : 0;
+        const dateB = b.dataVencimento ? new Date(b.dataVencimento).getTime() : b.dataSaida ? new Date(b.dataSaida).getTime() : 0;
+        // Se ambos têm vencimento ou fallback, compara datas
+        if (dateA && dateB) {
+          comparison = dateA - dateB;
+        } else if (dateA) {
+          comparison = -1;
+        } else if (dateB) {
+          comparison = 1;
+        } else {
+          comparison = 0;
+        }
+      } else if (sortField === "categoria") {
+        comparison = (a.categoria || "").localeCompare(b.categoria || "");
+      } else if (sortField === "fornecedor") {
+        const fnA = a.fornecedor || a.descricao || "";
+        const fnB = b.fornecedor || b.descricao || "";
+        comparison = fnA.localeCompare(fnB);
+      } else {
+        // dataSaida
+        const dateA = new Date(a.dataSaida).getTime();
+        const dateB = new Date(b.dataSaida).getTime();
+        comparison = dateA - dateB;
+      }
+
+      return sortOrder === "asc" ? comparison : -comparison;
+    });
+  }, [saidas, dateFilter, activeTab, statusFilter, selectedCategoryFilter, searchDesc, sortField, sortOrder]);
 
   // Estatísticas calculadas
   const stats = useMemo(() => {
@@ -1094,17 +1139,84 @@ export function SaidasScreen() {
             </div>
           </div>
 
-          {/* Lista de Saídas */}
+          {/* Lista ou Tabela de Saídas / Contas a Pagar */}
           <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-            <div className="border-b border-zinc-200 px-4 py-3 dark:border-zinc-800 flex items-center justify-between">
-              <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
-                {activeTab === "contas-a-pagar"
-                  ? `Contas a Pagar Pendentes (${filteredSaidas.length})`
-                  : `Registros Encontrados (${filteredSaidas.length})`}
-              </h3>
-              <span className="text-xs font-semibold text-rose-600 dark:text-rose-400">
-                Total: -{formatBRL(stats.total)}
-              </span>
+            {/* Cabeçalho da Listagem / Tabela com Alternador de View e Ordenação */}
+            <div className="border-b border-zinc-200 px-4 py-3 dark:border-zinc-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-zinc-50/50 dark:bg-zinc-800/40">
+              <div className="flex items-center gap-3">
+                <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
+                  {activeTab === "contas-a-pagar"
+                    ? `Contas a Pagar Pendentes (${filteredSaidas.length})`
+                    : `Registros Encontrados (${filteredSaidas.length})`}
+                </h3>
+                <span className="text-xs font-semibold text-rose-600 dark:text-rose-400">
+                  Total: -{formatBRL(stats.total)}
+                </span>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                {/* Seletores rápidos de ordenação */}
+                <div className="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400">
+                  <span className="hidden md:inline font-medium">Ordenar:</span>
+                  <select
+                    value={sortField}
+                    onChange={(e) => setSortField(e.target.value as any)}
+                    className="rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-zinc-800 shadow-sm dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 focus:outline-none"
+                  >
+                    <option value="vencimento">📅 Vencimento</option>
+                    <option value="valor">💰 Valor (R$)</option>
+                    <option value="dataSaida">🕒 Data de Lançamento</option>
+                    <option value="fornecedor">🏢 Fornecedor / Nome</option>
+                    <option value="categoria">🏷️ Categoria</option>
+                  </select>
+
+                  <button
+                    onClick={() => setSortOrder(sortOrder === "asc" ? "desc" : "asc")}
+                    title={sortOrder === "asc" ? "Ordem Crescente (clique p/ Decrescente)" : "Ordem Decrescente (clique p/ Crescente)"}
+                    className="inline-flex items-center gap-1 rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-zinc-700 shadow-sm hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700 transition"
+                  >
+                    {sortOrder === "asc" ? (
+                      <>
+                        <ArrowUp className="h-3.5 w-3.5 text-rose-600 dark:text-rose-400" />
+                        <span className="text-[11px] font-bold">Crescente</span>
+                      </>
+                    ) : (
+                      <>
+                        <ArrowDown className="h-3.5 w-3.5 text-rose-600 dark:text-rose-400" />
+                        <span className="text-[11px] font-bold">Decrescente</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {/* Alternador de Visualização: Tabela vs Lista */}
+                <div className="flex items-center rounded-lg border border-zinc-200 bg-white p-0.5 shadow-sm dark:border-zinc-700 dark:bg-zinc-800">
+                  <button
+                    onClick={() => setViewMode("table")}
+                    title="Visualização em Tabela"
+                    className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-bold transition ${
+                      viewMode === "table"
+                        ? "bg-rose-600 text-white shadow"
+                        : "text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+                    }`}
+                  >
+                    <TableIcon className="h-3.5 w-3.5" />
+                    <span>Tabela</span>
+                  </button>
+                  <button
+                    onClick={() => setViewMode("list")}
+                    title="Visualização em Lista / Cards"
+                    className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-bold transition ${
+                      viewMode === "list"
+                        ? "bg-rose-600 text-white shadow"
+                        : "text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+                    }`}
+                  >
+                    <LayoutList className="h-3.5 w-3.5" />
+                    <span>Cards</span>
+                  </button>
+                </div>
+              </div>
             </div>
 
             {loading ? (
@@ -1122,7 +1234,241 @@ export function SaidasScreen() {
                   Registre novas movimentações no formulário acima.
                 </p>
               </div>
+            ) : viewMode === "table" ? (
+              /* MODO TABELA */
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="border-b border-zinc-200 bg-zinc-100/75 dark:border-zinc-800 dark:bg-zinc-800/60 text-zinc-600 dark:text-zinc-300 font-semibold uppercase tracking-wider">
+                      <th
+                        className="py-3 px-4 cursor-pointer hover:text-rose-600 transition select-none"
+                        onClick={() => {
+                          if (sortField === "vencimento") {
+                            setSortOrder(sortOrder === "asc" ? "desc" : "asc");
+                          } else {
+                            setSortField("vencimento");
+                            setSortOrder("asc");
+                          }
+                        }}
+                      >
+                        <div className="flex items-center gap-1">
+                          <span>Vencimento</span>
+                          {sortField === "vencimento" ? (
+                            sortOrder === "asc" ? <ArrowUp className="h-3 w-3 text-rose-600" /> : <ArrowDown className="h-3 w-3 text-rose-600" />
+                          ) : (
+                            <ArrowUpDown className="h-3 w-3 opacity-40" />
+                          )}
+                        </div>
+                      </th>
+                      <th
+                        className="py-3 px-4 cursor-pointer hover:text-rose-600 transition select-none"
+                        onClick={() => {
+                          if (sortField === "fornecedor") {
+                            setSortOrder(sortOrder === "asc" ? "desc" : "asc");
+                          } else {
+                            setSortField("fornecedor");
+                            setSortOrder("asc");
+                          }
+                        }}
+                      >
+                        <div className="flex items-center gap-1">
+                          <span>Fornecedor / Descrição</span>
+                          {sortField === "fornecedor" ? (
+                            sortOrder === "asc" ? <ArrowUp className="h-3 w-3 text-rose-600" /> : <ArrowDown className="h-3 w-3 text-rose-600" />
+                          ) : (
+                            <ArrowUpDown className="h-3 w-3 opacity-40" />
+                          )}
+                        </div>
+                      </th>
+                      <th
+                        className="py-3 px-4 cursor-pointer hover:text-rose-600 transition select-none"
+                        onClick={() => {
+                          if (sortField === "categoria") {
+                            setSortOrder(sortOrder === "asc" ? "desc" : "asc");
+                          } else {
+                            setSortField("categoria");
+                            setSortOrder("asc");
+                          }
+                        }}
+                      >
+                        <div className="flex items-center gap-1">
+                          <span>Categoria</span>
+                          {sortField === "categoria" ? (
+                            sortOrder === "asc" ? <ArrowUp className="h-3 w-3 text-rose-600" /> : <ArrowDown className="h-3 w-3 text-rose-600" />
+                          ) : (
+                            <ArrowUpDown className="h-3 w-3 opacity-40" />
+                          )}
+                        </div>
+                      </th>
+                      <th
+                        className="py-3 px-4 cursor-pointer hover:text-rose-600 transition select-none text-right"
+                        onClick={() => {
+                          if (sortField === "valor") {
+                            setSortOrder(sortOrder === "asc" ? "desc" : "asc");
+                          } else {
+                            setSortField("valor");
+                            setSortOrder(sortOrder === "desc" ? "asc" : "desc");
+                          }
+                        }}
+                      >
+                        <div className="flex items-center justify-end gap-1">
+                          <span>Valor</span>
+                          {sortField === "valor" ? (
+                            sortOrder === "asc" ? <ArrowUp className="h-3 w-3 text-rose-600" /> : <ArrowDown className="h-3 w-3 text-rose-600" />
+                          ) : (
+                            <ArrowUpDown className="h-3 w-3 opacity-40" />
+                          )}
+                        </div>
+                      </th>
+                      <th className="py-3 px-4 text-center">Status</th>
+                      <th className="py-3 px-4 text-right">Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/70">
+                    {filteredSaidas.map((s) => {
+                      const catInfo = getCategoriaInfo(s.categoria);
+                      const isPendente = s.status === "pendente";
+
+                      const vencimentoDate = s.dataVencimento ? new Date(s.dataVencimento) : null;
+                      const vencimentoFormatado = vencimentoDate
+                        ? vencimentoDate.toLocaleDateString("pt-BR")
+                        : new Date(s.dataSaida).toLocaleDateString("pt-BR");
+
+                      // Calcular se está vencida hoje ou em atraso
+                      const hoje = new Date();
+                      hoje.setHours(0, 0, 0, 0);
+                      const isVencida = isPendente && vencimentoDate && vencimentoDate.getTime() < hoje.getTime();
+                      const isVenceHoje = isPendente && vencimentoDate && vencimentoDate.toDateString() === hoje.toDateString();
+
+                      return (
+                        <tr
+                          key={s.id}
+                          className="hover:bg-zinc-50/80 dark:hover:bg-zinc-800/40 transition group"
+                        >
+                          {/* Vencimento */}
+                          <td className="py-3.5 px-4 whitespace-nowrap">
+                            <div className="flex items-center gap-1.5">
+                              <span className={`font-semibold ${
+                                isVencida
+                                  ? "text-rose-600 font-bold dark:text-rose-400"
+                                  : isVenceHoje
+                                  ? "text-amber-600 font-bold dark:text-amber-400"
+                                  : "text-zinc-800 dark:text-zinc-200"
+                              }`}>
+                                {vencimentoFormatado}
+                              </span>
+                              {isVencida && (
+                                <span className="rounded bg-rose-100 dark:bg-rose-950/60 px-1.5 py-0.2 text-[10px] font-bold text-rose-700 dark:text-rose-300">
+                                  Atrasada
+                                </span>
+                              )}
+                              {isVenceHoje && (
+                                <span className="rounded bg-amber-100 dark:bg-amber-950/60 px-1.5 py-0.2 text-[10px] font-bold text-amber-700 dark:text-amber-300">
+                                  Hoje
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-[10px] text-zinc-400 block mt-0.5">
+                              Lançado {new Date(s.dataSaida).toLocaleDateString("pt-BR")}
+                            </span>
+                          </td>
+
+                          {/* Fornecedor / Descrição */}
+                          <td className="py-3.5 px-4 max-w-[280px]">
+                            <div className="flex items-center gap-2">
+                              {s.fornecedor ? (
+                                <span className="font-bold text-zinc-900 dark:text-zinc-100">
+                                  {s.fornecedor}
+                                </span>
+                              ) : (
+                                <span className="font-bold text-zinc-900 dark:text-zinc-100 truncate">
+                                  {s.descricao || "Sem identificação"}
+                                </span>
+                              )}
+                              {s.isFixa && (
+                                <span className="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-bold bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 border border-indigo-200/50">
+                                  <Repeat className="h-2.5 w-2.5" />
+                                  Fixa
+                                </span>
+                              )}
+                            </div>
+                            {s.descricao && s.fornecedor && (
+                              <p className="text-zinc-500 dark:text-zinc-400 text-[11px] truncate mt-0.5">
+                                {s.descricao}
+                              </p>
+                            )}
+                          </td>
+
+                          {/* Categoria */}
+                          <td className="py-3.5 px-4 whitespace-nowrap">
+                            <span className={`inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[11px] font-bold ${catInfo.bg} ${catInfo.text}`}>
+                              <span>{catInfo.icone}</span>
+                              <span>{catInfo.label}</span>
+                            </span>
+                          </td>
+
+                          {/* Valor */}
+                          <td className="py-3.5 px-4 text-right whitespace-nowrap font-mono font-bold text-sm">
+                            <span className={isPendente ? "text-amber-600 dark:text-amber-400" : "text-rose-600 dark:text-rose-400"}>
+                              - {formatBRL(s.valor)}
+                            </span>
+                          </td>
+
+                          {/* Status */}
+                          <td className="py-3.5 px-4 text-center whitespace-nowrap">
+                            {isPendente ? (
+                              <span className="inline-flex items-center gap-1 rounded-md bg-amber-100 dark:bg-amber-950/60 px-2 py-0.5 text-[11px] font-bold text-amber-800 dark:text-amber-300 border border-amber-300/50">
+                                <Clock className="h-3 w-3" />
+                                A Pagar
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 rounded-md bg-emerald-100 dark:bg-emerald-950/60 px-2 py-0.5 text-[11px] font-bold text-emerald-800 dark:text-emerald-300">
+                                <CheckCircle2 className="h-3 w-3" />
+                                Pago
+                              </span>
+                            )}
+                          </td>
+
+                          {/* Ações */}
+                          <td className="py-3.5 px-4 text-right whitespace-nowrap">
+                            <div className="flex items-center justify-end gap-1.5">
+                              {isPendente && (
+                                <button
+                                  onClick={() => {
+                                    setBaixaModalSaida(s);
+                                    setBaixaFormaPagamento("Pix");
+                                  }}
+                                  title="Dar Baixa (Registrar Pagamento)"
+                                  className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-2.5 py-1 text-xs font-bold text-white shadow hover:bg-emerald-500 transition active:scale-95"
+                                >
+                                  <Check className="h-3 w-3" />
+                                  <span>Dar Baixa</span>
+                                </button>
+                              )}
+                              <button
+                                onClick={() => setEditingSaida(s)}
+                                title="Editar"
+                                className="rounded-lg p-1.5 text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+                              >
+                                <Edit2 className="h-3.5 w-3.5" />
+                              </button>
+                              <button
+                                onClick={() => handleDelete(s.id)}
+                                title="Excluir"
+                                className="rounded-lg p-1.5 text-zinc-400 transition hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/40 dark:hover:text-rose-400"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             ) : (
+              /* MODO LISTA / CARDS */
               <div className="divide-y divide-zinc-100 dark:divide-zinc-800/80">
                 {filteredSaidas.map((s) => {
                   const catInfo = getCategoriaInfo(s.categoria);
