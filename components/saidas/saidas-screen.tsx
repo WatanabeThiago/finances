@@ -204,6 +204,7 @@ export function SaidasScreen() {
           status: "pago",
           formaPagamento: baixaFormaPagamento,
           dataPagamento: new Date().toISOString(),
+          dataSaida: new Date().toISOString(), // data do pagamento real, não do vencimento
         }),
       });
 
@@ -250,6 +251,7 @@ export function SaidasScreen() {
             status: "pago",
             formaPagamento: "Pix",
             dataPagamento: new Date().toISOString(),
+            dataSaida: new Date().toISOString(), // data do pagamento real, não do vencimento
           }),
         });
       } else {
