@@ -11,9 +11,16 @@ export function generateReceiptHTML(
   const prestador = venda.prestadorId
     ? prestadorById.get(venda.prestadorId)
     : null;
+  const dateOptions: Intl.DateTimeFormatOptions = {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  };
   const dataVenda = venda.dataVenda
-    ? new Date(venda.dataVenda).toLocaleString("pt-BR")
-    : new Date(venda.createdAt).toLocaleString("pt-BR");
+    ? new Date(venda.dataVenda).toLocaleString("pt-BR", dateOptions)
+    : new Date(venda.createdAt).toLocaleString("pt-BR", dateOptions);
 
   const total = venda.linhas.reduce((acc, l) => acc + l.preco * l.quantidade, 0);
 
@@ -135,6 +142,7 @@ export function generateReceiptHTML(
           border-top: 1px solid #e5e7eb;
           color: #6b7280;
           font-size: 12px;
+          line-height: 1.6;
         }
         @media print {
           body {
@@ -219,6 +227,7 @@ export function generateReceiptHTML(
         </table>
 
         <div class="footer">
+          <p style="font-weight: bold; color: #374151;">CNPJ: 40.652.926/0001-86</p>
           <p>Este é um recibo digital gerado automaticamente.</p>
           <p>ID da Venda: ${venda.id}</p>
         </div>
