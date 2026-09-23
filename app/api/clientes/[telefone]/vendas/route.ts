@@ -24,8 +24,12 @@ export async function GET(
           json_agg(
             json_build_object(
               'id', l.id, 
+              'tipo', COALESCE(l.tipo, CASE WHEN l."produtoId" IS NOT NULL THEN 'produto' ELSE 'servico' END),
               'servicoId', l."servicoId", 
-              'servicoNome', COALESCE(s.nome, 'Item'), 
+              'servicoNome', s.nome, 
+              'produtoId', l."produtoId",
+              'produtoNome', p.nome,
+              'nome', COALESCE(l.nome, s.nome, p.nome, 'Item'),
               'precoOriginal', l."precoOriginal", 
               'preco', l.preco, 
               'quantidade', l.quantidade
@@ -35,6 +39,7 @@ export async function GET(
        FROM "VendaLg" v
        LEFT JOIN "VendaLgLine" l ON l."vendaLgId" = v.id
        LEFT JOIN "Service" s ON s.id = l."servicoId"
+       LEFT JOIN "Produto" p ON p.id = l."produtoId"
        WHERE TRIM(v."clienteTelefone") = TRIM($1)
           OR (
             (v."clienteTelefone" IS NULL OR TRIM(v."clienteTelefone") = '')

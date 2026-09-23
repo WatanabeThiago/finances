@@ -1,12 +1,14 @@
 import type { VendaLg } from "./venda-lg";
 import type { Service } from "./service";
 import type { Partner } from "./partner";
+import type { Produto } from "./produto";
 import { formatBRL } from "./money";
 
 export function generateReceiptHTML(
   venda: VendaLg,
   servicoById: Map<string, Service>,
-  prestadorById: Map<string, Partner>
+  prestadorById: Map<string, Partner>,
+  produtoById?: Map<string, Produto>
 ): string {
   const prestador = venda.prestadorId
     ? prestadorById.get(venda.prestadorId)
@@ -26,12 +28,23 @@ export function generateReceiptHTML(
 
   const linhasHTML = venda.linhas
     .map((linha) => {
-      const servico = servicoById.get(linha.servicoId);
-      const servicoNome = servico?.nome ?? "Serviço removido";
+      const servico = linha.servicoId ? servicoById.get(linha.servicoId) : null;
+      const produto = linha.produtoId ? produtoById?.get(linha.produtoId) : null;
+      const itemNome =
+        linha.nome ||
+        linha.produtoNome ||
+        linha.servicoNome ||
+        produto?.nome ||
+        servico?.nome ||
+        (linha.tipo === "produto" ? "Produto" : "Serviço");
+      const isProduto = linha.tipo === "produto" || !!linha.produtoId;
       const subtotal = linha.preco * linha.quantidade;
       return `
         <tr>
-          <td style="padding: 8px; border-bottom: 1px solid #e5e7eb;">${servicoNome}</td>
+          <td style="padding: 8px; border-bottom: 1px solid #e5e7eb;">
+            ${itemNome}
+            ${isProduto ? '<span style="font-size: 10px; color: #b45309; background: #fef3c7; border: 1px solid #fde68a; padding: 1px 5px; border-radius: 4px; margin-left: 6px; font-weight: 600;">Produto</span>' : ''}
+          </td>
           <td style="padding: 8px; border-bottom: 1px solid #e5e7eb; text-align: center;">${linha.quantidade}</td>
           <td style="padding: 8px; border-bottom: 1px solid #e5e7eb; text-align: right;">${formatBRL(linha.preco)}</td>
           <td style="padding: 8px; border-bottom: 1px solid #e5e7eb; text-align: right; font-weight: bold;">${formatBRL(subtotal)}</td>
@@ -207,7 +220,7 @@ export function generateReceiptHTML(
           ` : ""}
         </div>
 
-        <h2 style="font-size: 14px; font-weight: bold; color: #374151; text-transform: uppercase; margin-bottom: 15px; border-bottom: 1px solid #e5e7eb; padding-bottom: 5px;">Serviços Prestados</h2>
+        <h2 style="font-size: 14px; font-weight: bold; color: #374151; text-transform: uppercase; margin-bottom: 15px; border-bottom: 1px solid #e5e7eb; padding-bottom: 5px;">Itens e Serviços Prestados</h2>
         <table>
           <thead>
             <tr>

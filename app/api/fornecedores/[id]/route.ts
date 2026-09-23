@@ -18,13 +18,18 @@ export async function PUT(
     const categoria = body.categoria ? body.categoria.trim() : null;
     const taxaMes = body.taxaMes != null ? Number(body.taxaMes) : null;
     const obs = (body.obs || "").trim();
+    const tipoVencimento = (body.tipoVencimento || "dia-fixo").trim();
+    const diaVencimento = body.diaVencimento != null ? Number(body.diaVencimento) : null;
+    const diasApos = body.diasApos != null ? Number(body.diasApos) : 30;
 
     const rows = await query(
       `UPDATE public."Fornecedor"
-       SET nome = $1, tipo = $2, categoria = $3, "taxaMes" = $4, obs = $5, "updatedAt" = CURRENT_TIMESTAMP
-       WHERE id = $6
-       RETURNING id, nome, tipo, categoria, "taxaMes", obs, "createdAt", "updatedAt"`,
-      [nome, tipo, categoria, taxaMes, obs, id]
+       SET nome = $1, tipo = $2, categoria = $3, "taxaMes" = $4, obs = $5,
+           "tipoVencimento" = $6, "diaVencimento" = $7, "diasApos" = $8,
+           "updatedAt" = CURRENT_TIMESTAMP
+       WHERE id = $9
+       RETURNING id, nome, tipo, categoria, "taxaMes", obs, "tipoVencimento", "diaVencimento", "diasApos", "createdAt", "updatedAt"`,
+      [nome, tipo, categoria, taxaMes, obs, tipoVencimento, diaVencimento, diasApos, id]
     );
 
     if (rows.length === 0) {

@@ -2,6 +2,85 @@ import { NextRequest, NextResponse } from "next/server";
 import { query, sanitizeData, initializeDatabase } from "@/lib/db";
 import { syncContasFixasDoMes } from "@/lib/saida";
 
+type VendaLinha = {
+  id: string;
+  tipo?: string;
+  servicoId?: string | null;
+  produtoId?: string | null;
+  nome?: string;
+  precoOriginal: number | string;
+  preco: number | string;
+  quantidade: number | string;
+};
+
+type VendaQueryRow = {
+  id: string;
+  clienteNome: string;
+  clienteTelefone: string | null;
+  dataVenda: string | Date | null;
+  createdAt: string | Date;
+  comissao: number | string | null;
+  comissaoPaga: boolean | null;
+  clientePagou: boolean | null;
+  formaPagamento: string | null;
+  prestadorId: string | null;
+  prestadorNome: string | null;
+  linhas: VendaLinha[];
+};
+
+type PendenteQueryRow = {
+  id: string;
+  clienteNome: string;
+  clienteTelefone: string | null;
+  dataVenda: string | Date | null;
+  createdAt: string | Date;
+  comissao: number | string | null;
+  comissaoPaga: boolean | null;
+  clientePagou: boolean | null;
+  formaPagamento: string | null;
+  prestadorId: string | null;
+  prestadorNome: string | null;
+  valorTotalVenda: number | string | null;
+};
+
+type AdsQueryRow = {
+  id: string;
+  date: string;
+  spend: number | string;
+  cpc: number | string;
+  impressions: number | string;
+  url_clicks?: number | string | null;
+  call_clicks?: number | string | null;
+  msg_clicks?: number | string | null;
+  revenue?: number | string | null;
+  commission?: number | string | null;
+  clients?: number | string | null;
+  createdAt: string | Date;
+};
+
+type SaidaQueryRow = {
+  id: string;
+  valor: number | string;
+  categoria: string;
+  descricao: string | null;
+  formaPagamento: string | null;
+  status: string;
+  dataVencimento: string | Date | null;
+  dataPagamento: string | Date | null;
+  fornecedor: string | null;
+  isFixa: boolean | null;
+  dataSaida: string | Date | null;
+};
+
+type ContaFixaQueryRow = {
+  id: string;
+  nome: string;
+  valor: number | string;
+  categoria: string;
+  diaVencimento: number;
+  ativo: boolean;
+};
+
 export async function GET(request: NextRequest) {
   try {
     // Sincroniza contas fixas ativas para o mês corrente
@@ -34,15 +113,21 @@ export async function GET(request: NextRequest) {
     const diasDecorridos = isCurrentMonth ? Math.max(1, now.getDate()) : daysInMonth;
 
     // 1. Buscar Vendas do Período (com linhas e prestador)
-    let vendasRows: any[] = [];
+    let vendasRows: VendaQueryRow[] = [];
     try {
-      vendasRows = await query(
+      vendasRows = (await query(
         `SELECT v.id, v."clienteNome", v."clienteTelefone", v."dataVenda", v."createdAt",
                 v.comissao, v."comissaoPaga", v."clientePagou", v."formaPagamento",
                 v."prestadorId", p.nome as "prestadorNome",
                 COALESCE(json_agg(json_build_object(
-                  'id', l.id, 'servicoId', l."servicoId", 'precoOriginal', l."precoOriginal",
-                  'preco', l.preco, 'quantidade', l.quantidade
+                  'id', l.id, 
+                  'tipo', COALESCE(l.tipo, CASE WHEN l."produtoId" IS NOT NULL THEN 'produto' ELSE 'servico' END),
+                  'servicoId', l."servicoId", 
+                  'produtoId', l."produtoId",
+                  'nome', COALESCE(l.nome, 'Item'),
+                  'precoOriginal', l."precoOriginal",
+                  'preco', l.preco, 
+                  'quantidade', l.quantidade
                 )) FILTER (WHERE l.id IS NOT NULL), '[]'::json) as linhas
          FROM "VendaLg" v
          LEFT JOIN "VendaLgLine" l ON l."vendaLgId" = v.id
@@ -52,9 +137,10 @@ export async function GET(request: NextRequest) {
          GROUP BY v.id, p.nome
          ORDER BY COALESCE(v."dataVenda", v."createdAt") DESC`,
         [startOfMonth, endOfMonth]
-      );
-    } catch (err: any) {
-      if (err.message?.includes("does not exist")) {
+      )) as VendaQueryRow[];
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes("does not exist")) {
         await initializeDatabase();
         vendasRows = [];
       } else {
@@ -63,9 +149,9 @@ export async function GET(request: NextRequest) {
     }
 
     // 2. Buscar Comissões Pendentes (Dinheiro na Rua - Todas as pendentes não pagas)
-    let comissoesPendentesRows: any[] = [];
+    let comissoesPendentesRows: PendenteQueryRow[] = [];
     try {
-      comissoesPendentesRows = await query(
+      comissoesPendentesRows = (await query(
         `SELECT v.id, v."clienteNome", v."clienteTelefone", v."dataVenda", v."createdAt",
                 v.comissao, v."comissaoPaga", v."clientePagou", v."formaPagamento",
                 v."prestadorId", p.nome as "prestadorNome",
@@ -78,27 +164,26 @@ export async function GET(request: NextRequest) {
          GROUP BY v.id, p.nome
          ORDER BY COALESCE(v."dataVenda", v."createdAt") DESC`,
         []
-      );
+      )) as PendenteQueryRow[];
     } catch {
       comissoesPendentesRows = [];
     }
 
     // 3. Buscar Google Ads do Período
-    let adsRows: any[] = [];
+    let adsRows: AdsQueryRow[] = [];
     try {
-      adsRows = await query(
+      adsRows = (await query(
         `SELECT id, date, spend, cpc, impressions, url_clicks, call_clicks, msg_clicks,
                 revenue, commission, clients, "createdAt"
          FROM public."DailyAdsManual"
          ORDER BY "createdAt" DESC`
-      );
+      )) as AdsQueryRow[];
     } catch {
       adsRows = [];
     }
 
-    // Filtrar ads do mês
-    // Formato de date em DailyAdsManual: "DD/MM/YYYY"
-    const adsDoMes = adsRows.filter((row: any) => {
+    // Filtrar ads do mês (formato "DD/MM/YYYY")
+    const adsDoMes = adsRows.filter((row: AdsQueryRow) => {
       if (!row.date) return false;
       const parts = row.date.split("/");
       if (parts.length === 3) {
@@ -110,9 +195,9 @@ export async function GET(request: NextRequest) {
     });
 
     // 4. Buscar Saídas do Período
-    let saidasRows: any[] = [];
+    let saidasRows: SaidaQueryRow[] = [];
     try {
-      saidasRows = await query(
+      saidasRows = (await query(
         `SELECT id, valor, categoria, descricao, "formaPagamento", status,
                 "dataVencimento", "dataPagamento", fornecedor, "isFixa", "dataSaida"
          FROM public."Saida"
@@ -120,20 +205,20 @@ export async function GET(request: NextRequest) {
             OR ("dataVencimento" >= $1 AND "dataVencimento" <= $2)
          ORDER BY "dataSaida" DESC`,
         [startOfMonth, endOfMonth]
-      );
+      )) as SaidaQueryRow[];
     } catch {
       saidasRows = [];
     }
 
     // 5. Buscar Contas Fixas ativas
-    let contasFixasRows: any[] = [];
+    let contasFixasRows: ContaFixaQueryRow[] = [];
     try {
-      contasFixasRows = await query(
+      contasFixasRows = (await query(
         `SELECT id, nome, valor, categoria, "diaVencimento", ativo
          FROM public."ContaFixa"
          WHERE ativo = true
          ORDER BY "diaVencimento" ASC`
-      );
+      )) as ContaFixaQueryRow[];
     } catch {
       contasFixasRows = [];
     }
@@ -149,7 +234,7 @@ export async function GET(request: NextRequest) {
     let comissaoPendenteMes = 0;
     const totalVendasCount = vendasRows.length;
 
-    vendasRows.forEach((v: any) => {
+    vendasRows.forEach((v: VendaQueryRow) => {
       const comissaoVal = typeof v.comissao === "string" ? parseFloat(v.comissao) : (v.comissao || 0);
       comissaoBrutaTotal += comissaoVal;
 
@@ -161,7 +246,7 @@ export async function GET(request: NextRequest) {
 
       let subtotalVenda = 0;
       if (Array.isArray(v.linhas)) {
-        v.linhas.forEach((linha: any) => {
+        v.linhas.forEach((linha: VendaLinha) => {
           const preco = typeof linha.preco === "string" ? parseFloat(linha.preco) : (linha.preco || 0);
           const qtd = typeof linha.quantidade === "string" ? parseInt(linha.quantidade, 10) : (linha.quantidade || 1);
           subtotalVenda += preco * qtd;
@@ -182,7 +267,7 @@ export async function GET(request: NextRequest) {
     let totalGastoAds = 0;
     let totalCliquesAds = 0;
     let totalImpressoesAds = 0;
-    adsDoMes.forEach((ad: any) => {
+    adsDoMes.forEach((ad: AdsQueryRow) => {
       totalGastoAds += typeof ad.spend === "string" ? parseFloat(ad.spend) : (ad.spend || 0);
       const urlCl = typeof ad.url_clicks === "number" ? ad.url_clicks : 0;
       const callCl = typeof ad.call_clicks === "number" ? ad.call_clicks : 0;
@@ -200,35 +285,34 @@ export async function GET(request: NextRequest) {
     const margemContribuicaoPercentual = comissaoBrutaTotal > 0 ? (margemContribuicao / comissaoBrutaTotal) * 100 : 0;
 
     // Custos Fixos & Saídas Operacionais
-    const totalContasFixasMes = contasFixasRows.reduce((acc: number, c: any) => {
+    const totalContasFixasMes = contasFixasRows.reduce((acc: number, c: ContaFixaQueryRow) => {
       const val = typeof c.valor === "string" ? parseFloat(c.valor) : (c.valor || 0);
       return acc + val;
     }, 0);
 
-    // Saídas pagas (excluindo fixas para não duplicar se já somamos contas fixas, ou somando as do período)
-    const saidasPagas = saidasRows.filter((s: any) => s.status === "pago");
-    const totalSaidasPagas = saidasPagas.reduce((acc: number, s: any) => {
+    // Saídas pagas
+    const saidasPagas = saidasRows.filter((s: SaidaQueryRow) => s.status === "pago");
+    const totalSaidasPagas = saidasPagas.reduce((acc: number, s: SaidaQueryRow) => {
       const val = typeof s.valor === "string" ? parseFloat(s.valor) : (s.valor || 0);
       return acc + val;
     }, 0);
 
     // Saídas variáveis pagas (não fixas)
     const totalSaidasVariaveisPagas = saidasPagas
-      .filter((s: any) => !s.isFixa)
-      .reduce((acc: number, s: any) => {
+      .filter((s: SaidaQueryRow) => !s.isFixa)
+      .reduce((acc: number, s: SaidaQueryRow) => {
         const val = typeof s.valor === "string" ? parseFloat(s.valor) : (s.valor || 0);
         return acc + val;
       }, 0);
 
     // Contas a pagar pendentes no mês
-    const saidasPendentes = saidasRows.filter((s: any) => s.status === "pendente");
-    const totalContasAPagarPendente = saidasPendentes.reduce((acc: number, s: any) => {
+    const saidasPendentes = saidasRows.filter((s: SaidaQueryRow) => s.status === "pendente");
+    const totalContasAPagarPendente = saidasPendentes.reduce((acc: number, s: SaidaQueryRow) => {
       const val = typeof s.valor === "string" ? parseFloat(s.valor) : (s.valor || 0);
       return acc + val;
     }, 0);
 
     // Total de despesas operacionais da empresa no mês:
-    // Custo das Contas Fixas + Despesas Variáveis Efetivas
     const totalDespesasOperacionais = totalContasFixasMes + totalSaidasVariaveisPagas;
 
     // Resultado Operacional Líquido Real (O que sobra no bolso do dono)
@@ -236,13 +320,6 @@ export async function GET(request: NextRequest) {
     const margemLiquidaRealPercentual = comissaoBrutaTotal > 0 ? (lucroLiquidoReal / comissaoBrutaTotal) * 100 : 0;
 
     // Ponto de Equilíbrio (Break-Even)
-    // Para cobrir: Custos Fixos + Saídas Variáveis + Google Ads + Imposto
-    // Margem líquida unitária de imposto por venda: comissaoMediaPorVenda * (1 - aliquotaImposto / 100)
-    const comissaoLiquidaMediaUnit = comissaoMediaPorVenda * (1 - (aliquotaImposto / 100));
-    const margemUnitAposAds = comissaoLiquidaMediaUnit - cacMedio;
-
-    // Ponto de equilíbrio em R$ de Comissão Bruta necessária:
-    // (Custos Fixos + Despesas + Gasto Ads) / (1 - aliquotaImposto / 100)
     const divisorImposto = Math.max(0.01, 1 - (aliquotaImposto / 100));
     const comissaoNecessariaPontoEquilibrio = (totalDespesasOperacionais + totalGastoAds) / divisorImposto;
 
@@ -259,25 +336,16 @@ export async function GET(request: NextRequest) {
     // ==========================================
     // NECESSIDADE DE CAPITAL DE GIRO (NCG)
     // ==========================================
-    // 1. Reserva para Google Ads: (Média diária de Ads) * diasSegurancaGiro
     const reservaGiroAds = mediaDiariaAds * diasSegurancaGiro;
-
-    // 2. Reserva de Custos Fixos: Contas Fixas * (diasSegurancaGiro / 30)
     const reservaGiroCustosFixos = totalContasFixasMes * (diasSegurancaGiro / 30);
-
-    // 3. Provisão de Impostos (DAS do Simples do próximo dia 20)
     const reservaGiroImpostos = provisaoSimplesNacional;
 
-    // 4. Dinheiro na Rua (Comissões Pendentes Totais)
-    const totalDinheiroNaRua = comissoesPendentesRows.reduce((acc: number, row: any) => {
+    const totalDinheiroNaRua = comissoesPendentesRows.reduce((acc: number, row: PendenteQueryRow) => {
       const val = typeof row.comissao === "string" ? parseFloat(row.comissao) : (row.comissao || 0);
       return acc + val;
     }, 0);
 
-    // Total de Capital de Giro Recomendado
     const capitalDeGiroRecomendado = reservaGiroAds + reservaGiroCustosFixos + reservaGiroImpostos + totalDinheiroNaRua;
-
-    // Resumo diário de custos de sobrevivência
     const custoDiarioSobrevivencia = (totalDespesasOperacionais / daysInMonth) + mediaDiariaAds;
 
     return NextResponse.json(
@@ -357,7 +425,7 @@ export async function GET(request: NextRequest) {
         dinheiroNaRua: {
           total: totalDinheiroNaRua,
           quantidadePendencias: comissoesPendentesRows.length,
-          itens: comissoesPendentesRows.map((r: any) => ({
+          itens: comissoesPendentesRows.map((r: PendenteQueryRow) => ({
             id: r.id,
             clienteNome: r.clienteNome,
             clienteTelefone: r.clienteTelefone,
@@ -370,10 +438,11 @@ export async function GET(request: NextRequest) {
         },
       })
     );
-  } catch (error: any) {
-    console.error("GET /api/financeiro error:", error);
+  } catch (error: unknown) {
+    const err = error as Error;
+    console.error("GET /api/financeiro error:", err);
     return NextResponse.json(
-      { error: "Falha ao calcular métricas financeiras", details: error.message },
+      { error: "Falha ao calcular métricas financeiras", details: err?.message || String(error) },
       { status: 500 }
     );
   }

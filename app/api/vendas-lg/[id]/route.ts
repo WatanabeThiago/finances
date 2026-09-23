@@ -9,9 +9,22 @@ export async function GET(
     const { id } = await params;
     const result = await query(
       `SELECT v.*, 
-              json_agg(json_build_object('id', l.id, 'servicoId', l."servicoId", 'precoOriginal', l."precoOriginal", 'preco', l.preco, 'quantidade', l.quantidade)) as linhas
+              COALESCE(json_agg(json_build_object(
+                'id', l.id, 
+                'tipo', COALESCE(l.tipo, CASE WHEN l."produtoId" IS NOT NULL THEN 'produto' ELSE 'servico' END),
+                'servicoId', l."servicoId", 
+                'servicoNome', s.nome, 
+                'produtoId', l."produtoId",
+                'produtoNome', p.nome,
+                'nome', COALESCE(l.nome, s.nome, p.nome, 'Item'),
+                'precoOriginal', l."precoOriginal", 
+                'preco', l.preco, 
+                'quantidade', l.quantidade
+              )) FILTER (WHERE l.id IS NOT NULL), '[]'::json) as linhas
        FROM "VendaLg" v
        LEFT JOIN "VendaLgLine" l ON l."vendaLgId" = v.id
+       LEFT JOIN "Service" s ON s.id = l."servicoId"
+       LEFT JOIN "Produto" p ON p.id = l."produtoId"
        WHERE v.id = $1
        GROUP BY v.id`,
       [id]
@@ -101,13 +114,17 @@ export async function PUT(
 
     if (Array.isArray(linhas) && linhas.length > 0) {
       for (const linha of linhas) {
+        const tipo = linha.tipo || (linha.produtoId ? "produto" : "servico");
         await query(
-          `INSERT INTO "VendaLgLine" (id, "vendaLgId", "servicoId", "precoOriginal", preco, quantidade)
-           VALUES ($1, $2, $3, $4, $5, $6)`,
+          `INSERT INTO "VendaLgLine" (id, "vendaLgId", "servicoId", "produtoId", tipo, nome, "precoOriginal", preco, quantidade)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
           [
             linha.id || crypto.randomUUID(),
             id,
-            linha.servicoId,
+            linha.servicoId || null,
+            linha.produtoId || null,
+            tipo,
+            linha.nome || null,
             linha.precoOriginal,
             linha.preco,
             linha.quantidade,
@@ -127,9 +144,22 @@ export async function PUT(
     // Fetch the complete venda with linhas
     const vendaWithLinhas = await query(
       `SELECT v.*, 
-              json_agg(json_build_object('id', l.id, 'servicoId', l."servicoId", 'precoOriginal', l."precoOriginal", 'preco', l.preco, 'quantidade', l.quantidade)) as linhas
+              COALESCE(json_agg(json_build_object(
+                'id', l.id, 
+                'tipo', COALESCE(l.tipo, CASE WHEN l."produtoId" IS NOT NULL THEN 'produto' ELSE 'servico' END),
+                'servicoId', l."servicoId", 
+                'servicoNome', s.nome, 
+                'produtoId', l."produtoId",
+                'produtoNome', p.nome,
+                'nome', COALESCE(l.nome, s.nome, p.nome, 'Item'),
+                'precoOriginal', l."precoOriginal", 
+                'preco', l.preco, 
+                'quantidade', l.quantidade
+              )) FILTER (WHERE l.id IS NOT NULL), '[]'::json) as linhas
        FROM "VendaLg" v
        LEFT JOIN "VendaLgLine" l ON l."vendaLgId" = v.id
+       LEFT JOIN "Service" s ON s.id = l."servicoId"
+       LEFT JOIN "Produto" p ON p.id = l."produtoId"
        WHERE v.id = $1
        GROUP BY v.id`,
       [id]
@@ -188,7 +218,7 @@ export async function PATCH(
 
     const allowedFields = ["comissaoPaga", "clientePagou", "comissao", "formaPagamento"];
     const updates: string[] = [];
-    const values: any[] = [];
+    const values: unknown[] = [];
     let pIdx = 1;
 
     for (const key of allowedFields) {

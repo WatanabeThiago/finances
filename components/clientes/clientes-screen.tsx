@@ -17,7 +17,8 @@ import {
   Tag,
   CreditCard,
   CheckCircle2,
-  Clock
+  Clock,
+  Package
 } from "lucide-react";
 import { formatBRL } from "@/lib/money";
 import { Skeleton, SkeletonTableRow } from "@/components/ui/skeleton";
@@ -34,8 +35,12 @@ type Cliente = {
 
 type VendaLineItem = {
   id: string;
-  servicoId: string;
-  servicoNome: string;
+  tipo?: string;
+  servicoId?: string;
+  servicoNome?: string;
+  produtoId?: string;
+  produtoNome?: string;
+  nome?: string;
   precoOriginal: number;
   preco: number;
   quantidade: number;
@@ -389,23 +394,36 @@ export function ClientesScreen() {
                       {/* Items List */}
                       <div className="py-3 space-y-1.5">
                         {venda.linhas && venda.linhas.length > 0 ? (
-                          venda.linhas.map((ln) => (
-                            <div
-                              key={ln.id}
-                              className="flex items-center justify-between text-xs py-0.5 text-zinc-700 dark:text-zinc-300"
-                            >
-                              <span className="flex items-center gap-1.5">
-                                <Tag className="h-3 w-3 text-sky-500 shrink-0" />
-                                <span className="font-medium">{ln.servicoNome}</span>
-                                {ln.quantidade > 1 && (
-                                  <span className="text-zinc-400">({ln.quantidade}x)</span>
-                                )}
-                              </span>
-                              <span className="font-mono text-zinc-900 dark:text-zinc-100">
-                                {formatBRL(ln.preco * ln.quantidade)}
-                              </span>
-                            </div>
-                          ))
+                          venda.linhas.map((ln) => {
+                            const isProduto = ln.tipo === "produto" || !!ln.produtoId;
+                            const itemName = ln.nome || ln.servicoNome || ln.produtoNome || (isProduto ? "Produto" : "Serviço");
+                            return (
+                              <div
+                                key={ln.id}
+                                className="flex items-center justify-between text-xs py-0.5 text-zinc-700 dark:text-zinc-300"
+                              >
+                                <span className="flex items-center gap-1.5 min-w-0">
+                                  {isProduto ? (
+                                    <Package className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+                                  ) : (
+                                    <Tag className="h-3.5 w-3.5 text-sky-500 shrink-0" />
+                                  )}
+                                  <span className="font-medium truncate">{itemName}</span>
+                                  {isProduto && (
+                                    <span className="rounded bg-amber-100 px-1 py-0.2 text-[10px] font-semibold text-amber-900 dark:bg-amber-950/60 dark:text-amber-300 shrink-0">
+                                      Produto
+                                    </span>
+                                  )}
+                                  {ln.quantidade > 1 && (
+                                    <span className="text-zinc-400 shrink-0">({ln.quantidade}x)</span>
+                                  )}
+                                </span>
+                                <span className="font-mono text-zinc-900 dark:text-zinc-100 shrink-0">
+                                  {formatBRL(ln.preco * ln.quantidade)}
+                                </span>
+                              </div>
+                            );
+                          })
                         ) : (
                           <p className="text-xs text-zinc-400 italic">Nenhum item listado</p>
                         )}

@@ -11,6 +11,8 @@ import type { Service } from "@/lib/service";
 import {
   parseServicesJson,
 } from "@/lib/service";
+import type { Produto } from "@/lib/produto";
+import { parseProdutosJson } from "@/lib/produto";
 import type { VendaLg, VendaLgLine } from "@/lib/venda-lg";
 import { totalVendaLg } from "@/lib/venda-lg";
 import { generateReceiptHTML } from "@/lib/pdf-receipt";
@@ -20,7 +22,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { SkeletonList, Skeleton } from "@/components/ui/skeleton";
 import { matchesPhoneSearch } from "@/lib/phone";
-import { Search as SearchIcon, X as ClearIcon } from "lucide-react";
+import { Search as SearchIcon, X as ClearIcon, Package as ProductIcon, Wrench as ServiceIcon } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -55,15 +57,24 @@ function newId(): string {
 // Function to download PDF quote
 async function downloadQuotePDF(
   venda: VendaLg,
-  servicoById: Map<string, Service>
+  servicoById: Map<string, Service>,
+  produtoById?: Map<string, Produto>
 ): Promise<void> {
   const html2pdf = (await import("html2pdf.js")).default;
 
   const items = venda.linhas.map((l) => {
-    const nome = servicoById.get(l.servicoId)?.nome ?? "Serviço";
+    const isProd = l.tipo === "produto" || !!l.produtoId;
+    const nome =
+      l.nome ||
+      l.produtoNome ||
+      l.servicoNome ||
+      (l.produtoId ? produtoById?.get(l.produtoId)?.nome : undefined) ||
+      (l.servicoId ? servicoById.get(l.servicoId)?.nome : undefined) ||
+      (isProd ? "Produto" : "Serviço");
     const total = l.preco * l.quantidade;
+    const badge = isProd ? " <span style=\"font-size:11px;color:#b45309;background:#fef3c7;padding:1px 5px;border-radius:4px;\">Produto</span>" : "";
     return `<tr>
-      <td style="padding:8px 12px;border-bottom:1px solid #e4e4e7">${nome}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #e4e4e7">${nome}${badge}</td>
       <td style="padding:8px 12px;border-bottom:1px solid #e4e4e7;text-align:center">${l.quantidade}</td>
       <td style="padding:8px 12px;border-bottom:1px solid #e4e4e7;text-align:right">${total.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</td>
     </tr>`;
@@ -91,7 +102,7 @@ async function downloadQuotePDF(
       <table style="width:100%;border-collapse:collapse;margin-bottom:24px">
         <thead>
           <tr style="background:#f4f4f5">
-            <th style="padding:10px 12px;text-align:left;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:#71717a">Serviço</th>
+            <th style="padding:10px 12px;text-align:left;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:#71717a">Item / Descrição</th>
             <th style="padding:10px 12px;text-align:center;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:#71717a">Qtd</th>
             <th style="padding:10px 12px;text-align:right;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:#71717a">Total</th>
           </tr>
@@ -128,16 +139,66 @@ async function downloadQuotePDF(
 async function downloadReceiptPDF(
   venda: VendaLg,
   servicoById: Map<string, Service>,
-  prestadorById: Map<string, Partner>
+  prestadorById: Map<string, Partner>,
+  produtoById?: Map<string, Produto>
 ): Promise<void> {
+  let effectiveServicoById = servicoById;
+  const missingNames = venda.linhas.some((l) => {
+    if (l.tipo === "produto") {
+      return !l.nome && !(l.produtoId && produtoById?.get(l.produtoId)?.nome);
+    }
+    return !l.servicoNome && !(l.servicoId && effectiveServicoById.get(l.servicoId)?.nome);
+  });
+
+  if (missingNames || effectiveServicoById.size === 0) {
+    try {
+      const res = await fetch("/api/servicos");
+      if (res.ok) {
+        const data = await res.json();
+        const freshMap = new Map<string, Service>(effectiveServicoById);
+        for (const s of normalizeServices(data)) {
+          freshMap.set(s.id, s);
+        }
+        effectiveServicoById = freshMap;
+      }
+    } catch (err) {
+      console.error("Erro ao carregar serviços para o recibo:", err);
+    }
+  }
+
+  let effectiveVenda = venda;
+  if (
+    venda.linhas.some((l) => {
+      if (l.tipo === "produto") {
+        return !l.nome && !(l.produtoId && produtoById?.get(l.produtoId)?.nome);
+      }
+      return !l.servicoNome && !(l.servicoId && effectiveServicoById.get(l.servicoId)?.nome);
+    })
+  ) {
+    try {
+      const res = await fetch(`/api/vendas-lg/${venda.id}`);
+      if (res.ok) {
+        const freshVenda = await res.json();
+        if (freshVenda && Array.isArray(freshVenda.linhas)) {
+          effectiveVenda = {
+            ...venda,
+            linhas: freshVenda.linhas,
+          };
+        }
+      }
+    } catch (err) {
+      console.error("Erro ao buscar dados atualizados da venda para o recibo:", err);
+    }
+  }
+
   // Dynamically import html2pdf
   const html2pdf = (await import("html2pdf.js")).default;
 
-  const htmlContent = generateReceiptHTML(venda, servicoById, prestadorById);
+  const htmlContent = generateReceiptHTML(effectiveVenda, effectiveServicoById, prestadorById, produtoById);
 
   const opt: any = {
     margin: 10,
-    filename: `recibo_${venda.clienteNome.replace(/\s+/g, "_")}_${new Date().getTime()}.pdf`,
+    filename: `recibo_${effectiveVenda.clienteNome.replace(/\s+/g, "_")}_${new Date().getTime()}.pdf`,
     image: { type: "jpeg" as const, quality: 0.98 },
     html2canvas: { scale: 2 },
     jsPDF: { orientation: "portrait", unit: "mm", format: "a4" },
@@ -192,7 +253,12 @@ async function geocodeAddress(
 
 type LineDraft = {
   id: string;
-  servicoId: string;
+  tipo: "servico" | "produto";
+  servicoId?: string;
+  servicoNome?: string;
+  produtoId?: string;
+  produtoNome?: string;
+  nome: string;
   precoOriginal: string;
   preco: string;
   quantidade: string;
@@ -215,6 +281,19 @@ function normalizeServices(data: any[]): Service[] {
     gastosEstimados: typeof s.gastosEstimados === "string" ? parseFloat(s.gastosEstimados) : s.gastosEstimados,
     prestadorIds: Array.isArray(s.prestadorIds) ? s.prestadorIds : [],
     produtoIds: Array.isArray(s.produtoIds) ? s.produtoIds : [],
+  }));
+}
+
+// Helper to convert API response to Produto format
+function normalizeProdutos(data: any[]): Produto[] {
+  return data.map((p: any) => ({
+    ...p,
+    valorCompra:
+      typeof p.valor === "string"
+        ? parseFloat(p.valor)
+        : (typeof p.valorCompra === "string" ? parseFloat(p.valorCompra) : (p.valor || p.valorCompra || 0)),
+    residencial: Boolean(p.residencial),
+    automotivo: Boolean(p.automotivo),
   }));
 }
 
@@ -243,7 +322,8 @@ function emptyModalState() {
     formaPagamento: "",
     clientePagou: false,
     dataVenda: dataVendaDefault,
-    servicoQuery: "",
+    itemQuery: "",
+    catalogTab: "todos" as "todos" | "servicos" | "produtos",
     linhas: [] as LineDraft[],
   };
 }
@@ -369,6 +449,7 @@ function VendasLgWorkspace({ mode }: { mode: VendasLgWorkspaceMode }) {
           longitude: typeof v.longitude === "string" ? parseFloat(v.longitude) : (v.longitude != null ? v.longitude : null),
           linhas: Array.isArray(v.linhas) ? v.linhas.map((l: any) => ({
             ...l,
+            servicoNome: typeof l.servicoNome === "string" ? l.servicoNome : undefined,
             precoOriginal: typeof l.precoOriginal === "string" ? parseFloat(l.precoOriginal) : l.precoOriginal,
             preco: typeof l.preco === "string" ? parseFloat(l.preco) : l.preco,
             quantidade: typeof l.quantidade === "string" ? parseInt(l.quantidade, 10) : l.quantidade,
@@ -423,6 +504,42 @@ function VendasLgWorkspace({ mode }: { mode: VendasLgWorkspaceMode }) {
     return m;
   }, [servicos]);
 
+  // Fetch produtos from API
+  const [produtos, setProdutos] = useState<Produto[]>([]);
+  const [isFetchingProdutos, setIsFetchingProdutos] = useState(false);
+
+  const fetchProdutos = useCallback(async () => {
+    setIsFetchingProdutos(true);
+    try {
+      const response = await fetch("/api/produtos");
+      if (!response.ok) throw new Error("Falha ao carregar produtos");
+      const data = await response.json();
+      setProdutos(normalizeProdutos(data));
+    } catch (err) {
+      console.error("Error fetching produtos:", err);
+      try {
+        const localData = localStorage.getItem("finances.produtos.v1");
+        if (localData) {
+          setProdutos(parseProdutosJson(localData));
+        }
+      } catch {
+        setProdutos([]);
+      }
+    } finally {
+      setIsFetchingProdutos(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchProdutos();
+  }, [fetchProdutos]);
+
+  const produtoById = useMemo(() => {
+    const m = new Map<string, Produto>();
+    for (const p of produtos) m.set(p.id, p);
+    return m;
+  }, [produtos]);
+
   const [modalOpen, setModalOpen] = useState(isCreatePage);
   const [modalMode, setModalMode] = useState<ModalMode>("create");
   const [editingVendaId, setEditingVendaId] = useState<string | null>(null);
@@ -443,17 +560,31 @@ function VendasLgWorkspace({ mode }: { mode: VendasLgWorkspaceMode }) {
     setEditingVendaId(null);
     setFormError(null);
 
-
     if (vendaToEdit) {
       setModalMode("edit");
       setEditingVendaId(vendaToEdit.id);
-      const linhas: LineDraft[] = vendaToEdit.linhas.map((l) => ({
-        id: l.id,
-        servicoId: l.servicoId,
-        precoOriginal: l.precoOriginal.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
-        preco: l.preco.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
-        quantidade: l.quantidade.toString(),
-      }));
+      const linhas: LineDraft[] = vendaToEdit.linhas.map((l) => {
+        const isProd = l.tipo === "produto" || !!l.produtoId;
+        const nome =
+          l.nome ||
+          l.produtoNome ||
+          l.servicoNome ||
+          (l.produtoId ? produtoById.get(l.produtoId)?.nome : undefined) ||
+          (l.servicoId ? servicoById.get(l.servicoId)?.nome : undefined) ||
+          (isProd ? "Produto" : "Serviço");
+        return {
+          id: l.id || newId(),
+          tipo: isProd ? "produto" : "servico",
+          servicoId: l.servicoId,
+          servicoNome: !isProd ? nome : undefined,
+          produtoId: l.produtoId,
+          produtoNome: isProd ? nome : undefined,
+          nome,
+          precoOriginal: l.precoOriginal.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+          preco: l.preco.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+          quantidade: l.quantidade.toString(),
+        };
+      });
       setForm({
         clienteNome: vendaToEdit.clienteNome,
         clienteTelefone: vendaToEdit.clienteTelefone,
@@ -469,14 +600,15 @@ function VendasLgWorkspace({ mode }: { mode: VendasLgWorkspaceMode }) {
         formaPagamento: vendaToEdit.formaPagamento ?? "",
         clientePagou: vendaToEdit.clientePagou ?? false,
         dataVenda: vendaToEdit.dataVenda ? new Date(vendaToEdit.dataVenda).toISOString().slice(0, 16) : "",
-        servicoQuery: "",
+        itemQuery: "",
+        catalogTab: "todos",
         linhas,
       });
     } else {
       setForm(emptyModalState());
     }
     setModalOpen(true);
-  }, [parceiros]);
+  }, [parceiros, servicoById, produtoById]);
 
   const closeModal = useCallback(() => {
     if (isCreatePage) {
@@ -530,22 +662,70 @@ function VendasLgWorkspace({ mode }: { mode: VendasLgWorkspaceMode }) {
     }
   }, [form.endereco]);
 
-  const filteredServicos = useMemo(() => {
-    const q = form.servicoQuery.trim().toLowerCase();
-    if (!q) return servicos;
-    return servicos.filter((s) => s.nome.toLowerCase().includes(q));
-  }, [servicos, form.servicoQuery]);
+  const filteredCatalogItems = useMemo(() => {
+    const q = (form.itemQuery || "").trim().toLowerCase();
+    const tab = form.catalogTab || "todos";
+
+    let servList = servicos;
+    let prodList = produtos;
+
+    if (q) {
+      servList = servList.filter((s) => s.nome.toLowerCase().includes(q));
+      prodList = prodList.filter((p) => p.nome.toLowerCase().includes(q));
+    }
+
+    const items: Array<{
+      id: string;
+      tipo: "servico" | "produto";
+      nome: string;
+      valor: number;
+      fotoDataUrl?: string;
+      service?: Service;
+      produto?: Produto;
+    }> = [];
+
+    if (tab === "todos" || tab === "servicos") {
+      for (const s of servList) {
+        items.push({
+          id: s.id,
+          tipo: "servico",
+          nome: s.nome,
+          valor: s.valor,
+          fotoDataUrl: s.fotoDataUrl,
+          service: s,
+        });
+      }
+    }
+
+    if (tab === "todos" || tab === "produtos") {
+      for (const p of prodList) {
+        items.push({
+          id: p.id,
+          tipo: "produto",
+          nome: p.nome,
+          valor: p.valorCompra,
+          fotoDataUrl: p.fotoDataUrl,
+          produto: p,
+        });
+      }
+    }
+
+    return items;
+  }, [servicos, produtos, form.itemQuery, form.catalogTab]);
 
   const addServicoLinha = useCallback((s: Service) => {
     const br = formatNumberBrInput(s.valor);
     setForm((f) => ({
       ...f,
-      servicoQuery: "",
+      itemQuery: "",
       linhas: [
         ...f.linhas,
         {
           id: newId(),
+          tipo: "servico",
           servicoId: s.id,
+          servicoNome: s.nome,
+          nome: s.nome,
           precoOriginal: br,
           preco: br,
           quantidade: "1",
@@ -554,6 +734,56 @@ function VendasLgWorkspace({ mode }: { mode: VendasLgWorkspaceMode }) {
     }));
     setFormError(null);
   }, []);
+
+  const addProdutoLinha = useCallback((p: Produto) => {
+    const br = formatNumberBrInput(p.valorCompra);
+    setForm((f) => ({
+      ...f,
+      itemQuery: "",
+      linhas: [
+        ...f.linhas,
+        {
+          id: newId(),
+          tipo: "produto",
+          produtoId: p.id,
+          produtoNome: p.nome,
+          nome: p.nome,
+          precoOriginal: br,
+          preco: br,
+          quantidade: "1",
+        },
+      ],
+    }));
+    setFormError(null);
+  }, []);
+
+  const suggestedProducts = useMemo(() => {
+    const serviceIdsInSale = form.linhas
+      .filter((l) => l.tipo === "servico" && l.servicoId)
+      .map((l) => l.servicoId as string);
+
+    if (serviceIdsInSale.length === 0) return [];
+
+    const existingProductIds = new Set(
+      form.linhas.filter((l) => l.tipo === "produto" && l.produtoId).map((l) => l.produtoId as string)
+    );
+
+    const linkedProductIds = new Set<string>();
+    for (const sid of serviceIdsInSale) {
+      const s = servicoById.get(sid);
+      if (s && Array.isArray(s.produtoIds)) {
+        for (const pid of s.produtoIds) {
+          if (!existingProductIds.has(pid)) {
+            linkedProductIds.add(pid);
+          }
+        }
+      }
+    }
+
+    return Array.from(linkedProductIds)
+      .map((pid) => produtoById.get(pid))
+      .filter((p): p is Produto => p !== undefined);
+  }, [form.linhas, servicoById, produtoById]);
 
   const removeLinha = useCallback((lineId: string) => {
     setForm((f) => ({
@@ -588,7 +818,7 @@ function VendasLgWorkspace({ mode }: { mode: VendasLgWorkspaceMode }) {
         return;
       }
       if (form.linhas.length === 0) {
-        setFormError("Adicione pelo menos um serviço.");
+        setFormError("Adicione pelo menos um serviço ou produto.");
         return;
       }
 
@@ -611,7 +841,12 @@ function VendasLgWorkspace({ mode }: { mode: VendasLgWorkspaceMode }) {
         }
         linhas.push({
           id: newId(),
-          servicoId: l.servicoId,
+          tipo: l.tipo,
+          servicoId: l.tipo === "servico" ? l.servicoId : undefined,
+          servicoNome: l.tipo === "servico" ? (l.nome || servicoById.get(l.servicoId || "")?.nome) : undefined,
+          produtoId: l.tipo === "produto" ? l.produtoId : undefined,
+          produtoNome: l.tipo === "produto" ? (l.nome || produtoById.get(l.produtoId || "")?.nome) : undefined,
+          nome: l.nome,
           precoOriginal: po,
           preco: pv,
           quantidade: q,
@@ -675,7 +910,7 @@ function VendasLgWorkspace({ mode }: { mode: VendasLgWorkspaceMode }) {
         setSubmitting(false);
       }
     },
-    [form, closeModal, modalMode, editingVendaId]
+    [form, closeModal, modalMode, editingVendaId, servicoById, produtoById]
   );
 
   useEffect(() => {
@@ -1011,13 +1246,28 @@ function VendasLgWorkspace({ mode }: { mode: VendasLgWorkspaceMode }) {
                   {/* Items List */}
                   <ul className="flex-1 space-y-1 text-sm">
                     {v.linhas.map((ln) => {
+                      const isProd = ln.tipo === "produto" || !!ln.produtoId;
                       const sn =
-                        servicoById.get(ln.servicoId)?.nome ?? "Serviço removido";
+                        ln.nome ||
+                        ln.produtoNome ||
+                        ln.servicoNome ||
+                        (ln.produtoId ? produtoById.get(ln.produtoId)?.nome : undefined) ||
+                        (ln.servicoId ? servicoById.get(ln.servicoId)?.nome : undefined) ||
+                        (isProd ? "Produto" : "Serviço");
                       return (
                         <li
                           key={ln.id}
                           className="flex flex-wrap items-center gap-x-2 text-zinc-700 dark:text-zinc-300"
                         >
+                          <span
+                            className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold ${
+                              isProd
+                                ? "bg-amber-100 text-amber-900 dark:bg-amber-950/60 dark:text-amber-300 ring-1 ring-amber-600/30"
+                                : "bg-sky-100 text-sky-900 dark:bg-sky-950/60 dark:text-sky-300 ring-1 ring-sky-600/30"
+                            }`}
+                          >
+                            {isProd ? "📦 Produto" : "🛠️ Serviço"}
+                          </span>
                           <span className="font-medium text-zinc-900 dark:text-zinc-50">{sn}</span>
                           <span className="text-zinc-400 dark:text-zinc-500">×{ln.quantidade}</span>
                           <span className="tabular-nums text-zinc-500">({formatBRL(ln.preco)})</span>
@@ -1064,7 +1314,7 @@ function VendasLgWorkspace({ mode }: { mode: VendasLgWorkspaceMode }) {
                     </button>
                     <button
                       type="button"
-                      onClick={() => downloadQuotePDF(v, servicoById)}
+                      onClick={() => downloadQuotePDF(v, servicoById, produtoById)}
                       className="rounded-lg p-2 text-zinc-400 transition-colors hover:bg-amber-50 hover:text-amber-600 dark:hover:bg-amber-950/45 dark:hover:text-amber-400"
                       aria-label="Baixar orçamento em PDF"
                       title="Orçamento PDF"
@@ -1075,7 +1325,7 @@ function VendasLgWorkspace({ mode }: { mode: VendasLgWorkspaceMode }) {
                     </button>
                     <button
                       type="button"
-                      onClick={() => downloadReceiptPDF(v, servicoById, new Map(parceiros.map(p => [p.id, p])))}
+                      onClick={() => downloadReceiptPDF(v, servicoById, new Map(parceiros.map(p => [p.id, p])), produtoById)}
                       className="rounded-lg p-2 text-zinc-400 transition-colors hover:bg-sky-50 hover:text-sky-600 dark:hover:bg-sky-950/45 dark:hover:text-sky-400"
                       aria-label="Baixar recibo em PDF"
                       title="Recibo PDF"
@@ -2043,102 +2293,230 @@ function VendasLgWorkspace({ mode }: { mode: VendasLgWorkspaceMode }) {
                 <section>
                   <div className="flex items-center justify-between">
                     <h4 className="text-sm font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-                      Serviços
+                      Itens da Venda (Serviços e Produtos)
                     </h4>
                     <button
                       type="button"
-                      onClick={() => fetchServicos()}
-                      disabled={isFetchingServicos}
+                      onClick={() => {
+                        fetchServicos();
+                        fetchProdutos();
+                      }}
+                      disabled={isFetchingServicos || isFetchingProdutos}
                       className="flex items-center gap-1.5 text-xs font-medium text-sky-600 hover:text-sky-700 disabled:opacity-50 dark:text-sky-400 dark:hover:text-sky-300"
                     >
-                      {isFetchingServicos ? "⏳ Atualizando..." : "🔄 Atualizar"}
+                      {isFetchingServicos || isFetchingProdutos ? "⏳ Atualizando..." : "🔄 Atualizar Catálogo"}
                     </button>
                   </div>
                   <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-                    Busque e toque em um serviço para adicionar à venda. Você
-                    pode ajustar preços e quantidade em cada linha.
+                    Selecione serviços ou produtos para incluir na venda. Você pode ajustar preços e quantidade em cada item.
                   </p>
 
-                  {servicos.length === 0 ? (
-                    <p className="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:bg-amber-950/40 dark:text-amber-100">
-                      Não há serviços cadastrados. Vá em Serviços e cadastre
-                      antes.
-                    </p>
-                  ) : (
-                    <>
-                      <input
-                        type="search"
-                        value={form.servicoQuery}
-                        onChange={(e) =>
-                          setForm((f) => ({
-                            ...f,
-                            servicoQuery: e.target.value,
-                          }))
-                        }
-                        className="mt-3 w-full rounded-xl border border-zinc-300 bg-white px-3 py-2.5 text-[15px] text-zinc-900 outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500/30 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-100"
-                        placeholder="Digite para filtrar serviços…"
-                        autoComplete="off"
-                      />
-                      <ul
-                        className="mt-2 max-h-36 overflow-y-auto rounded-xl border border-zinc-200 dark:border-zinc-700"
-                        role="listbox"
-                      >
-                        {filteredServicos.length === 0 ? (
-                          <li className="px-3 py-3 text-sm text-zinc-500">
-                            Nenhum serviço encontrado.
-                          </li>
-                        ) : (
-                          filteredServicos.map((s) => (
-                            <li key={s.id} className="border-b border-zinc-100 last:border-0 dark:border-zinc-800">
-                              <button
-                                type="button"
-                                onClick={() => addServicoLinha(s)}
-                                className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left text-[15px] hover:bg-zinc-50 active:bg-zinc-100 dark:hover:bg-zinc-900 dark:active:bg-zinc-800"
-                              >
-                                <div className="flex items-center gap-3 min-w-0">
-                                  {s.fotoDataUrl ? (
-                                    <img
-                                      src={s.fotoDataUrl}
-                                      alt={s.nome}
-                                      className="h-8 w-8 rounded-md object-cover shrink-0"
-                                    />
-                                  ) : (
-                                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-gradient-to-br from-sky-400 to-indigo-500 text-[10px] font-bold text-white">
-                                      {s.nome.split(" ").filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join("")}
-                                    </span>
-                                  )}
-                                  <span className="font-medium text-zinc-900 dark:text-zinc-50 truncate">
-                                    {s.nome}
-                                  </span>
-                                </div>
-                                <span className="shrink-0 text-sm tabular-nums text-zinc-500">
-                                  {formatBRL(s.valor)}
-                                </span>
-                              </button>
-                            </li>
-                          ))
-                        )}
-                      </ul>
-                    </>
+                  {/* Sugestão Inteligente de Produtos Vinculados aos Serviços Adicionados */}
+                  {suggestedProducts.length > 0 && (
+                    <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50/80 p-3 dark:border-amber-900/60 dark:bg-amber-950/30">
+                      <p className="text-xs font-semibold text-amber-900 dark:text-amber-200 flex items-center gap-1.5">
+                        <span>💡</span> Produtos vinculados aos serviços adicionados:
+                      </p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {suggestedProducts.map((sp) => (
+                          <button
+                            key={sp.id}
+                            type="button"
+                            onClick={() => addProdutoLinha(sp)}
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-amber-300 bg-white px-2.5 py-1 text-xs font-medium text-amber-950 shadow-sm transition hover:bg-amber-100 dark:border-amber-700 dark:bg-zinc-900 dark:text-amber-200 dark:hover:bg-amber-950/60"
+                            title={`Adicionar ${sp.nome} à venda`}
+                          >
+                            <span>📦 {sp.nome}</span>
+                            <span className="font-semibold text-amber-700 dark:text-amber-300">({formatBRL(sp.valorCompra)})</span>
+                            <span className="font-bold text-emerald-600 dark:text-emerald-400">+ Adicionar</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                   )}
 
+                  {/* Abas / Filtro de Catálogo (Todos | Serviços | Produtos) */}
+                  <div className="mt-3 flex gap-1.5 border-b border-zinc-200 pb-2 dark:border-zinc-800">
+                    <button
+                      type="button"
+                      onClick={() => setForm((f) => ({ ...f, catalogTab: "todos" }))}
+                      className={`rounded-lg px-2.5 py-1 text-xs font-medium transition-colors ${
+                        (form.catalogTab || "todos") === "todos"
+                          ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
+                          : "text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800"
+                      }`}
+                    >
+                      Todos ({servicos.length + produtos.length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setForm((f) => ({ ...f, catalogTab: "servicos" }))}
+                      className={`flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium transition-colors ${
+                        form.catalogTab === "servicos"
+                          ? "bg-sky-600 text-white dark:bg-sky-700"
+                          : "text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800"
+                      }`}
+                    >
+                      <ServiceIcon className="h-3 w-3" />
+                      Serviços ({servicos.length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setForm((f) => ({ ...f, catalogTab: "produtos" }))}
+                      className={`flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium transition-colors ${
+                        form.catalogTab === "produtos"
+                          ? "bg-amber-600 text-white dark:bg-amber-700"
+                          : "text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800"
+                      }`}
+                    >
+                      <ProductIcon className="h-3 w-3" />
+                      Produtos ({produtos.length})
+                    </button>
+                  </div>
+
+                  {/* Input de busca no catálogo */}
+                  <div className="relative mt-2">
+                    <SearchIcon className="absolute left-3.5 top-3 h-4 w-4 text-zinc-400" />
+                    <input
+                      type="search"
+                      value={form.itemQuery || ""}
+                      onChange={(e) =>
+                        setForm((f) => ({
+                          ...f,
+                          itemQuery: e.target.value,
+                        }))
+                      }
+                      className="w-full rounded-xl border border-zinc-300 bg-white pl-10 pr-3 py-2 text-[14px] text-zinc-900 outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500/30 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-100"
+                      placeholder={
+                        form.catalogTab === "servicos"
+                          ? "Buscar serviço..."
+                          : form.catalogTab === "produtos"
+                          ? "Buscar produto (chip, chave, miolo...)..."
+                          : "Digite para filtrar serviços ou produtos…"
+                      }
+                      autoComplete="off"
+                    />
+                  </div>
+
+                  {/* Lista de itens do catálogo para adicionar */}
+                  <ul
+                    className="mt-2 max-h-44 overflow-y-auto rounded-xl border border-zinc-200 dark:border-zinc-700"
+                    role="listbox"
+                  >
+                    {filteredCatalogItems.length === 0 ? (
+                      <li className="px-3 py-3 text-center text-sm text-zinc-500">
+                        Nenhum item encontrado no catálogo.
+                      </li>
+                    ) : (
+                      filteredCatalogItems.map((item) => (
+                        <li key={`${item.tipo}-${item.id}`} className="border-b border-zinc-100 last:border-0 dark:border-zinc-800">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (item.tipo === "servico" && item.service) {
+                                addServicoLinha(item.service);
+                              } else if (item.tipo === "produto" && item.produto) {
+                                addProdutoLinha(item.produto);
+                              }
+                            }}
+                            className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left text-[14px] hover:bg-zinc-50 active:bg-zinc-100 dark:hover:bg-zinc-900 dark:active:bg-zinc-800"
+                          >
+                            <div className="flex items-center gap-3 min-w-0">
+                              {item.fotoDataUrl ? (
+                                <img
+                                  src={item.fotoDataUrl}
+                                  alt={item.nome}
+                                  className="h-8 w-8 rounded-md object-cover shrink-0"
+                                />
+                              ) : (
+                                <span
+                                  className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-[10px] font-bold text-white ${
+                                    item.tipo === "produto"
+                                      ? "bg-gradient-to-br from-amber-500 to-orange-600"
+                                      : "bg-gradient-to-br from-sky-400 to-indigo-500"
+                                  }`}
+                                >
+                                  {item.nome.split(" ").filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join("")}
+                                </span>
+                              )}
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-1.5">
+                                  <span
+                                    className={`inline-flex items-center rounded px-1.5 py-0.2 text-[10px] font-semibold ${
+                                      item.tipo === "produto"
+                                        ? "bg-amber-100 text-amber-900 dark:bg-amber-950/60 dark:text-amber-300 ring-1 ring-amber-600/30"
+                                        : "bg-sky-100 text-sky-900 dark:bg-sky-950/60 dark:text-sky-300 ring-1 ring-sky-600/30"
+                                    }`}
+                                  >
+                                    {item.tipo === "produto" ? "📦 Produto" : "🛠️ Serviço"}
+                                  </span>
+                                  <span className="font-medium text-zinc-900 dark:text-zinc-50 truncate">
+                                    {item.nome}
+                                  </span>
+                                </div>
+                                {item.service && item.service.produtoIds && item.service.produtoIds.length > 0 && (
+                                  <span className="text-[11px] text-amber-600 dark:text-amber-400 font-medium">
+                                    Vincula {item.service.produtoIds.length} produto(s)
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <span className="text-sm font-semibold tabular-nums text-zinc-700 dark:text-zinc-300">
+                                {formatBRL(item.valor)}
+                              </span>
+                              <span className="rounded-md bg-zinc-100 px-1.5 py-0.5 text-xs font-bold text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300">
+                                +
+                              </span>
+                            </div>
+                          </button>
+                        </li>
+                      ))
+                    )}
+                  </ul>
+
+                  {/* Lista de itens adicionados à venda */}
                   {form.linhas.length > 0 ? (
-                    <div className="mt-4 space-y-4">
-                      <p className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
-                        Itens da venda
-                      </p>
+                    <div className="mt-4 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-zinc-600 dark:text-zinc-400">
+                          Itens Adicionados ({form.linhas.length})
+                        </p>
+                        <span className="text-[11px] text-zinc-400">Ajuste valores ou quantidades</span>
+                      </div>
                       {form.linhas.map((ln) => {
-                        const nomeServ =
-                          servicoById.get(ln.servicoId)?.nome ?? "Serviço";
+                        const isProd = ln.tipo === "produto" || !!ln.produtoId;
+                        const itemName =
+                          ln.nome ||
+                          ln.produtoNome ||
+                          ln.servicoNome ||
+                          (ln.produtoId ? produtoById.get(ln.produtoId)?.nome : undefined) ||
+                          (ln.servicoId ? servicoById.get(ln.servicoId)?.nome : undefined) ||
+                          (isProd ? "Produto" : "Serviço");
                         return (
                           <div
                             key={ln.id}
-                            className="rounded-xl border border-zinc-200 p-3 dark:border-zinc-700"
+                            className={`rounded-xl border p-3 transition-colors ${
+                              isProd
+                                ? "border-amber-200 bg-amber-50/30 dark:border-amber-900/40 dark:bg-amber-950/10"
+                                : "border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-900/50"
+                            }`}
                           >
                             <div className="flex items-start justify-between gap-2">
-                              <p className="font-medium leading-snug text-zinc-900 dark:text-zinc-50">
-                                {nomeServ}
-                              </p>
+                              <div className="flex items-center gap-2 min-w-0">
+                                <span
+                                  className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold shrink-0 ${
+                                    isProd
+                                      ? "bg-amber-100 text-amber-900 dark:bg-amber-950/60 dark:text-amber-300 ring-1 ring-amber-600/30"
+                                      : "bg-sky-100 text-sky-900 dark:bg-sky-950/60 dark:text-sky-300 ring-1 ring-sky-600/30"
+                                  }`}
+                                >
+                                  {isProd ? "📦 Produto" : "🛠️ Serviço"}
+                                </span>
+                                <p className="font-medium text-sm leading-snug text-zinc-900 dark:text-zinc-50 truncate">
+                                  {itemName}
+                                </p>
+                              </div>
                               <button
                                 type="button"
                                 onClick={() => removeLinha(ln.id)}
@@ -2147,9 +2525,9 @@ function VendasLgWorkspace({ mode }: { mode: VendasLgWorkspaceMode }) {
                                 Remover
                               </button>
                             </div>
-                            <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                            <div className="mt-2.5 grid grid-cols-1 gap-2.5 sm:grid-cols-3">
                               <label className="block">
-                                <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                                <span className="text-[11px] font-medium text-zinc-600 dark:text-zinc-400">
                                   Preço original
                                 </span>
                                 <input
@@ -2161,11 +2539,11 @@ function VendasLgWorkspace({ mode }: { mode: VendasLgWorkspaceMode }) {
                                       precoOriginal: e.target.value,
                                     })
                                   }
-                                  className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-2.5 py-2 text-sm text-zinc-900 outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-100"
+                                  className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 text-sm text-zinc-900 outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-100"
                                 />
                               </label>
                               <label className="block">
-                                <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                                <span className="text-[11px] font-medium text-zinc-600 dark:text-zinc-400">
                                   Preço (venda)
                                 </span>
                                 <input
@@ -2177,11 +2555,11 @@ function VendasLgWorkspace({ mode }: { mode: VendasLgWorkspaceMode }) {
                                       preco: e.target.value,
                                     })
                                   }
-                                  className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-2.5 py-2 text-sm text-zinc-900 outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-100"
+                                  className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 text-sm text-zinc-900 outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-100"
                                 />
                               </label>
                               <label className="block">
-                                <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                                <span className="text-[11px] font-medium text-zinc-600 dark:text-zinc-400">
                                   Quantidade
                                 </span>
                                 <input
@@ -2193,7 +2571,7 @@ function VendasLgWorkspace({ mode }: { mode: VendasLgWorkspaceMode }) {
                                       quantidade: e.target.value,
                                     })
                                   }
-                                  className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-2.5 py-2 text-sm text-zinc-900 outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-100"
+                                  className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 text-sm text-zinc-900 outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-100"
                                 />
                               </label>
                             </div>
@@ -2228,6 +2606,7 @@ function VendasLgWorkspace({ mode }: { mode: VendasLgWorkspaceMode }) {
       <VendaDetailModal
         venda={viewingVenda}
         servicoById={servicoById}
+        produtoById={produtoById}
         parceiros={parceiros}
         onClose={() => setViewingVenda(null)}
         onUpdateVenda={(updated) => {

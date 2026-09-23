@@ -196,13 +196,30 @@ export async function initializeDatabase() {
       `CREATE TABLE IF NOT EXISTS public."VendaLgLine" (
         id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
         "vendaLgId" TEXT NOT NULL,
-        "servicoId" TEXT NOT NULL,
+        "servicoId" TEXT,
+        "produtoId" TEXT,
+        tipo TEXT NOT NULL DEFAULT 'servico',
+        nome TEXT,
         "precoOriginal" DECIMAL(10, 2) NOT NULL,
         preco DECIMAL(10, 2) NOT NULL,
         quantidade INTEGER NOT NULL,
         FOREIGN KEY ("vendaLgId") REFERENCES public."VendaLg"(id) ON DELETE CASCADE,
-        FOREIGN KEY ("servicoId") REFERENCES public."Service"(id) ON DELETE SET NULL
+        FOREIGN KEY ("servicoId") REFERENCES public."Service"(id) ON DELETE SET NULL,
+        FOREIGN KEY ("produtoId") REFERENCES public."Produto"(id) ON DELETE SET NULL
       )`
+    );
+
+    await query(
+      `ALTER TABLE public."VendaLgLine"
+       ALTER COLUMN "servicoId" DROP NOT NULL`
+    );
+
+    await query(
+      `ALTER TABLE public."VendaLgLine"
+       ADD COLUMN IF NOT EXISTS "servicoNome" TEXT DEFAULT NULL,
+       ADD COLUMN IF NOT EXISTS "produtoId" TEXT,
+       ADD COLUMN IF NOT EXISTS tipo TEXT DEFAULT 'servico',
+       ADD COLUMN IF NOT EXISTS nome TEXT`
     );
 
     await query(
@@ -432,16 +449,50 @@ export async function initializeDatabase() {
        ADD COLUMN IF NOT EXISTS tipo TEXT NOT NULL DEFAULT 'comum',
        ADD COLUMN IF NOT EXISTS categoria TEXT,
        ADD COLUMN IF NOT EXISTS "taxaMes" DECIMAL(7, 4) DEFAULT NULL,
-       ADD COLUMN IF NOT EXISTS obs TEXT DEFAULT ''`
+       ADD COLUMN IF NOT EXISTS obs TEXT DEFAULT '',
+       ADD COLUMN IF NOT EXISTS "tipoVencimento" TEXT DEFAULT 'dia-fixo',
+       ADD COLUMN IF NOT EXISTS "diaVencimento" INTEGER DEFAULT NULL,
+       ADD COLUMN IF NOT EXISTS "diasApos" INTEGER DEFAULT 30`
     );
 
-    // Seeds de fornecedores especiais
+    // Seeds de fornecedores especiais (upsert para atualizar campos novos)
     await query(
-      `INSERT INTO public."Fornecedor" (nome, tipo, categoria, "taxaMes", obs)
+      `INSERT INTO public."Fornecedor" (nome, tipo, categoria, "taxaMes", obs, "tipoVencimento", "diasApos")
        VALUES
-         ('MercadoPago', 'credito', 'Crédito/Empréstimo', 0.0398, 'Empréstimo Mercado Crédito'),
-         ('Nubank', 'credito', 'Crédito/Empréstimo', NULL, 'Empréstimo / Cartão Nubank')
-       ON CONFLICT (nome) DO NOTHING`
+         ('MercadoPago', 'credito', 'Crédito/Empréstimo', 0.0398, 'Empréstimo Mercado Crédito', 'd+n', 30),
+         ('Nubank', 'credito', 'Crédito/Empréstimo', NULL, 'Empréstimo / Cartão Nubank', 'dia-fixo', 30)
+       ON CONFLICT (nome) DO UPDATE
+         SET "tipoVencimento" = EXCLUDED."tipoVencimento",
+             "diasApos"       = EXCLUDED."diasApos"`
+    );
+
+    // Tabela de Créditos (Empréstimos / Financiamentos)
+    await query(
+      `CREATE TABLE IF NOT EXISTS public."Credito" (
+        id                  TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        "fornecedorNome"    TEXT NOT NULL,
+        "valorOriginal"     DECIMAL(10, 2) NOT NULL,
+        "taxaMes"           DECIMAL(7, 4) DEFAULT NULL,
+        "numParcelas"       INTEGER NOT NULL,
+        "valorParcela"      DECIMAL(10, 2) NOT NULL,
+        "tipoVencimento"    TEXT NOT NULL DEFAULT 'dia-fixo',
+        "diaVencimento"     INTEGER DEFAULT NULL,
+        "diasApos"          INTEGER DEFAULT 30,
+        "dataContratacao"   TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        categoria           TEXT NOT NULL DEFAULT 'Crédito/Empréstimo',
+        descricao           TEXT DEFAULT '',
+        status              TEXT NOT NULL DEFAULT 'ativo',
+        "parcelasPagas"     INTEGER NOT NULL DEFAULT 0,
+        "createdAt"         TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        "updatedAt"         TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      )`
+    );
+
+    // Coluna creditoId em Saida para linkar parcelas ao crédito
+    await query(
+      `ALTER TABLE public."Saida"
+       ADD COLUMN IF NOT EXISTS "creditoId" TEXT DEFAULT NULL,
+       ADD COLUMN IF NOT EXISTS "numeroParcela" INTEGER DEFAULT NULL`
     );
 
     // Tabela de Contas Fixas Recorrentes

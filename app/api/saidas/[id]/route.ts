@@ -116,7 +116,40 @@ export async function PUT(
       return NextResponse.json({ error: "Saída não encontrada" }, { status: 404 });
     }
 
-    return NextResponse.json(sanitizeData(rows[0]));
+    const updatedSaida = rows[0];
+
+    // Se pertence a um crédito, atualizar a contagem de parcelas pagas e status do crédito
+    try {
+      const creditoCheck = await query(
+        `SELECT "creditoId" FROM public."Saida" WHERE id = $1`,
+        [id]
+      );
+      const cId = creditoCheck[0]?.creditoId;
+      if (cId) {
+        const stats = await query(
+          `SELECT 
+             COUNT(*) AS total,
+             COUNT(*) FILTER (WHERE status = 'pago') AS pagas
+           FROM public."Saida"
+           WHERE "creditoId" = $1`,
+          [cId]
+        );
+        const total = Number(stats[0]?.total || 0);
+        const pagas = Number(stats[0]?.pagas || 0);
+        const newStatus = pagas >= total && total > 0 ? "quitado" : "ativo";
+
+        await query(
+          `UPDATE public."Credito"
+           SET "parcelasPagas" = $1, status = $2, "updatedAt" = CURRENT_TIMESTAMP
+           WHERE id = $3`,
+          [pagas, newStatus, cId]
+        );
+      }
+    } catch (cErr) {
+      console.error("Erro ao atualizar status do crédito:", cErr);
+    }
+
+    return NextResponse.json(sanitizeData(updatedSaida));
   } catch (error: any) {
     console.error("Error updating saida:", error);
     return NextResponse.json(

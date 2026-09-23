@@ -2,10 +2,9 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { formatBRL } from "@/lib/money";
-import type { FinanceiroData, ItemDinheiroNaRua } from "./types";
+import type { FinanceiroData } from "./types";
 import {
   Wallet,
-  TrendingUp,
   TrendingDown,
   AlertTriangle,
   CheckCircle2,
@@ -16,15 +15,9 @@ import {
   Megaphone,
   Check,
   RefreshCw,
-  SlidersHorizontal,
   Calendar,
-  ExternalLink,
-  Info,
   DollarSign,
-  AlertCircle,
-  HelpCircle,
 } from "lucide-react";
-import Link from "next/link";
 
 const MESES = [
   { valor: 1, nome: "Janeiro" },

@@ -5,6 +5,7 @@ import type { VendaLg } from "@/lib/venda-lg";
 import { updateVendaLg } from "@/lib/venda-lg";
 import type { Partner } from "@/lib/partner";
 import type { Service } from "@/lib/service";
+import type { Produto } from "@/lib/produto";
 import { formatBRL } from "@/lib/money";
 
 import { SingleLocationMap } from "@/components/locations/single-location-map";
@@ -16,6 +17,8 @@ export interface VendaDetailModalProps {
   venda: VendaLg | null;
   /** Map servicoId → Service so we can show service names. */
   servicoById: Map<string, Service>;
+  /** Optional Map produtoId → Produto so we can show product names. */
+  produtoById?: Map<string, Produto>;
   /** List of partners so we can resolve prestadorId. */
   parceiros: Partner[];
   /** Called when the user wants to close the modal. */
@@ -78,6 +81,7 @@ function WhatsAppIcon({ className }: { className?: string }) {
 export function VendaDetailModal({
   venda,
   servicoById,
+  produtoById,
   parceiros,
   onClose,
   onUpdateVenda,
@@ -253,7 +257,7 @@ export function VendaDetailModal({
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-zinc-200/80 dark:border-zinc-700/60">
-                      <th className="px-3.5 py-2 text-left text-xs font-semibold text-zinc-500 dark:text-zinc-400">Serviço</th>
+                      <th className="px-3.5 py-2 text-left text-xs font-semibold text-zinc-500 dark:text-zinc-400">Item / Descrição</th>
                       <th className="px-3.5 py-2 text-center text-xs font-semibold text-zinc-500 dark:text-zinc-400">Qtd</th>
                       <th className="px-3.5 py-2 text-right text-xs font-semibold text-zinc-500 dark:text-zinc-400">Unit.</th>
                       <th className="px-3.5 py-2 text-right text-xs font-semibold text-zinc-500 dark:text-zinc-400">Subtotal</th>
@@ -261,13 +265,31 @@ export function VendaDetailModal({
                   </thead>
                   <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/60">
                     {currentVenda.linhas.map((ln) => {
-                      const serviceName = servicoById.get(ln.servicoId)?.nome ?? "Serviço removido";
+                      const isProduto = ln.tipo === "produto" || !!ln.produtoId;
+                      const itemName =
+                        ln.nome ||
+                        ln.produtoNome ||
+                        ln.servicoNome ||
+                        (ln.produtoId ? produtoById?.get(ln.produtoId)?.nome : undefined) ||
+                        (ln.servicoId ? servicoById.get(ln.servicoId)?.nome : undefined) ||
+                        (isProduto ? "Produto" : "Serviço");
                       const subtotal = ln.preco * ln.quantidade;
                       const hasDiscount = ln.precoOriginal > 0 && ln.preco < ln.precoOriginal;
                       return (
                         <tr key={ln.id}>
                           <td className="px-3.5 py-2 font-medium text-zinc-900 dark:text-zinc-50">
-                            {serviceName}
+                            <div className="flex items-center gap-2">
+                              <span
+                                className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-semibold ${
+                                  isProduto
+                                    ? "bg-amber-100 text-amber-900 ring-1 ring-amber-600/30 dark:bg-amber-950/60 dark:text-amber-300"
+                                    : "bg-sky-100 text-sky-900 ring-1 ring-sky-600/30 dark:bg-sky-950/60 dark:text-sky-300"
+                                }`}
+                              >
+                                {isProduto ? "📦 Produto" : "🛠️ Serviço"}
+                              </span>
+                              <span>{itemName}</span>
+                            </div>
                           </td>
                           <td className="px-3.5 py-2 text-center text-zinc-600 dark:text-zinc-400">
                             {ln.quantidade}

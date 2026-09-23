@@ -1,6 +1,11 @@
 export type VendaLgLine = {
   id: string;
-  servicoId: string;
+  tipo?: "servico" | "produto";
+  servicoId?: string;
+  servicoNome?: string;
+  produtoId?: string;
+  produtoNome?: string;
+  nome?: string;
   precoOriginal: number;
   preco: number;
   quantidade: number;
@@ -36,7 +41,8 @@ function isLineArray(v: unknown): v is VendaLgLine[] {
       typeof x === "object" &&
       x !== null &&
       typeof (x as VendaLgLine).id === "string" &&
-      typeof (x as VendaLgLine).servicoId === "string" &&
+      (typeof (x as VendaLgLine).servicoId === "string" || (x as VendaLgLine).servicoId === undefined || (x as VendaLgLine).servicoId === null) &&
+      (typeof (x as VendaLgLine).produtoId === "string" || (x as VendaLgLine).produtoId === undefined || (x as VendaLgLine).produtoId === null) &&
       typeof (x as VendaLgLine).precoOriginal === "number" &&
       Number.isFinite((x as VendaLgLine).precoOriginal) &&
       typeof (x as VendaLgLine).preco === "number" &&

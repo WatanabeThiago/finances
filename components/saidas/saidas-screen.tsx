@@ -8,6 +8,7 @@ import {
   parseDateInputToISO,
   formatDateForInput,
   type ContaFixa,
+  type Credito,
   type Fornecedor,
   type Saida,
   type SaidaCategoria,
@@ -43,7 +44,7 @@ import { SkeletonList } from "@/components/ui/skeleton";
 import { useEffect, useMemo, useState } from "react";
 
 type DateFilterType = "today" | "yesterday" | "7d" | "month" | "30d" | "all";
-type TabType = "saidas" | "contas-a-pagar" | "contas-fixas";
+type TabType = "saidas" | "contas-a-pagar" | "contas-fixas" | "creditos";
 
 export function SaidasScreen() {
   const [activeTab, setActiveTab] = useState<TabType>("saidas");
@@ -52,6 +53,7 @@ export function SaidasScreen() {
   const [saidas, setSaidas] = useState<Saida[]>([]);
   const [contasFixas, setContasFixas] = useState<ContaFixa[]>([]);
   const [fornecedores, setFornecedores] = useState<Fornecedor[]>([]);
+  const [creditos, setCreditos] = useState<Credito[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
@@ -96,6 +98,24 @@ export function SaidasScreen() {
   const [categoriaFixaInput, setCategoriaFixaInput] = useState("Outros");
   const [diaVencimentoFixaInput, setDiaVencimentoFixaInput] = useState("10");
   const [obsFixaInput, setObsFixaInput] = useState("");
+  // Formulário de Novo Crédito
+  const [modalCredito, setModalCredito] = useState(false);
+  const [creditoFornecedorInput, setCreditoFornecedorInput] = useState("");
+  const [creditoValorOriginal, setCreditoValorOriginal] = useState("");
+  const [creditoTaxaMes, setCreditoTaxaMes] = useState("");
+  const [creditoNumParcelas, setCreditoNumParcelas] = useState("12");
+  const [creditoValorParcela, setCreditoValorParcela] = useState("");
+  const [creditoTipoVenc, setCreditoTipoVenc] = useState<"dia-fixo" | "d+n">("dia-fixo");
+  const [creditoDiaVenc, setCreditoDiaVenc] = useState("10");
+  const [creditoDiasApos, setCreditoDiasApos] = useState("30");
+  const [creditoDataContratacao, setCreditoDataContratacao] = useState(() => new Date().toISOString().slice(0, 10));
+  const [creditoDescricao, setCreditoDescricao] = useState("");
+  const [savingCredito, setSavingCredito] = useState(false);
+
+  // Modal de Detalhes / Amortização do Crédito
+  const [creditoDetalheId, setCreditoDetalheId] = useState<string | null>(null);
+  const [creditoDetalheData, setCreditoDetalheData] = useState<any | null>(null);
+  const [loadingDetalhe, setLoadingDetalhe] = useState(false);
 
   // Helpers de fornecedor
   const fornecedorSelecionado = fornecedores.find(
@@ -124,15 +144,108 @@ export function SaidasScreen() {
       // silencioso — não bloqueia o usuário
     }
   };
+  // Cálculo automático da parcela (PMT Price) mantendo editável
+  const calcularParcelaEstimada = (valor: string, taxa: string, parcelas: string) => {
+    const pv = parseMoney(valor) || 0;
+    const n = parseInt(parcelas) || 1;
+    const i = (parseFloat(taxa) || 0) / 100;
+    if (pv <= 0 || n <= 0) return "";
+    if (i <= 0) return (pv / n).toFixed(2);
+    const pmt = (pv * (i * Math.pow(1 + i, n))) / (Math.pow(1 + i, n) - 1);
+    return pmt.toFixed(2);
+  };
 
-  // Carregar saídas, contas fixas e fornecedores
+  const handleOpenCreditoDetalhe = async (id: string) => {
+    try {
+      setCreditoDetalheId(id);
+      setLoadingDetalhe(true);
+      const res = await fetch(`/api/creditos/${id}`);
+      if (res.ok) {
+        setCreditoDetalheData(await res.json());
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoadingDetalhe(false);
+    }
+  };
+
+  const handleSaveCredito = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const vOrig = parseMoney(creditoValorOriginal);
+    if (!vOrig || vOrig <= 0) {
+      alert("Informe um valor original válido.");
+      return;
+    }
+    if (!creditoFornecedorInput.trim()) {
+      alert("Informe o fornecedor do crédito.");
+      return;
+    }
+
+    try {
+      setSavingCredito(true);
+      const res = await fetch("/api/creditos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fornecedorNome: creditoFornecedorInput.trim(),
+          valorOriginal: vOrig,
+          taxaMes: creditoTaxaMes ? parseFloat(creditoTaxaMes) / 100 : null,
+          numParcelas: parseInt(creditoNumParcelas) || 1,
+          valorParcela: creditoValorParcela ? parseFloat(creditoValorParcela) : null,
+          tipoVencimento: creditoTipoVenc,
+          diaVencimento: creditoTipoVenc === "dia-fixo" ? parseInt(creditoDiaVenc) : null,
+          diasApos: creditoTipoVenc === "d+n" ? parseInt(creditoDiasApos) : null,
+          dataContratacao: creditoDataContratacao,
+          descricao: creditoDescricao.trim(),
+        }),
+      });
+
+      if (res.ok) {
+        await fetchData();
+        setModalCredito(false);
+        // Reset campos
+        setCreditoFornecedorInput("");
+        setCreditoValorOriginal("");
+        setCreditoTaxaMes("");
+        setCreditoNumParcelas("12");
+        setCreditoValorParcela("");
+        setCreditoDescricao("");
+      } else {
+        const err = await res.json();
+        alert(err.error || "Erro ao registrar crédito.");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Erro ao conectar com o servidor.");
+    } finally {
+      setSavingCredito(false);
+    }
+  };
+
+  const handleDeleteCredito = async (id: string, fornecedor: string) => {
+    if (!confirm(`Deseja cancelar o crédito com "${fornecedor}"? As parcelas pendentes serão removidas.`)) return;
+
+    try {
+      const res = await fetch(`/api/creditos/${id}`, { method: "DELETE" });
+      if (res.ok) {
+        await fetchData();
+        if (creditoDetalheId === id) setCreditoDetalheId(null);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // Carregar saídas, contas fixas, fornecedores e créditos
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [resSaidas, resFixas, resFornecedores] = await Promise.all([
+      const [resSaidas, resFixas, resFornecedores, resCreditos] = await Promise.all([
         fetch("/api/saidas"),
         fetch("/api/contas-fixas"),
         fetch("/api/fornecedores"),
+        fetch("/api/creditos"),
       ]);
 
       if (resSaidas.ok) {
@@ -157,6 +270,18 @@ export function SaidasScreen() {
 
       if (resFornecedores.ok) {
         setFornecedores(await resFornecedores.json());
+      }
+
+      if (resCreditos.ok) {
+        const cData = await resCreditos.json();
+        setCreditos(
+          cData.map((c: any) => ({
+            ...c,
+            valorOriginal: typeof c.valorOriginal === "string" ? parseFloat(c.valorOriginal) : c.valorOriginal,
+            valorParcela: typeof c.valorParcela === "string" ? parseFloat(c.valorParcela) : c.valorParcela,
+            taxaMes: c.taxaMes != null ? (typeof c.taxaMes === "string" ? parseFloat(c.taxaMes) : c.taxaMes) : null,
+          }))
+        );
       }
     } catch (err) {
       console.error("Erro ao carregar dados:", err);
@@ -736,6 +861,25 @@ export function SaidasScreen() {
             {contasFixas.length}
           </span>
         </button>
+
+        <button
+          onClick={() => setActiveTab("creditos")}
+          className={`flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-bold transition-all ${
+            activeTab === "creditos"
+              ? "bg-violet-600 text-white shadow-md shadow-violet-600/20"
+              : "text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800/60"
+          }`}
+        >
+          <CreditCard className="h-4 w-4" />
+          <span>Crédito & Empréstimos</span>
+          <span className={`ml-1 rounded-full px-2 py-0.5 text-xs font-semibold ${
+            activeTab === "creditos"
+              ? "bg-violet-700 text-violet-100"
+              : "bg-zinc-200/80 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400"
+          }`}>
+            {creditos.filter((c) => c.status === "ativo").length}
+          </span>
+        </button>
       </div>
 
       {/* Conteúdo da Aba Contas Fixas */}
@@ -888,6 +1032,187 @@ export function SaidasScreen() {
                     </div>
                   );
                 })}
+              </div>
+            )}
+          </div>
+        </div>
+      ) : activeTab === "creditos" ? (
+        /* Aba de Crédito & Empréstimos */
+        <div className="space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 rounded-2xl border border-violet-200 bg-gradient-to-br from-violet-50/60 via-white to-purple-50/40 p-5 shadow-sm dark:border-violet-950 dark:from-violet-950/20 dark:via-zinc-900 dark:to-purple-950/10">
+            <div>
+              <h2 className="text-base font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
+                <CreditCard className="h-5 w-5 text-violet-600 dark:text-violet-400" />
+                Controle de Empréstimos & Financiamentos
+              </h2>
+              <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400 max-w-xl">
+                Registre empréstimos (MercadoPago, bancos). O sistema gera as parcelas automaticamente no Contas a Pagar, rastreia amortização do capital e simula juros em tempo real.
+              </p>
+            </div>
+            <button
+              onClick={() => {
+                setCreditoFornecedorInput("");
+                setCreditoValorOriginal("");
+                setCreditoTaxaMes("");
+                setCreditoNumParcelas("12");
+                setCreditoValorParcela("");
+                setCreditoDescricao("");
+                setModalCredito(true);
+              }}
+              className="inline-flex items-center gap-2 rounded-xl bg-violet-600 px-4 py-2.5 text-sm font-bold text-white shadow-md shadow-violet-600/20 hover:bg-violet-500 active:scale-95 self-start sm:self-auto"
+            >
+              <Plus className="h-4 w-4" />
+              Novo Crédito / Empréstimo
+            </button>
+          </div>
+
+          {/* Cards de Métricas de Crédito */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="rounded-xl border border-violet-200 bg-violet-50/40 p-4 dark:border-violet-900/40 dark:bg-violet-950/20">
+              <p className="text-xs font-semibold uppercase tracking-wider text-violet-600 dark:text-violet-400">
+                Total Contratado (Original)
+              </p>
+              <p className="mt-1 text-2xl font-black text-violet-700 dark:text-violet-300">
+                {formatBRL(creditos.reduce((acc, c) => acc + (c.valorOriginal || 0), 0))}
+              </p>
+              <p className="mt-1 text-xs text-violet-500/80">
+                {creditos.length} contrato(s) no total
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+              <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+                Créditos Ativos
+              </p>
+              <p className="mt-1 text-2xl font-bold text-zinc-900 dark:text-white">
+                {creditos.filter((c) => c.status === "ativo").length}
+              </p>
+              <p className="mt-1 text-xs text-zinc-400">em processo de amortização</p>
+            </div>
+
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50/40 p-4 shadow-sm dark:border-emerald-950 dark:bg-emerald-950/20">
+              <p className="text-xs font-semibold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">
+                Quitados / Finalizados
+              </p>
+              <p className="mt-1 text-2xl font-bold text-emerald-800 dark:text-emerald-300">
+                {creditos.filter((c) => c.status === "quitado").length}
+              </p>
+              <p className="mt-1 text-xs text-emerald-600/80">contratos 100% pagos</p>
+            </div>
+          </div>
+
+          {/* Tabela de Créditos */}
+          <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+            <div className="border-b border-zinc-200 px-4 py-3 dark:border-zinc-800 flex items-center justify-between">
+              <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
+                Contratos de Crédito Cadastrados ({creditos.length})
+              </h3>
+            </div>
+            {creditos.length === 0 ? (
+              <div className="p-8 text-center text-sm text-zinc-500">
+                Nenhum crédito cadastrado. Clique no botão acima para adicionar um empréstimo.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="border-b border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-800/60 text-zinc-600 dark:text-zinc-300 font-semibold uppercase tracking-wider">
+                      <th className="py-3 px-4">Fornecedor / Credor</th>
+                      <th className="py-3 px-4">Valor Original</th>
+                      <th className="py-3 px-4">Taxa / Mês</th>
+                      <th className="py-3 px-4">Parcelas</th>
+                      <th className="py-3 px-4">Valor Parcela</th>
+                      <th className="py-3 px-4">Progresso</th>
+                      <th className="py-3 px-4">Status</th>
+                      <th className="py-3 px-4 text-right">Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                    {creditos.map((c) => {
+                      const progresso = Math.min(100, Math.round(((c.parcelasPagas || 0) / c.numParcelas) * 100));
+                      const isQuitado = c.status === "quitado" || c.parcelasPagas >= c.numParcelas;
+                      return (
+                        <tr
+                          key={c.id}
+                          className="hover:bg-zinc-50/80 dark:hover:bg-zinc-800/40 transition cursor-pointer"
+                          onClick={() => handleOpenCreditoDetalhe(c.id)}
+                        >
+                          <td className="py-3.5 px-4 font-bold text-zinc-900 dark:text-white">
+                            <div>
+                              <span>{c.fornecedorNome}</span>
+                              {c.descricao && (
+                                <p className="text-[11px] font-normal text-zinc-500">{c.descricao}</p>
+                              )}
+                            </div>
+                          </td>
+                          <td className="py-3.5 px-4 font-mono font-bold text-zinc-900 dark:text-white">
+                            {formatBRL(c.valorOriginal)}
+                          </td>
+                          <td className="py-3.5 px-4 whitespace-nowrap">
+                            {c.taxaMes != null ? (
+                              <span className="font-bold text-violet-600 dark:text-violet-400">
+                                {(Number(c.taxaMes) * 100).toFixed(2)}% a.m.
+                              </span>
+                            ) : (
+                              <span className="text-zinc-400">—</span>
+                            )}
+                          </td>
+                          <td className="py-3.5 px-4 whitespace-nowrap">
+                            {c.numParcelas}x
+                          </td>
+                          <td className="py-3.5 px-4 font-mono font-bold text-zinc-900 dark:text-white">
+                            {formatBRL(c.valorParcela)}
+                          </td>
+                          <td className="py-3.5 px-4 min-w-[140px]">
+                            <div className="space-y-1">
+                              <div className="flex justify-between text-[10px] font-semibold text-zinc-500">
+                                <span>{c.parcelasPagas} de {c.numParcelas} pagas</span>
+                                <span>{progresso}%</span>
+                              </div>
+                              <div className="h-1.5 w-full rounded-full bg-zinc-100 dark:bg-zinc-800 overflow-hidden">
+                                <div
+                                  className={`h-full rounded-full transition-all ${
+                                    isQuitado ? "bg-emerald-500" : "bg-violet-500"
+                                  }`}
+                                  style={{ width: `${progresso}%` }}
+                                />
+                              </div>
+                            </div>
+                          </td>
+                          <td className="py-3.5 px-4 whitespace-nowrap">
+                            {isQuitado ? (
+                              <span className="inline-flex items-center gap-1 rounded-md bg-emerald-100 px-2 py-0.5 text-[11px] font-bold text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
+                                <CheckCircle2 className="h-3 w-3" /> Quitado
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 rounded-md bg-violet-100 px-2 py-0.5 text-[11px] font-bold text-violet-800 dark:bg-violet-950/60 dark:text-violet-300">
+                                <Clock className="h-3 w-3" /> Ativo
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-3.5 px-4 text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                            <div className="flex items-center justify-end gap-1.5">
+                              <button
+                                onClick={() => handleOpenCreditoDetalhe(c.id)}
+                                className="rounded-lg bg-zinc-100 px-2.5 py-1 text-xs font-bold text-zinc-700 hover:bg-violet-100 hover:text-violet-700 transition dark:bg-zinc-800 dark:text-zinc-300"
+                                title="Ver Parcelas e Simular Amortização"
+                              >
+                                Ver Parcelas
+                              </button>
+                              <button
+                                onClick={() => handleDeleteCredito(c.id, c.fornecedorNome)}
+                                className="rounded-lg p-1.5 text-zinc-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/40"
+                                title="Cancelar Crédito"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
             )}
           </div>
@@ -1566,6 +1891,12 @@ export function SaidasScreen() {
                                   Fixa
                                 </span>
                               )}
+                              {s.creditoId && (
+                                <span className="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-bold bg-violet-100 text-violet-700 dark:bg-violet-950/60 dark:text-violet-300 border border-violet-200/50">
+                                  <CreditCard className="h-2.5 w-2.5" />
+                                  Crédito
+                                </span>
+                              )}
                             </div>
                             {s.descricao && s.fornecedor && (
                               <p className="text-zinc-500 dark:text-zinc-400 text-[11px] truncate mt-0.5">
@@ -2139,6 +2470,361 @@ export function SaidasScreen() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Registro de Novo Crédito */}
+      {modalCredito && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800">
+            <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3">
+              <h2 className="text-lg font-bold text-zinc-900 dark:text-white flex items-center gap-2">
+                <CreditCard className="h-5 w-5 text-violet-600" />
+                Registrar Novo Crédito / Empréstimo
+              </h2>
+              <button
+                onClick={() => setModalCredito(false)}
+                className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 p-1 rounded-lg"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveCredito} className="mt-4 space-y-4">
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-zinc-600 dark:text-zinc-400 mb-1">
+                  Fornecedor / Credor <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  list="fornecedores-credito-list"
+                  placeholder="Ex.: MercadoPago, Nubank, Banco Itaú..."
+                  value={creditoFornecedorInput}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setCreditoFornecedorInput(val);
+                    const match = fornecedores.find(
+                      (f) => f.nome.toLowerCase() === val.trim().toLowerCase()
+                    );
+                    if (match) {
+                      if (match.taxaMes != null) {
+                        const tStr = String((match.taxaMes * 100).toFixed(2));
+                        setCreditoTaxaMes(tStr);
+                        const calc = calcularParcelaEstimada(creditoValorOriginal, tStr, creditoNumParcelas);
+                        if (calc) setCreditoValorParcela(calc);
+                      }
+                      if (match.tipoVencimento) setCreditoTipoVenc(match.tipoVencimento);
+                      if (match.diaVencimento) setCreditoDiaVenc(String(match.diaVencimento));
+                      if (match.diasApos) setCreditoDiasApos(String(match.diasApos));
+                    }
+                  }}
+                  className="w-full rounded-xl border border-zinc-300 bg-white px-3.5 py-2 text-sm font-semibold text-zinc-900 dark:border-zinc-700 dark:bg-zinc-950 dark:text-white focus:border-violet-500 focus:outline-none"
+                />
+                <datalist id="fornecedores-credito-list">
+                  {fornecedores.map((f) => (
+                    <option key={f.id} value={f.nome}>
+                      {f.tipo === "credito" ? `💳 ${f.nome}` : f.nome}
+                    </option>
+                  ))}
+                </datalist>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-zinc-600 dark:text-zinc-400 mb-1">
+                    Valor Original (R$) <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Ex.: 5.000,00"
+                    value={creditoValorOriginal}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setCreditoValorOriginal(val);
+                      const calc = calcularParcelaEstimada(val, creditoTaxaMes, creditoNumParcelas);
+                      if (calc) setCreditoValorParcela(calc);
+                    }}
+                    className="w-full rounded-xl border border-zinc-300 bg-white px-3.5 py-2 text-sm font-black text-zinc-900 dark:border-zinc-700 dark:bg-zinc-950 dark:text-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-violet-700 dark:text-violet-400 mb-1">
+                    Taxa / Mês (%)
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      step="0.01"
+                      placeholder="Ex.: 3.98"
+                      value={creditoTaxaMes}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setCreditoTaxaMes(val);
+                        const calc = calcularParcelaEstimada(creditoValorOriginal, val, creditoNumParcelas);
+                        if (calc) setCreditoValorParcela(calc);
+                      }}
+                      className="w-full rounded-xl border border-violet-300 bg-violet-50/50 py-2 pl-3.5 pr-8 text-sm font-bold text-violet-900 dark:border-violet-700 dark:bg-zinc-950 dark:text-violet-100"
+                    />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-violet-500">
+                      %
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-zinc-600 dark:text-zinc-400 mb-1">
+                    Número de Parcelas <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="120"
+                    required
+                    value={creditoNumParcelas}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setCreditoNumParcelas(val);
+                      const calc = calcularParcelaEstimada(creditoValorOriginal, creditoTaxaMes, val);
+                      if (calc) setCreditoValorParcela(calc);
+                    }}
+                    className="w-full rounded-xl border border-zinc-300 bg-white px-3.5 py-2 text-sm font-bold text-zinc-900 dark:border-zinc-700 dark:bg-zinc-950 dark:text-white"
+                  />
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-bold uppercase tracking-wider text-zinc-600 dark:text-zinc-400">
+                      Valor da Parcela (R$)
+                    </label>
+                    <span className="text-[10px] text-zinc-400 font-normal">editável</span>
+                  </div>
+                  <input
+                    type="number"
+                    step="0.01"
+                    placeholder="Auto ou informe"
+                    value={creditoValorParcela}
+                    onChange={(e) => setCreditoValorParcela(e.target.value)}
+                    className="w-full rounded-xl border border-emerald-300 bg-emerald-50/40 px-3.5 py-2 text-sm font-black text-emerald-900 dark:border-emerald-700 dark:bg-zinc-950 dark:text-emerald-300"
+                  />
+                </div>
+              </div>
+
+              {/* Vencimento */}
+              <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3.5 dark:border-zinc-800 dark:bg-zinc-800/40 space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-zinc-500 mb-1">Tipo de Vencimento</label>
+                    <select
+                      value={creditoTipoVenc}
+                      onChange={(e) => setCreditoTipoVenc(e.target.value as "dia-fixo" | "d+n")}
+                      className="w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-xs font-semibold text-zinc-800 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
+                    >
+                      <option value="dia-fixo">📅 Dia Fixo do Mês</option>
+                      <option value="d+n">⏱️ D+N Dias (Prazo)</option>
+                    </select>
+                  </div>
+
+                  {creditoTipoVenc === "dia-fixo" ? (
+                    <div>
+                      <label className="block text-[11px] font-semibold text-zinc-500 mb-1">Dia Vencimento</label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="31"
+                        value={creditoDiaVenc}
+                        onChange={(e) => setCreditoDiaVenc(e.target.value)}
+                        className="w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-xs font-semibold text-zinc-800 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
+                      />
+                    </div>
+                  ) : (
+                    <div>
+                      <label className="block text-[11px] font-semibold text-zinc-500 mb-1">Dias de Intervalo</label>
+                      <input
+                        type="number"
+                        min="1"
+                        value={creditoDiasApos}
+                        onChange={(e) => setCreditoDiasApos(e.target.value)}
+                        className="w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-xs font-semibold text-zinc-800 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
+                      />
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-zinc-500 mb-1">Data da Contratação</label>
+                  <input
+                    type="date"
+                    value={creditoDataContratacao}
+                    onChange={(e) => setCreditoDataContratacao(e.target.value)}
+                    className="w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-xs font-semibold text-zinc-800 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-zinc-600 dark:text-zinc-400 mb-1">
+                  Descrição / Motivo
+                </label>
+                <input
+                  type="text"
+                  placeholder="Ex.: Capital de giro para compra de máquinas pantográficas"
+                  value={creditoDescricao}
+                  onChange={(e) => setCreditoDescricao(e.target.value)}
+                  className="w-full rounded-xl border border-zinc-300 bg-white px-3.5 py-2 text-xs font-medium text-zinc-900 dark:border-zinc-700 dark:bg-zinc-950 dark:text-white"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-zinc-100 dark:border-zinc-800">
+                <button
+                  type="button"
+                  onClick={() => setModalCredito(false)}
+                  className="rounded-xl border border-zinc-200 px-4 py-2 text-xs font-bold text-zinc-600 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingCredito}
+                  className="rounded-xl bg-violet-600 px-5 py-2 text-xs font-bold text-white shadow-md hover:bg-violet-500 active:scale-95"
+                >
+                  {savingCredito ? "Gerando Parcelas..." : "Criar Crédito & Parcelas"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Detalhes / Simulação de Amortização do Crédito */}
+      {creditoDetalheId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="w-full max-w-3xl max-h-[90vh] overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800">
+            <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3">
+              <div>
+                <h2 className="text-lg font-bold text-zinc-900 dark:text-white flex items-center gap-2">
+                  <CreditCard className="h-5 w-5 text-violet-600" />
+                  {creditoDetalheData ? `${creditoDetalheData.fornecedorNome} — Simulação de Amortização` : "Carregando..."}
+                </h2>
+                <p className="text-xs text-zinc-500">
+                  Veja a decomposição de cada parcela entre capital e juros para decidir sobre amortização antecipada
+                </p>
+              </div>
+              <button
+                onClick={() => setCreditoDetalheId(null)}
+                className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 p-1 rounded-lg"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {loadingDetalhe || !creditoDetalheData ? (
+              <div className="py-12 text-center text-sm text-zinc-400">
+                Calculando simulação de amortização...
+              </div>
+            ) : (
+              <div className="mt-4 space-y-4">
+                {/* Resumo do Crédito */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-zinc-800/40">
+                    <p className="text-[10px] uppercase font-bold text-zinc-500">Valor Original</p>
+                    <p className="text-base font-black text-zinc-900 dark:text-white">
+                      {formatBRL(creditoDetalheData.valorOriginal)}
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-violet-200 bg-violet-50/50 p-3 dark:border-violet-950 dark:bg-violet-950/20">
+                    <p className="text-[10px] uppercase font-bold text-violet-600">Taxa ao Mês</p>
+                    <p className="text-base font-black text-violet-700 dark:text-violet-300">
+                      {creditoDetalheData.taxaMes != null ? `${(Number(creditoDetalheData.taxaMes) * 100).toFixed(2)}% a.m.` : "—"}
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-zinc-800/40">
+                    <p className="text-[10px] uppercase font-bold text-zinc-500">Progresso Pago</p>
+                    <p className="text-base font-black text-zinc-900 dark:text-white">
+                      {creditoDetalheData.parcelas?.filter((p: any) => p.status === "pago").length || 0} / {creditoDetalheData.numParcelas}
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-3 dark:border-emerald-950 dark:bg-emerald-950/20">
+                    <p className="text-[10px] uppercase font-bold text-emerald-700">Saldo Capital Restante</p>
+                    <p className="text-base font-black text-emerald-800 dark:text-emerald-300">
+                      {formatBRL(creditoDetalheData.saldoDevedorRestante || 0)}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Tabela de Parcelas com Amortização */}
+                <div className="rounded-xl border border-zinc-200 overflow-hidden dark:border-zinc-800">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="border-b border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-800/60 font-semibold uppercase text-zinc-600 dark:text-zinc-300 text-[10px]">
+                        <th className="py-2.5 px-3">Parc.</th>
+                        <th className="py-2.5 px-3">Vencimento</th>
+                        <th className="py-2.5 px-3">Valor Total</th>
+                        <th className="py-2.5 px-3 text-emerald-600">Amortização (Capital)</th>
+                        <th className="py-2.5 px-3 text-rose-600">Juros Embutidos</th>
+                        <th className="py-2.5 px-3 text-right">Saldo Devedor</th>
+                        <th className="py-2.5 px-3 text-center">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                      {creditoDetalheData.parcelas?.map((parc: any) => {
+                        const isPago = parc.status === "pago";
+                        return (
+                          <tr
+                            key={parc.id}
+                            className={`transition ${isPago ? "bg-emerald-50/30 dark:bg-emerald-950/10" : "hover:bg-zinc-50 dark:hover:bg-zinc-800/40"}`}
+                          >
+                            <td className="py-2.5 px-3 font-bold">
+                              #{parc.numeroParcela}
+                            </td>
+                            <td className="py-2.5 px-3 whitespace-nowrap">
+                              {parc.dataVencimento ? formatVencimentoBR(parc.dataVencimento) : "—"}
+                            </td>
+                            <td className="py-2.5 px-3 font-mono font-bold">
+                              {formatBRL(parc.valor)}
+                            </td>
+                            <td className="py-2.5 px-3 font-mono text-emerald-600 dark:text-emerald-400 font-semibold">
+                              {formatBRL(parc.amortizacaoCapital)}
+                            </td>
+                            <td className="py-2.5 px-3 font-mono text-rose-500 dark:text-rose-400">
+                              {formatBRL(parc.jurosEmbutidos)}
+                            </td>
+                            <td className="py-2.5 px-3 font-mono text-right text-zinc-600 dark:text-zinc-400">
+                              {formatBRL(parc.saldoDevedorAtual)}
+                            </td>
+                            <td className="py-2.5 px-3 text-center whitespace-nowrap">
+                              {isPago ? (
+                                <span className="inline-flex items-center gap-1 rounded bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
+                                  <CheckCircle2 className="h-2.5 w-2.5" /> Pago
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 rounded bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
+                                  <Clock className="h-2.5 w-2.5" /> A Pagar
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="rounded-xl border border-violet-200 bg-violet-50/60 p-3 dark:border-violet-900/40 dark:bg-violet-950/20 text-xs text-violet-800 dark:text-violet-300">
+                  <p className="font-bold flex items-center gap-1.5 mb-1">
+                    💡 Dica de Amortização
+                  </p>
+                  <p>
+                    Se você antecipar o pagamento das parcelas finais hoje, você economiza os <strong>Juros Embutidos</strong> listados em vermelho acima, pagando apenas a <strong>Amortização (Capital)</strong> daquele período.
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

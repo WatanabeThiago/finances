@@ -35,6 +35,8 @@ export interface Saida {
   fornecedor?: string;
   isFixa?: boolean;
   taxaMes?: number | null;
+  creditoId?: string | null;
+  numeroParcela?: number | null;
   dataSaida: string;
   createdAt?: string;
   updatedAt?: string;
@@ -59,6 +61,28 @@ export interface Fornecedor {
   categoria?: string | null;
   taxaMes?: number | null;
   obs?: string;
+  tipoVencimento?: "dia-fixo" | "d+n";
+  diaVencimento?: number | null;
+  diasApos?: number | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface Credito {
+  id: string;
+  fornecedorNome: string;
+  valorOriginal: number;
+  taxaMes?: number | null;
+  numParcelas: number;
+  valorParcela: number;
+  tipoVencimento: "dia-fixo" | "d+n";
+  diaVencimento?: number | null;
+  diasApos?: number | null;
+  dataContratacao: string;
+  categoria: string;
+  descricao?: string;
+  status: "ativo" | "quitado" | "cancelado";
+  parcelasPagas: number;
   createdAt?: string;
   updatedAt?: string;
 }

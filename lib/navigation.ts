@@ -22,6 +22,11 @@ export const NAV_ITEMS: NavItem[] = [
     description: "Gastos, ferramentas e custos",
   },
   {
+    href: "/fornecedores",
+    label: "Fornecedores",
+    description: "Gestão de fornecedores, crédito e prazos",
+  },
+  {
     href: "/servicos",
     label: "Serviços",
     description: "Catálogo e gestão dos serviços",
