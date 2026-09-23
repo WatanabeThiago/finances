@@ -572,6 +572,21 @@ export function SaidasScreen() {
       .filter((c) => c.ativo)
       .reduce((acc, c) => acc + (c.valor || 0), 0);
 
+    // Contas Fixas pagas e pendentes no mês corrente
+    const inicioMesAtual = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+    const fixasDoMesPagas = saidas.filter((s) => {
+      if (!s.isFixa || s.status === "pendente") return false;
+      return new Date(s.dataSaida) >= inicioMesAtual;
+    });
+    const totalFixasPagasMes = fixasDoMesPagas.reduce((acc, s) => acc + (s.valor || 0), 0);
+    const countFixasPagasMes = fixasDoMesPagas.length;
+
+    const fixasDoMesPendentes = saidas.filter((s) => s.isFixa && s.status === "pendente");
+    const totalFixasPendentesMes = fixasDoMesPendentes.reduce((acc, s) => acc + (s.valor || 0), 0);
+    const countFixasPendentesMes = fixasDoMesPendentes.length;
+
+    const countContasFixasAtivas = contasFixas.filter((c) => c.ativo).length;
+
     return {
       total,
       count,
@@ -586,6 +601,11 @@ export function SaidasScreen() {
       totalVencidas,
       countVencidas,
       totalContasFixas,
+      totalFixasPagasMes,
+      countFixasPagasMes,
+      totalFixasPendentesMes,
+      countFixasPendentesMes,
+      countContasFixasAtivas,
     };
   }, [filteredSaidas, saidas, contasFixas]);
 
@@ -1040,15 +1060,45 @@ export function SaidasScreen() {
             </div>
 
             <div className="rounded-xl border border-indigo-200 bg-indigo-50/50 p-4 dark:border-indigo-900/40 dark:bg-indigo-950/20">
-              <p className="text-xs font-semibold uppercase tracking-wider text-indigo-700 dark:text-indigo-400">
-                Contas Fixas / Mês
-              </p>
-              <p className="mt-1 text-2xl font-bold text-indigo-800 dark:text-indigo-300">
+              <div className="flex items-center justify-between mb-1">
+                <p className="text-xs font-semibold uppercase tracking-wider text-indigo-700 dark:text-indigo-400">
+                  Contas Fixas / Mês
+                </p>
+                <span className="text-[10px] font-semibold text-indigo-500 dark:text-indigo-400">
+                  {stats.countContasFixasAtivas} ativa{stats.countContasFixasAtivas !== 1 ? "s" : ""}
+                </span>
+              </div>
+              <p className="text-2xl font-bold text-indigo-800 dark:text-indigo-300">
                 {formatBRL(stats.totalContasFixas)}
               </p>
-              <p className="mt-1 text-xs text-indigo-600 dark:text-indigo-400/80">
-                {contasFixas.length} contas cadastradas
-              </p>
+
+              {/* Barra de progresso pago vs pendente */}
+              {stats.totalContasFixas > 0 && (
+                <div className="mt-2.5 space-y-1.5">
+                  <div className="w-full h-1.5 rounded-full bg-indigo-200/60 dark:bg-indigo-900/50 overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-emerald-500 transition-all duration-500"
+                      style={{ width: `${Math.min(100, (stats.totalFixasPagasMes / stats.totalContasFixas) * 100)}%` }}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between text-[10px] font-semibold">
+                    <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
+                      <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                      Pago: {formatBRL(stats.totalFixasPagasMes)}
+                      {stats.countFixasPagasMes > 0 && (
+                        <span className="text-emerald-500/70">({stats.countFixasPagasMes})</span>
+                      )}
+                    </span>
+                    <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400">
+                      {stats.countFixasPendentesMes > 0 && (
+                        <span className="text-amber-500/70">({stats.countFixasPendentesMes})</span>
+                      )}
+                      Falta: {formatBRL(stats.totalFixasPendentesMes)}
+                      <span className="inline-block h-1.5 w-1.5 rounded-full bg-amber-400" />
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="rounded-xl border border-rose-200 bg-rose-50/60 p-4 shadow-sm dark:border-rose-900/50 dark:bg-rose-950/30">
