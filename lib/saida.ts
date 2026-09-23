@@ -34,6 +34,7 @@ export interface Saida {
   dataPagamento?: string | null;
   fornecedor?: string;
   isFixa?: boolean;
+  taxaMes?: number | null;
   dataSaida: string;
   createdAt?: string;
   updatedAt?: string;
@@ -47,6 +48,17 @@ export interface ContaFixa {
   diaVencimento: number;
   ativo: boolean;
   observacoes?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface Fornecedor {
+  id: string;
+  nome: string;
+  tipo: "comum" | "credito";
+  categoria?: string | null;
+  taxaMes?: number | null;
+  obs?: string;
   createdAt?: string;
   updatedAt?: string;
 }

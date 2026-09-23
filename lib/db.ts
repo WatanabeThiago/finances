@@ -400,7 +400,8 @@ export async function initializeDatabase() {
        ADD COLUMN IF NOT EXISTS "dataVencimento" TIMESTAMP WITH TIME ZONE,
        ADD COLUMN IF NOT EXISTS "dataPagamento" TIMESTAMP WITH TIME ZONE,
        ADD COLUMN IF NOT EXISTS fornecedor TEXT DEFAULT '',
-       ADD COLUMN IF NOT EXISTS "isFixa" BOOLEAN NOT NULL DEFAULT false`
+       ADD COLUMN IF NOT EXISTS "isFixa" BOOLEAN NOT NULL DEFAULT false,
+       ADD COLUMN IF NOT EXISTS "taxaMes" DECIMAL(7, 4) DEFAULT NULL`
     );
 
     await query(
@@ -408,6 +409,39 @@ export async function initializeDatabase() {
     );
     await query(
       `CREATE INDEX IF NOT EXISTS idx_saida_status ON public."Saida" (status)`
+    );
+
+    // Tabela de Fornecedores
+    await query(
+      `CREATE TABLE IF NOT EXISTS public."Fornecedor" (
+        id          TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        nome        TEXT NOT NULL,
+        tipo        TEXT NOT NULL DEFAULT 'comum',
+        categoria   TEXT,
+        "taxaMes"   DECIMAL(7, 4) DEFAULT NULL,
+        obs         TEXT DEFAULT '',
+        "createdAt" TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        "updatedAt" TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT "Fornecedor_nome_key" UNIQUE (nome)
+      )`
+    );
+
+    // Migração de colunas caso a tabela Fornecedor já exista
+    await query(
+      `ALTER TABLE public."Fornecedor"
+       ADD COLUMN IF NOT EXISTS tipo TEXT NOT NULL DEFAULT 'comum',
+       ADD COLUMN IF NOT EXISTS categoria TEXT,
+       ADD COLUMN IF NOT EXISTS "taxaMes" DECIMAL(7, 4) DEFAULT NULL,
+       ADD COLUMN IF NOT EXISTS obs TEXT DEFAULT ''`
+    );
+
+    // Seeds de fornecedores especiais
+    await query(
+      `INSERT INTO public."Fornecedor" (nome, tipo, categoria, "taxaMes", obs)
+       VALUES
+         ('MercadoPago', 'credito', 'Crédito/Empréstimo', 0.0398, 'Empréstimo Mercado Crédito'),
+         ('Nubank', 'credito', 'Crédito/Empréstimo', NULL, 'Empréstimo / Cartão Nubank')
+       ON CONFLICT (nome) DO NOTHING`
     );
 
     // Tabela de Contas Fixas Recorrentes

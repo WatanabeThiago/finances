@@ -18,6 +18,7 @@ import {
   Handshake,
   LogOut,
   TrendingDown,
+  Wallet,
 } from "lucide-react";
 
 function HamburgerIcon({ className }: { className?: string }) {
@@ -61,6 +62,8 @@ function getIconForHref(href: string) {
   switch (href) {
     case "/":
       return <Home {...props} />;
+    case "/financeiro":
+      return <Wallet {...props} />;
     case "/servicos":
       return <Wrench {...props} />;
     case "/produtos":

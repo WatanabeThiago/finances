@@ -74,6 +74,7 @@ export async function POST(request: NextRequest) {
       fornecedor,
       isFixa,
       dataSaida,
+      taxaMes,
     } = body;
 
     const parsedValor = typeof valor === "string" ? parseFloat(valor.replace(",", ".")) : Number(valor);
@@ -98,6 +99,7 @@ export async function POST(request: NextRequest) {
     const cleanStatus = status === "pendente" ? "pendente" : "pago";
     const cleanFornecedor = (fornecedor || "").trim();
     const cleanIsFixa = Boolean(isFixa);
+    const cleanTaxaMes = taxaMes != null ? Number(taxaMes) : null;
     let finalDataVencimento: Date | null = null;
     if (dataVencimento) {
       if (typeof dataVencimento === "string" && /^\d{4}-\d{2}-\d{2}$/.test(dataVencimento.trim())) {
@@ -113,10 +115,10 @@ export async function POST(request: NextRequest) {
     const insertSql = `
       INSERT INTO public."Saida" (
         valor, categoria, descricao, "formaPagamento", status,
-        "dataVencimento", "dataPagamento", fornecedor, "isFixa", "dataSaida"
+        "dataVencimento", "dataPagamento", fornecedor, "isFixa", "dataSaida", "taxaMes"
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-      RETURNING id, valor, categoria, descricao, "formaPagamento", status, "dataVencimento", "dataPagamento", fornecedor, "isFixa", "dataSaida", "createdAt", "updatedAt"
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      RETURNING id, valor, categoria, descricao, "formaPagamento", status, "dataVencimento", "dataPagamento", fornecedor, "isFixa", "dataSaida", "taxaMes", "createdAt", "updatedAt"
     `;
 
     try {
@@ -131,6 +133,7 @@ export async function POST(request: NextRequest) {
         cleanFornecedor,
         cleanIsFixa,
         finalDataSaida,
+        cleanTaxaMes,
       ]);
       return NextResponse.json(sanitizeData(rows[0]), { status: 201 });
     } catch (insertErr: any) {
@@ -147,6 +150,7 @@ export async function POST(request: NextRequest) {
           cleanFornecedor,
           cleanIsFixa,
           finalDataSaida,
+          cleanTaxaMes,
         ]);
         return NextResponse.json(sanitizeData(rows[0]), { status: 201 });
       }

@@ -177,3 +177,53 @@ export async function DELETE(
     );
   }
 }
+
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+    const body = await req.json();
+
+    const allowedFields = ["comissaoPaga", "clientePagou", "comissao", "formaPagamento"];
+    const updates: string[] = [];
+    const values: any[] = [];
+    let pIdx = 1;
+
+    for (const key of allowedFields) {
+      if (body[key] !== undefined) {
+        updates.push(`"${key}" = $${pIdx++}`);
+        values.push(body[key]);
+      }
+    }
+
+    if (updates.length === 0) {
+      return NextResponse.json(
+        { error: "Nenhum campo válido para atualização fornecido" },
+        { status: 400 }
+      );
+    }
+
+    updates.push(`"updatedAt" = CURRENT_TIMESTAMP`);
+    values.push(id);
+
+    const sql = `UPDATE "VendaLg" SET ${updates.join(", ")} WHERE id = $${pIdx} RETURNING *`;
+    const result = await query(sql, values);
+
+    if (result.length === 0) {
+      return NextResponse.json(
+        { error: "Venda não encontrada" },
+        { status: 404 }
+      );
+    }
+
+    return NextResponse.json(sanitizeData(result[0]));
+  } catch (error) {
+    console.error("PATCH /api/vendas-lg/[id] error:", error);
+    return NextResponse.json(
+      { error: "Falha ao atualizar venda" },
+      { status: 500 }
+    );
+  }
+}

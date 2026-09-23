@@ -561,11 +561,20 @@ export function TrackingScreen() {
     const matchMap: Record<string, { total: number; converted: number }> = {};
     const networkMap: Record<string, { total: number; converted: number }> = {};
 
+    const sourceMap: Record<string, number> = {};
+    const mediumMap: Record<string, number> = {};
+
     for (const [, eventList] of groupedVisitors) {
       const first = eventList[0];
       if (!inDateRange(first?.session_created_at)) continue;
       const isConverted = eventList.some((e) => e.event === "click" || e.event === "call");
       const scroll = getMaxScroll(eventList);
+
+      const src = first?.utm_source || (first?.gclid ? "google (gclid)" : "Direto");
+      sourceMap[src] = (sourceMap[src] || 0) + 1;
+
+      const med = first?.utm_medium || (first?.gclid ? "cpc" : "N/A");
+      mediumMap[med] = (mediumMap[med] || 0) + 1;
 
       if (isConverted) {
         const t = getTimeToConvert(eventList);
@@ -601,6 +610,14 @@ export function TrackingScreen() {
     const avgScroll = scrollDepths.length ? Math.round(scrollDepths.reduce((a, b) => a + b, 0) / scrollDepths.length) : 0;
     const scrollDist = [0, 10, 25, 35, 50, 75, 100].map((d) => ({ label: d === 0 ? "0%" : `${d}%`, count: scrollDepths.filter((s) => s === d).length }));
 
+    const utmSourceDist = Object.entries(sourceMap)
+      .map(([label, count]) => ({ label, count }))
+      .sort((a, b) => b.count - a.count);
+
+    const utmMediumDist = Object.entries(mediumMap)
+      .map(([label, count]) => ({ label, count }))
+      .sort((a, b) => b.count - a.count);
+
     const keywords = Object.entries(keywordMap)
       .map(([kw, v]) => ({ kw, ...v, rate: v.total > 0 ? Math.round((v.converted / v.total) * 100) : 0 }))
       .sort((a, b) => b.rate - a.rate || b.total - a.total);
@@ -610,6 +627,8 @@ export function TrackingScreen() {
       avgNotConverted: avg(notConverted),
       avgScroll,
       scrollDist,
+      utmSourceDist,
+      utmMediumDist,
       keywords,
       deviceMap,
       matchMap,
@@ -884,12 +903,40 @@ export function TrackingScreen() {
           change={`${stats.botPercentage}% do total`}
           color="red"
         />
-        <StatCard
-          label="Fonte Principal"
-          value={stats.topSource}
-          change="utm_source"
-          color="violet"
-        />
+        <div className="rounded-xl border border-violet-200 dark:border-violet-800 bg-violet-50/50 dark:bg-violet-950/20 p-4">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">Fontes (utm_source)</p>
+            <span className="text-[10px] text-zinc-400 font-mono">
+              {reports.utmSourceDist.length} fonte(s)
+            </span>
+          </div>
+          <div className="flex flex-col gap-1.5 max-h-24 overflow-y-auto pr-1">
+            {reports.utmSourceDist.length === 0 ? (
+              <p className="text-xs text-zinc-400">Nenhum dado</p>
+            ) : (
+              reports.utmSourceDist.map(({ label, count }) => {
+                const total = groupedVisitors.length || 1;
+                const pct = Math.round((count / total) * 100);
+                return (
+                  <div key={label} className="flex items-center gap-2 text-xs">
+                    <span className="w-16 truncate text-right font-medium text-zinc-700 dark:text-zinc-300" title={label}>
+                      {label}
+                    </span>
+                    <div className="flex-1 bg-zinc-200 dark:bg-zinc-700 rounded-full h-2 overflow-hidden">
+                      <div
+                        className="h-full bg-violet-500 rounded-full"
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                    <span className="w-10 text-right text-[11px] text-zinc-600 dark:text-zinc-400 font-mono">
+                      {count} ({pct}%)
+                    </span>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
         <StatCard
           label="Meio Principal"
           value={stats.topMediumLabel}

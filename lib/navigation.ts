@@ -7,6 +7,11 @@ export type NavItem = {
 export const NAV_ITEMS: NavItem[] = [
   { href: "/", label: "Início" },
   {
+    href: "/financeiro",
+    label: "Financeiro",
+    description: "Capital de giro, DRE e ponto de equilíbrio",
+  },
+  {
     href: "/vendas-lg",
     label: "Vendas",
     description: "Captação e venda do serviço",
@@ -61,6 +66,9 @@ export const NAV_ITEMS: NavItem[] = [
 
 export function navItemActive(pathname: string, href: string): boolean {
   if (href === "/") return pathname === "/";
+  if (href === "/financeiro") {
+    return pathname === "/financeiro" || pathname.startsWith("/financeiro/");
+  }
   if (href === "/vendas-lg") {
     return pathname === "/vendas-lg" || pathname.startsWith("/vendas-lg/");
   }

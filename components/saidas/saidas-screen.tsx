@@ -8,6 +8,7 @@ import {
   parseDateInputToISO,
   formatDateForInput,
   type ContaFixa,
+  type Fornecedor,
   type Saida,
   type SaidaCategoria,
   type SaidaStatus,
@@ -50,6 +51,7 @@ export function SaidasScreen() {
   // Saídas
   const [saidas, setSaidas] = useState<Saida[]>([]);
   const [contasFixas, setContasFixas] = useState<ContaFixa[]>([]);
+  const [fornecedores, setFornecedores] = useState<Fornecedor[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
@@ -71,6 +73,7 @@ export function SaidasScreen() {
   const [formaPagamentoInput, setFormaPagamentoInput] = useState<string>("Pix");
   const [statusInput, setStatusInput] = useState<SaidaStatus>("pago");
   const [fornecedorInput, setFornecedorInput] = useState("");
+  const [taxaMesInput, setTaxaMesInput] = useState<string>("");
   const [dataVencimentoInput, setDataVencimentoInput] = useState<string>("");
   const [dataSaidaInput, setDataSaidaInput] = useState<string>(() => {
     const now = new Date();
@@ -94,13 +97,42 @@ export function SaidasScreen() {
   const [diaVencimentoFixaInput, setDiaVencimentoFixaInput] = useState("10");
   const [obsFixaInput, setObsFixaInput] = useState("");
 
-  // Carregar saídas e contas fixas
+  // Helpers de fornecedor
+  const fornecedorSelecionado = fornecedores.find(
+    (f) => f.nome.toLowerCase() === fornecedorInput.trim().toLowerCase()
+  );
+  const isFornecedorCredito = fornecedorSelecionado?.tipo === "credito";
+
+  // Auto-save de fornecedor ao perder foco (upsert silencioso)
+  const handleFornecedorBlur = async (nome: string) => {
+    const n = nome.trim();
+    if (!n) return;
+    try {
+      const res = await fetch("/api/fornecedores", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nome: n }),
+      });
+      if (res.ok) {
+        const salvo: Fornecedor = await res.json();
+        setFornecedores((prev) => {
+          const existe = prev.some((f) => f.id === salvo.id);
+          return existe ? prev.map((f) => (f.id === salvo.id ? salvo : f)) : [...prev, salvo];
+        });
+      }
+    } catch {
+      // silencioso — não bloqueia o usuário
+    }
+  };
+
+  // Carregar saídas, contas fixas e fornecedores
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [resSaidas, resFixas] = await Promise.all([
+      const [resSaidas, resFixas, resFornecedores] = await Promise.all([
         fetch("/api/saidas"),
         fetch("/api/contas-fixas"),
+        fetch("/api/fornecedores"),
       ]);
 
       if (resSaidas.ok) {
@@ -121,6 +153,10 @@ export function SaidasScreen() {
             valor: typeof item.valor === "string" ? parseFloat(item.valor) : item.valor,
           }))
         );
+      }
+
+      if (resFornecedores.ok) {
+        setFornecedores(await resFornecedores.json());
       }
     } catch (err) {
       console.error("Erro ao carregar dados:", err);
@@ -148,6 +184,12 @@ export function SaidasScreen() {
 
     try {
       setSubmitting(true);
+
+      // Auto-save do fornecedor (sem bloquear o submit)
+      if (fornecedorInput.trim()) {
+        handleFornecedorBlur(fornecedorInput);
+      }
+
       const res = await fetch("/api/saidas", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -158,6 +200,7 @@ export function SaidasScreen() {
           formaPagamento: formaPagamentoInput,
           status: statusInput,
           fornecedor: fornecedorInput,
+          taxaMes: taxaMesInput ? parseFloat(taxaMesInput) / 100 : null,
           dataVencimento: parseDateInputToISO(dataVencimentoInput),
           dataSaida: new Date(dataSaidaInput).toISOString(),
         }),
@@ -176,6 +219,7 @@ export function SaidasScreen() {
         setValorInput("");
         setDescricaoInput("");
         setFornecedorInput("");
+        setTaxaMesInput("");
         setDataVencimentoInput("");
         setStatusInput("pago");
       } else {
@@ -913,18 +957,69 @@ export function SaidasScreen() {
                 </div>
 
                 {/* Fornecedor / Credor */}
-                <div className="md:col-span-3">
+                <div className={isFornecedorCredito ? "md:col-span-2" : "md:col-span-3"}>
                   <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-zinc-600 dark:text-zinc-400">
                     Fornecedor / Credor
+                    {isFornecedorCredito && (
+                      <span className="ml-2 inline-flex items-center gap-0.5 rounded bg-violet-100 px-1.5 py-0.5 text-[10px] font-bold text-violet-700 dark:bg-violet-950/60 dark:text-violet-300">
+                        <CreditCard className="h-2.5 w-2.5" /> Crédito
+                      </span>
+                    )}
                   </label>
                   <input
                     type="text"
-                    placeholder="Ex.: Distribuidora X, Proprietário..."
+                    list="fornecedores-list"
+                    placeholder="Ex.: Gold Floripa, MercadoPago..."
                     value={fornecedorInput}
-                    onChange={(e) => setFornecedorInput(e.target.value)}
-                    className="block w-full rounded-xl border border-zinc-300 bg-white px-3.5 py-2.5 text-sm font-medium text-zinc-900 placeholder-zinc-400 focus:border-rose-500 focus:outline-none focus:ring-2 focus:ring-rose-500/20 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:placeholder-zinc-600"
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setFornecedorInput(val);
+                      // Ao selecionar um fornecedor de crédito, pre-preenche categoria e taxa
+                      const match = fornecedores.find(
+                        (f) => f.nome.toLowerCase() === val.trim().toLowerCase()
+                      );
+                      if (match?.tipo === "credito") {
+                        if (match.categoria) setCategoriaInput(match.categoria);
+                        if (match.taxaMes != null) setTaxaMesInput(String((match.taxaMes * 100).toFixed(4)));
+                      }
+                    }}
+                    onBlur={(e) => handleFornecedorBlur(e.target.value)}
+                    className={`block w-full rounded-xl border px-3.5 py-2.5 text-sm font-medium placeholder-zinc-400 focus:outline-none focus:ring-2 dark:bg-zinc-950 dark:text-zinc-100 dark:placeholder-zinc-600 ${
+                      isFornecedorCredito
+                        ? "border-violet-400 bg-violet-50 text-violet-900 focus:border-violet-500 focus:ring-violet-500/20 dark:border-violet-700 dark:bg-violet-950/20 dark:text-violet-100"
+                        : "border-zinc-300 bg-white text-zinc-900 focus:border-rose-500 focus:ring-rose-500/20 dark:border-zinc-700"
+                    }`}
                   />
+                  <datalist id="fornecedores-list">
+                    {fornecedores.map((f) => (
+                      <option key={f.id} value={f.nome}>
+                        {f.tipo === "credito" ? `💳 ${f.nome}` : f.nome}
+                      </option>
+                    ))}
+                  </datalist>
                 </div>
+
+                {/* Taxa ao Mês — só aparece para fornecedores de crédito */}
+                {isFornecedorCredito && (
+                  <div className="md:col-span-1">
+                    <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-violet-600 dark:text-violet-400">
+                      Taxa / Mês (%)
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        step="0.0001"
+                        min="0"
+                        placeholder="3.98"
+                        value={taxaMesInput}
+                        onChange={(e) => setTaxaMesInput(e.target.value)}
+                        className="block w-full rounded-xl border border-violet-400 bg-violet-50 py-2.5 pl-3 pr-8 text-sm font-semibold text-violet-900 focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-500/20 dark:border-violet-700 dark:bg-violet-950/20 dark:text-violet-100"
+                      />
+                      <span className="pointer-events-none absolute inset-y-0 right-2.5 flex items-center text-xs font-bold text-violet-500">%</span>
+                    </div>
+                  </div>
+                )}
+
 
                 {/* Descrição Opcional */}
                 <div className="md:col-span-3">
@@ -1926,7 +2021,8 @@ export function SaidasScreen() {
                   </label>
                   <input
                     type="text"
-                    placeholder="Ex.: Distribuidora, Posto, etc."
+                    list="fornecedores-list-edit"
+                    placeholder="Ex.: Gold Floripa, MercadoPago..."
                     value={editingSaida.fornecedor || ""}
                     onChange={(e) =>
                       setEditingSaida({
@@ -1934,8 +2030,14 @@ export function SaidasScreen() {
                         fornecedor: e.target.value,
                       })
                     }
+                    onBlur={(e) => handleFornecedorBlur(e.target.value)}
                     className="w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-700 dark:bg-zinc-950 dark:text-white"
                   />
+                  <datalist id="fornecedores-list-edit">
+                    {fornecedores.map((f) => (
+                      <option key={f.id} value={f.nome} />
+                    ))}
+                  </datalist>
                 </div>
 
                 <div>
