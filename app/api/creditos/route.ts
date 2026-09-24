@@ -51,6 +51,7 @@ export async function POST(request: NextRequest) {
       dataContratacao,
       categoria,
       descricao,
+      parcelasPagasInicial,
     } = body;
 
     const cleanFornecedor = (fornecedorNome || "").trim();
@@ -138,7 +139,9 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 2. Gerar as parcelas como Saidas (status = pendente)
+    const pagasInic = parcelasPagasInicial != null ? Math.min(nParcelas, Math.max(0, parseInt(parcelasPagasInicial))) : 0;
+
+    // 2. Gerar as parcelas como Saidas (status = pendente ou pago se for financiamento em andamento)
     for (let p = 1; p <= nParcelas; p++) {
       let dataVencimento: Date;
 
@@ -156,24 +159,39 @@ export async function POST(request: NextRequest) {
         ? `Parcela ${p}/${nParcelas} (${cleanDesc})`
         : `Parcela ${p}/${nParcelas} - ${cleanFornecedor}`;
 
+      const jaPaga = p <= pagasInic;
+      const statusParcela = jaPaga ? "pago" : "pendente";
+      const dataPagamento = jaPaga ? dataVencimento.toISOString() : null;
+
       await query(
         `INSERT INTO public."Saida" (
           valor, categoria, descricao, "formaPagamento", status,
-          "dataVencimento", fornecedor, "creditoId", "numeroParcela", "dataSaida"
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+          "dataVencimento", "dataPagamento", fornecedor, "creditoId", "numeroParcela", "dataSaida"
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
         [
           vParcela,
           cleanCat,
           descParcela,
           "Pix",
-          "pendente",
+          statusParcela,
           dataVencimento.toISOString(),
+          dataPagamento,
           cleanFornecedor,
           creditoRow.id,
           p,
           dataVencimento.toISOString(),
         ]
       );
+    }
+
+    if (pagasInic > 0) {
+      const novoStatus = pagasInic >= nParcelas ? "quitado" : "ativo";
+      await query(
+        `UPDATE public."Credito" SET "parcelasPagas" = $1, status = $2 WHERE id = $3`,
+        [pagasInic, novoStatus, creditoRow.id]
+      );
+      creditoRow.parcelasPagas = pagasInic;
+      creditoRow.status = novoStatus;
     }
 
     return NextResponse.json(sanitizeData(creditoRow), { status: 201 });

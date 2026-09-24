@@ -105,6 +105,7 @@ export function SaidasScreen() {
   const [creditoTaxaMes, setCreditoTaxaMes] = useState("");
   const [creditoNumParcelas, setCreditoNumParcelas] = useState("12");
   const [creditoValorParcela, setCreditoValorParcela] = useState("");
+  const [creditoParcelasPagas, setCreditoParcelasPagas] = useState("0");
   const [creditoTipoVenc, setCreditoTipoVenc] = useState<"dia-fixo" | "d+n">("dia-fixo");
   const [creditoDiaVenc, setCreditoDiaVenc] = useState("10");
   const [creditoDiasApos, setCreditoDiasApos] = useState("30");
@@ -144,7 +145,8 @@ export function SaidasScreen() {
       // silencioso — não bloqueia o usuário
     }
   };
-  // Cálculo automático da parcela (PMT Price) mantendo editável
+
+  // Cálculo da parcela estimada pelo PMT (Price)
   const calcularParcelaEstimada = (valor: string, taxa: string, parcelas: string) => {
     const pv = parseMoney(valor) || 0;
     const n = parseInt(parcelas) || 1;
@@ -153,6 +155,20 @@ export function SaidasScreen() {
     if (i <= 0) return (pv / n).toFixed(2);
     const pmt = (pv * (i * Math.pow(1 + i, n))) / (Math.pow(1 + i, n) - 1);
     return pmt.toFixed(2);
+  };
+
+  // Regra de 3: calcula a taxa % ao mês baseando-se no acréscimo total do valor pago
+  // Total Pago = n * valorParcela. Acréscimo = (Total Pago - pv). Taxa mensal proporcional = (Acréscimo / pv) / n * 100
+  const calcularTaxaPorRegraDeTres = (valor: string, parcela: string, parcelas: string) => {
+    const pv = parseMoney(valor) || 0;
+    const pmt = parseFloat(parcela) || 0;
+    const n = parseInt(parcelas) || 1;
+    if (pv <= 0 || pmt <= 0 || n <= 0) return "";
+    const totalPago = pmt * n;
+    const acrescimo = totalPago - pv;
+    if (acrescimo <= 0) return "0.00";
+    const taxaProporcionalMes = ((acrescimo / pv) / n) * 100;
+    return taxaProporcionalMes.toFixed(2);
   };
 
   const handleOpenCreditoDetalhe = async (id: string) => {
@@ -198,6 +214,7 @@ export function SaidasScreen() {
           diasApos: creditoTipoVenc === "d+n" ? parseInt(creditoDiasApos) : null,
           dataContratacao: creditoDataContratacao,
           descricao: creditoDescricao.trim(),
+          parcelasPagasInicial: parseInt(creditoParcelasPagas) || 0,
         }),
       });
 
@@ -210,6 +227,7 @@ export function SaidasScreen() {
         setCreditoTaxaMes("");
         setCreditoNumParcelas("12");
         setCreditoValorParcela("");
+        setCreditoParcelasPagas("0");
         setCreditoDescricao("");
       } else {
         const err = await res.json();
@@ -2609,9 +2627,60 @@ export function SaidasScreen() {
                     step="0.01"
                     placeholder="Auto ou informe"
                     value={creditoValorParcela}
-                    onChange={(e) => setCreditoValorParcela(e.target.value)}
+                    onChange={(e) => {
+                      const pVal = e.target.value;
+                      setCreditoValorParcela(pVal);
+                      // Se o usuário digitou a parcela manualmente, oferece cálculo da taxa por regra de três
+                      if (pVal && creditoValorOriginal) {
+                        const tCalc = calcularTaxaPorRegraDeTres(creditoValorOriginal, pVal, creditoNumParcelas);
+                        if (tCalc) setCreditoTaxaMes(tCalc);
+                      }
+                    }}
                     className="w-full rounded-xl border border-emerald-300 bg-emerald-50/40 px-3.5 py-2 text-sm font-black text-emerald-900 dark:border-emerald-700 dark:bg-zinc-950 dark:text-emerald-300"
                   />
+                </div>
+              </div>
+
+              {/* Botão de Atalho para Regra de 3 */}
+              {creditoValorOriginal && creditoValorParcela && (
+                <div className="flex items-center justify-between rounded-xl border border-violet-200 bg-violet-50/40 px-3 py-2 text-xs dark:border-violet-950 dark:bg-violet-950/20">
+                  <div className="text-zinc-600 dark:text-zinc-300">
+                    Total a pagar: <strong>{formatBRL(Number(creditoValorParcela) * (parseInt(creditoNumParcelas) || 1))}</strong>
+                    {" "}(Juros totais: {formatBRL(Math.max(0, (Number(creditoValorParcela) * (parseInt(creditoNumParcelas) || 1)) - (parseMoney(creditoValorOriginal) || 0)))})
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const t = calcularTaxaPorRegraDeTres(creditoValorOriginal, creditoValorParcela, creditoNumParcelas);
+                      if (t) setCreditoTaxaMes(t);
+                    }}
+                    className="rounded-lg bg-violet-600 px-2.5 py-1 text-[11px] font-bold text-white hover:bg-violet-500 shadow-sm"
+                  >
+                    Calcular Taxa p/ Regra de 3
+                  </button>
+                </div>
+              )}
+
+              {/* Financiamento Já em Andamento */}
+              <div className="rounded-xl border border-amber-200 bg-amber-50/40 p-3 dark:border-amber-950 dark:bg-amber-950/20">
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-bold uppercase tracking-wider text-amber-800 dark:text-amber-300">
+                    Já começou a pagar? (Em andamento)
+                  </label>
+                  <span className="text-[10px] text-amber-700 font-semibold">Ex: moto, carro</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min="0"
+                    max={creditoNumParcelas || "120"}
+                    value={creditoParcelasPagas}
+                    onChange={(e) => setCreditoParcelasPagas(e.target.value)}
+                    className="w-24 rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-bold text-amber-950 dark:border-amber-700 dark:bg-zinc-950 dark:text-amber-100"
+                  />
+                  <span className="text-xs text-amber-800 dark:text-amber-400">
+                    parcelas já pagas (essas entram como quitadas automaticamente)
+                  </span>
                 </div>
               </div>
 
