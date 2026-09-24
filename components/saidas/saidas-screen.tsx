@@ -106,6 +106,7 @@ export function SaidasScreen() {
   const [creditoNumParcelas, setCreditoNumParcelas] = useState("12");
   const [creditoValorParcela, setCreditoValorParcela] = useState("");
   const [creditoParcelasPagas, setCreditoParcelasPagas] = useState("0");
+  const [creditoCategoria, setCreditoCategoria] = useState("Crédito/Empréstimo");
   const [creditoTipoVenc, setCreditoTipoVenc] = useState<"dia-fixo" | "d+n">("dia-fixo");
   const [creditoDiaVenc, setCreditoDiaVenc] = useState("10");
   const [creditoDiasApos, setCreditoDiasApos] = useState("30");
@@ -213,6 +214,7 @@ export function SaidasScreen() {
           diaVencimento: creditoTipoVenc === "dia-fixo" ? parseInt(creditoDiaVenc) : null,
           diasApos: creditoTipoVenc === "d+n" ? parseInt(creditoDiasApos) : null,
           dataContratacao: creditoDataContratacao,
+          categoria: creditoCategoria || "Crédito/Empréstimo",
           descricao: creditoDescricao.trim(),
           parcelasPagasInicial: parseInt(creditoParcelasPagas) || 0,
         }),
@@ -228,6 +230,7 @@ export function SaidasScreen() {
         setCreditoNumParcelas("12");
         setCreditoValorParcela("");
         setCreditoParcelasPagas("0");
+        setCreditoCategoria("Crédito/Empréstimo");
         setCreditoDescricao("");
       } else {
         const err = await res.json();
@@ -1084,6 +1087,8 @@ export function SaidasScreen() {
                 setCreditoTaxaMes("");
                 setCreditoNumParcelas("12");
                 setCreditoValorParcela("");
+                setCreditoParcelasPagas("0");
+                setCreditoCategoria("Crédito/Empréstimo");
                 setCreditoDescricao("");
                 setModalCredito(true);
               }}
@@ -1146,6 +1151,7 @@ export function SaidasScreen() {
                   <thead>
                     <tr className="border-b border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-800/60 text-zinc-600 dark:text-zinc-300 font-semibold uppercase tracking-wider">
                       <th className="py-3 px-4">Fornecedor / Credor</th>
+                      <th className="py-3 px-4">Categoria</th>
                       <th className="py-3 px-4">Valor Original</th>
                       <th className="py-3 px-4">Taxa / Mês</th>
                       <th className="py-3 px-4">Parcelas</th>
@@ -1159,6 +1165,7 @@ export function SaidasScreen() {
                     {creditos.map((c) => {
                       const progresso = Math.min(100, Math.round(((c.parcelasPagas || 0) / c.numParcelas) * 100));
                       const isQuitado = c.status === "quitado" || c.parcelasPagas >= c.numParcelas;
+                      const catInfo = getCategoriaInfo(c.categoria || "Crédito/Empréstimo");
                       return (
                         <tr
                           key={c.id}
@@ -1172,6 +1179,12 @@ export function SaidasScreen() {
                                 <p className="text-[11px] font-normal text-zinc-500">{c.descricao}</p>
                               )}
                             </div>
+                          </td>
+                          <td className="py-3.5 px-4 whitespace-nowrap">
+                            <span className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-bold ${catInfo.bg} ${catInfo.text}`}>
+                              <span>{catInfo.icone}</span>
+                              <span>{c.categoria || "Crédito"}</span>
+                            </span>
                           </td>
                           <td className="py-3.5 px-4 font-mono font-bold text-zinc-900 dark:text-white">
                             {formatBRL(c.valorOriginal)}
@@ -2539,6 +2552,9 @@ export function SaidasScreen() {
                       (f) => f.nome.toLowerCase() === val.trim().toLowerCase()
                     );
                     if (match) {
+                      if (match.categoria) {
+                        setCreditoCategoria(match.categoria);
+                      }
                       if (match.taxaMes != null) {
                         const tStr = String((match.taxaMes * 100).toFixed(2));
                         setCreditoTaxaMes(tStr);
@@ -2559,6 +2575,33 @@ export function SaidasScreen() {
                     </option>
                   ))}
                 </datalist>
+              </div>
+
+              {/* Categoria do Crédito */}
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-zinc-600 dark:text-zinc-400 mb-1.5">
+                  Categoria da Despesa: <span className="text-zinc-900 dark:text-white font-black">{creditoCategoria}</span>
+                </label>
+                <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto p-1 rounded-xl border border-zinc-100 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-950/40">
+                  {CATEGORIAS_PADRAO.map((cat) => {
+                    const isSelected = creditoCategoria === cat.id;
+                    return (
+                      <button
+                        key={cat.id}
+                        type="button"
+                        onClick={() => setCreditoCategoria(cat.id)}
+                        className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-semibold transition-all ${
+                          isSelected
+                            ? "bg-zinc-900 text-white shadow-sm dark:bg-white dark:text-zinc-900 ring-2 ring-zinc-900 dark:ring-white"
+                            : "border border-zinc-200/80 bg-white text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                        }`}
+                      >
+                        <span>{cat.icone}</span>
+                        <span>{cat.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
