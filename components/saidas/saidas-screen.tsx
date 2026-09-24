@@ -626,11 +626,13 @@ export function SaidasScreen() {
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
     let cutoffDate: Date | null = null;
+    let maxDate: Date | null = null;
     let isYesterday = false;
     let endOfYesterday: Date | null = null;
 
     if (dateFilter === "today") {
       cutoffDate = startOfToday;
+      maxDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
     } else if (dateFilter === "yesterday") {
       isYesterday = true;
       cutoffDate = new Date(startOfToday);
@@ -638,7 +640,9 @@ export function SaidasScreen() {
       endOfYesterday = new Date(cutoffDate);
       endOfYesterday.setDate(endOfYesterday.getDate() + 1);
     } else if (dateFilter === "month") {
-      cutoffDate = new Date(now.getFullYear(), now.getMonth(), 1);
+      // Dia 1 ao último dia do mês corrente
+      cutoffDate = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+      maxDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
     } else if (dateFilter === "7d") {
       cutoffDate = new Date(startOfToday);
       cutoffDate.setDate(cutoffDate.getDate() - 7);
@@ -648,13 +652,19 @@ export function SaidasScreen() {
     }
 
     const result = saidas.filter((s) => {
-      // Filtro de data
+      // Filtro de data:
+      // Se for "Contas a Pagar", a referência principal de data deve ser o VENCIMENTO (s.dataVencimento || s.dataSaida)
+      // Se for "Todas as Saídas", a referência é a data do pagamento/registro (s.dataSaida)
+      const dateToCompare = activeTab === "contas-a-pagar"
+        ? (s.dataVencimento ? new Date(s.dataVencimento) : new Date(s.dataSaida))
+        : new Date(s.dataSaida);
+
       if (cutoffDate) {
-        const sDate = new Date(s.dataSaida);
         if (isYesterday && endOfYesterday) {
-          if (sDate < cutoffDate || sDate >= endOfYesterday) return false;
+          if (dateToCompare < cutoffDate || dateToCompare >= endOfYesterday) return false;
         } else {
-          if (sDate < cutoffDate) return false;
+          if (dateToCompare < cutoffDate) return false;
+          if (maxDate && dateToCompare > maxDate) return false;
         }
       }
 
@@ -1579,7 +1589,9 @@ export function SaidasScreen() {
                     onClick={() => setDateFilter(value)}
                     className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
                       dateFilter === value
-                        ? "bg-rose-600 text-white shadow dark:bg-rose-500"
+                        ? activeTab === "contas-a-pagar"
+                          ? "bg-amber-500 text-white shadow shadow-amber-500/20"
+                          : "bg-rose-600 text-white shadow dark:bg-rose-500"
                         : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
                     }`}
                   >
