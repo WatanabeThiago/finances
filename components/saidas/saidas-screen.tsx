@@ -2602,7 +2602,6 @@ export function SaidasScreen() {
                   <input
                     type="number"
                     min="1"
-                    max="120"
                     required
                     value={creditoNumParcelas}
                     onChange={(e) => {
@@ -2667,13 +2666,13 @@ export function SaidasScreen() {
                   <label className="block text-xs font-bold uppercase tracking-wider text-amber-800 dark:text-amber-300">
                     Já começou a pagar? (Em andamento)
                   </label>
-                  <span className="text-[10px] text-amber-700 font-semibold">Ex: moto, carro</span>
+                  <span className="text-[10px] text-amber-700 font-semibold">Ex: moto, carro, imóvel</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <input
                     type="number"
                     min="0"
-                    max={creditoNumParcelas || "120"}
+                    max={creditoNumParcelas || undefined}
                     value={creditoParcelasPagas}
                     onChange={(e) => setCreditoParcelasPagas(e.target.value)}
                     className="w-24 rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-bold text-amber-950 dark:border-amber-700 dark:bg-zinc-950 dark:text-amber-100"
