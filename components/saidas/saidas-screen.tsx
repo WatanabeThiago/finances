@@ -43,7 +43,7 @@ import {
 import { SkeletonList } from "@/components/ui/skeleton";
 import { useEffect, useMemo, useState } from "react";
 
-type DateFilterType = "today" | "yesterday" | "7d" | "month" | "30d" | "all";
+type DateFilterType = "today" | "yesterday" | "7d" | "month" | "last_month" | "30d" | "all";
 type TabType = "saidas" | "contas-a-pagar" | "contas-fixas" | "creditos";
 
 export function SaidasScreen() {
@@ -646,6 +646,10 @@ export function SaidasScreen() {
       // Dia 1 ao último dia do mês corrente
       cutoffDate = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
       maxDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+    } else if (dateFilter === "last_month") {
+      // Dia 1 ao último dia do mês anterior
+      cutoffDate = new Date(now.getFullYear(), now.getMonth() - 1, 1, 0, 0, 0, 0);
+      maxDate = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
     } else if (dateFilter === "7d") {
       cutoffDate = new Date(startOfToday);
       cutoffDate.setDate(cutoffDate.getDate() - 7);
@@ -1593,6 +1597,7 @@ export function SaidasScreen() {
                     ["yesterday", "Ontem"],
                     ["7d", "7 dias"],
                     ["month", "Este Mês"],
+                    ["last_month", "Mês Passado"],
                     ["30d", "30 dias"],
                     ["all", "Todas"],
                   ] as const

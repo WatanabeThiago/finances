@@ -40,7 +40,7 @@ async function runMigrations() {
 
     for (const file of files) {
       const filePath = path.join(migrationsDir, file);
-      const sql = fs.readFileSync(filePath, 'utf-8');
+      const sql = fs.readFileSync(filePath, 'utf-8').replace(/^\uFEFF/, '');
 
       console.log(`\n⏳ Executando: ${file}`);
       try {

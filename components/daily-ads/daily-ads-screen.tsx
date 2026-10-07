@@ -337,7 +337,7 @@ export function DailyAdsScreen() {
   const [actionError, setActionError] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("date");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
-  const [dateFilter, setDateFilter] = useState<"this_month" | "all">("this_month");
+  const [dateFilter, setDateFilter] = useState<"this_month" | "last_month" | "all">("this_month");
   const [expandedRecordId, setExpandedRecordId] = useState<string | null>(null);
 
   const salesMetricsByDate = useMemo(() => {
@@ -419,12 +419,26 @@ export function DailyAdsScreen() {
     if (dateFilter === "all") return records;
 
     const now = new Date();
-    const currentMonth = now.getMonth();
-    const currentYear = now.getFullYear();
+    const [, currentMonthStr, currentYearStr] = campoGrandeDateFormatter
+      .format(now)
+      .split("/")
+      .map(Number);
+    const currentMonth = currentMonthStr - 1;
+    const currentYear = currentYearStr;
+
+    let targetMonth = currentMonth;
+    let targetYear = currentYear;
+
+    if (dateFilter === "last_month") {
+      targetMonth = currentMonth === 0 ? 11 : currentMonth - 1;
+      targetYear = currentMonth === 0 ? currentYear - 1 : currentYear;
+    }
 
     return records.filter((record) => {
-      const [day, month, year] = record.date.split("/").map(Number);
-      return month - 1 === currentMonth && year === currentYear;
+      const parts = record.date.split("/").map(Number);
+      if (parts.length < 3) return false;
+      const [, month, year] = parts;
+      return month - 1 === targetMonth && year === targetYear;
     });
   }, [records, dateFilter]);
 
@@ -758,7 +772,7 @@ export function DailyAdsScreen() {
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
             <select
               value={dateFilter}
-              onChange={(e) => setDateFilter(e.target.value as "this_month" | "all")}
+              onChange={(e) => setDateFilter(e.target.value as "this_month" | "last_month" | "all")}
               className="min-h-11 cursor-pointer appearance-none rounded-xl border border-zinc-200 bg-white px-4 pr-10 text-sm font-semibold text-zinc-700 outline-none transition hover:bg-zinc-50 focus:border-blue-500 focus:ring-3 focus:ring-blue-500/15 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-200 dark:hover:bg-zinc-900"
               style={{
                 backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke-width='2' stroke='currentColor' class='size-6'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M8.25 15 12 18.75 15.75 15m-7.5-6L12 5.25 15.75 9' /%3E%3C/svg%3E")`,
@@ -768,6 +782,7 @@ export function DailyAdsScreen() {
               }}
             >
               <option value="this_month">Esse mês</option>
+              <option value="last_month">Último mês</option>
               <option value="all">Todo o período</option>
             </select>
             

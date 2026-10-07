@@ -232,7 +232,7 @@ export async function GET(request: NextRequest) {
     let comissaoBrutaTotal = 0;
     let comissaoRecebidaMes = 0;
     let comissaoPendenteMes = 0;
-    const totalVendasCount = vendasRows.length;
+    let totalVendasCount = vendasRows.length;
 
     vendasRows.forEach((v: VendaQueryRow) => {
       const comissaoVal = typeof v.comissao === "string" ? parseFloat(v.comissao) : (v.comissao || 0);
@@ -254,6 +254,35 @@ export async function GET(request: NextRequest) {
       }
       faturamentoBrutoTotal += subtotalVenda;
     });
+
+    // Fallback: incluir faturamento e comissão de DailyAdsManual para dias sem VendaLg individual
+    const datesWithVendas = new Set(
+      vendasRows.map((v: VendaQueryRow) => {
+        const rawDate = v.dataVenda || v.createdAt;
+        if (!rawDate) return "";
+        const d = new Date(rawDate);
+        return `${String(d.getUTCDate()).padStart(2, "0")}/${String(d.getUTCMonth() + 1).padStart(2, "0")}/${d.getUTCFullYear()}`;
+      })
+    );
+
+    let fallbackRevenue = 0;
+    let fallbackCommission = 0;
+    let fallbackClients = 0;
+
+    adsDoMes.forEach((ad: AdsQueryRow) => {
+      if (datesWithVendas.has(ad.date)) return;
+      const rev = typeof ad.revenue === "string" ? parseFloat(ad.revenue) : (ad.revenue || 0);
+      const com = typeof ad.commission === "string" ? parseFloat(ad.commission) : (ad.commission ?? rev ?? 0);
+      const cli = typeof ad.clients === "string" ? parseInt(ad.clients, 10) : (ad.clients || 0);
+      fallbackRevenue += rev;
+      fallbackCommission += com;
+      fallbackClients += cli;
+    });
+
+    faturamentoBrutoTotal += fallbackRevenue;
+    comissaoBrutaTotal += fallbackCommission;
+    comissaoRecebidaMes += fallbackCommission;
+    totalVendasCount += fallbackClients;
 
     const repasseParceiros = Math.max(0, faturamentoBrutoTotal - comissaoBrutaTotal);
     const ticketMedioTransacionado = totalVendasCount > 0 ? faturamentoBrutoTotal / totalVendasCount : 0;
