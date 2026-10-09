@@ -57,6 +57,22 @@ export async function POST(request: Request) {
       ADD COLUMN IF NOT EXISTS telefone VARCHAR(30)
     `);
 
+    // Adicionar ab_variant nas tabelas de tracking se não existir
+    await query(`
+      ALTER TABLE public."Tracking" 
+      ADD COLUMN IF NOT EXISTS ab_variant VARCHAR(50) NULL;
+    `);
+
+    await query(`
+      ALTER TABLE public."TrackingSession" 
+      ADD COLUMN IF NOT EXISTS ab_variant VARCHAR(50) NULL;
+    `);
+
+    await query(`
+      CREATE INDEX IF NOT EXISTS idx_tracking_ab_variant 
+      ON public."Tracking"(ab_variant, event);
+    `);
+
     return Response.json(
       {
         success: true,

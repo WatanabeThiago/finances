@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import type { TrackingEvent } from "@/lib/tracking";
 import { formatTelefone } from "@/lib/phone";
@@ -41,6 +42,7 @@ export function TrackingScreen() {
   const [syncing, setSyncing] = useState(false);
   const [dateFilter, setDateFilter] = useState<"today" | "yesterday" | "7days" | "30days" | "thisMonth" | "all">("today");
   const [campaignFilter, setCampaignFilter] = useState<string>("all");
+  const [abVariantFilter, setAbVariantFilter] = useState<string>("all");
   const [ignoreBots, setIgnoreBots] = useState(true);
   const [syncResult, setSyncResult] = useState<{ matched: number; details: { visitor_id: string; phone: string; diff_seconds: number }[] } | null>(null);
   const [templates, setTemplates] = useState<{ id: string; text: string; active: boolean }[]>([]);
@@ -412,6 +414,10 @@ export function TrackingScreen() {
       if (e.is_bot && !e.gclid && !e.fbclid && !e.msclkid) return false;
       if (ignoreBots && !e.gclid && !e.fbclid && !e.msclkid) return false;
       if (campaignFilter !== "all" && e.gad_campaignid !== campaignFilter) return false;
+      if (abVariantFilter !== "all") {
+        if (abVariantFilter === "none" && e.ab_variant) return false;
+        if (abVariantFilter !== "none" && e.ab_variant !== abVariantFilter) return false;
+      }
       if (dateFilter === "all") return true;
       const eventDateSp = spDate(new Date(e.created_at));
       if (dateFilter === "today") return eventDateSp === todaySp;
@@ -421,7 +427,7 @@ export function TrackingScreen() {
       if (dateFilter === "thisMonth") return eventDateSp.startsWith(thisMonthPrefix);
       return true;
     });
-  }, [events, dateFilter, ignoreBots, campaignFilter]);
+  }, [events, dateFilter, ignoreBots, campaignFilter, abVariantFilter]);
 
   // Agrupar por visitor_id e manter ordenação por data
   const groupedVisitors = useMemo(() => {
@@ -622,6 +628,85 @@ export function TrackingScreen() {
       .map(([kw, v]) => ({ kw, ...v, rate: v.total > 0 ? Math.round((v.converted / v.total) * 100) : 0 }))
       .sort((a, b) => b.rate - a.rate || b.total - a.total);
 
+    // Métricas A/B Test (hero_v1_a vs hero_v1_b)
+    const abMap: Record<string, {
+      variant: string;
+      pageViews: number;
+      visitors: Set<string>;
+      whatsappVisitors: Set<string>;
+      callVisitors: Set<string>;
+      totalConvertedVisitors: Set<string>;
+    }> = {};
+
+    groupedVisitors.forEach(([vId, evList]) => {
+      const first = evList[0];
+      if (!inDateRange(first?.session_created_at)) return;
+      // Determina a variante da sessão ou do primeiro evento que contém a variante
+      const variant = evList.find((e) => e.ab_variant)?.ab_variant || first?.ab_variant || null;
+      if (!variant) return;
+
+      if (!abMap[variant]) {
+        abMap[variant] = {
+          variant,
+          pageViews: 0,
+          visitors: new Set(),
+          whatsappVisitors: new Set(),
+          callVisitors: new Set(),
+          totalConvertedVisitors: new Set(),
+        };
+      }
+
+      abMap[variant].visitors.add(vId);
+
+      const hasPageView = evList.some((e) => e.event === "page_view");
+      if (hasPageView) {
+        abMap[variant].pageViews += evList.filter((e) => e.event === "page_view").length;
+      }
+
+      const hasWhatsapp = evList.some((e) =>
+        e.event === "whatsapp_click" ||
+        e.event === "click" ||
+        e.event === "automotive_whatsapp_click" ||
+        e.event === "board_repair_whatsapp_click"
+      );
+      if (hasWhatsapp) {
+        abMap[variant].whatsappVisitors.add(vId);
+        abMap[variant].totalConvertedVisitors.add(vId);
+      }
+
+      const hasCall = evList.some((e) =>
+        e.event === "call_click" ||
+        e.event === "call" ||
+        e.event === "automotive_call_click" ||
+        e.event === "board_repair_call_click"
+      );
+      if (hasCall) {
+        abMap[variant].callVisitors.add(vId);
+        abMap[variant].totalConvertedVisitors.add(vId);
+      }
+    });
+
+    const abVariantsList = Object.values(abMap).map((item) => {
+      const uniqueCount = item.visitors.size;
+      const waCount = item.whatsappVisitors.size;
+      const callCount = item.callVisitors.size;
+      const totalConv = item.totalConvertedVisitors.size;
+
+      const crWhatsapp = uniqueCount > 0 ? (waCount / uniqueCount) * 100 : 0;
+      const crTotal = uniqueCount > 0 ? (totalConv / uniqueCount) * 100 : 0;
+
+      return {
+        variant: item.variant,
+        visitors: uniqueCount,
+        pageViews: item.pageViews,
+        whatsappConversions: waCount,
+        callConversions: callCount,
+        totalConversions: totalConv,
+        crWhatsappPct: Number(crWhatsapp.toFixed(2)),
+        crTotalPct: Number(crTotal.toFixed(2)),
+      };
+    }).sort((a, b) => a.variant.localeCompare(b.variant));
+
     return {
       avgConverted: avg(converted),
       avgNotConverted: avg(notConverted),
@@ -633,6 +718,7 @@ export function TrackingScreen() {
       deviceMap,
       matchMap,
       networkMap,
+      abVariantsList,
       fmtTime,
     };
   }, [groupedVisitors, dateFilter]);
@@ -685,13 +771,29 @@ export function TrackingScreen() {
 
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-5 pb-28">
-      <div>
-        <h1 className="text-4xl font-bold text-zinc-900 dark:text-white">
-          📊 Tracking de Visitantes
-        </h1>
-        <p className="mt-2 text-zinc-600 dark:text-zinc-400">
-          Análise de dados da landing page (apenas visitantes reais, bots excluídos)
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-4xl font-bold text-zinc-900 dark:text-white">
+            📊 Tracking de Visitantes
+          </h1>
+          <p className="mt-2 text-zinc-600 dark:text-zinc-400">
+            Análise de dados da landing page (apenas visitantes reais, bots excluídos)
+          </p>
+        </div>
+
+        {/* Sub-navegação para a tela de A/B */}
+        <div className="flex items-center gap-2">
+          <Link
+            href="/tracking/ab-test"
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold bg-gradient-to-r from-emerald-600 to-indigo-600 text-white hover:from-emerald-500 hover:to-indigo-500 shadow-sm transition-all hover:scale-[1.02]"
+          >
+            <span>🧪</span>
+            <span>Comparativo Teste A/B</span>
+            <span className="text-xs bg-white/20 px-1.5 py-0.5 rounded-full font-mono">
+              Novo
+            </span>
+          </Link>
+        </div>
       </div>
 
       {/* Date Filters */}
@@ -740,6 +842,41 @@ export function TrackingScreen() {
             {name}
           </button>
         ))}
+      </div>
+
+      {/* A/B Variant Filters */}
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-xs text-zinc-500 dark:text-zinc-400 font-medium">🧪 Teste A/B:</span>
+        <button
+          onClick={() => setAbVariantFilter("all")}
+          className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors border ${
+            abVariantFilter === "all"
+              ? "bg-indigo-600 text-white border-indigo-600 dark:bg-indigo-500 dark:border-indigo-500"
+              : "bg-white text-zinc-600 border-zinc-300 hover:border-zinc-400 dark:bg-zinc-900 dark:text-zinc-400 dark:border-zinc-700 dark:hover:border-zinc-500"
+          }`}
+        >
+          Todas
+        </button>
+        <button
+          onClick={() => setAbVariantFilter("hero_v1_a")}
+          className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors border ${
+            abVariantFilter === "hero_v1_a"
+              ? "bg-indigo-600 text-white border-indigo-600 dark:bg-indigo-500 dark:border-indigo-500"
+              : "bg-white text-zinc-600 border-zinc-300 hover:border-zinc-400 dark:bg-zinc-900 dark:text-zinc-400 dark:border-zinc-700 dark:hover:border-zinc-500"
+          }`}
+        >
+          Hero A (Controle)
+        </button>
+        <button
+          onClick={() => setAbVariantFilter("hero_v1_b")}
+          className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors border ${
+            abVariantFilter === "hero_v1_b"
+              ? "bg-indigo-600 text-white border-indigo-600 dark:bg-indigo-500 dark:border-indigo-500"
+              : "bg-white text-zinc-600 border-zinc-300 hover:border-zinc-400 dark:bg-zinc-900 dark:text-zinc-400 dark:border-zinc-700 dark:hover:border-zinc-500"
+          }`}
+        >
+          Hero B (Otimizada)
+        </button>
       </div>
 
       {/* Ignore Bots Toggle */}
@@ -960,7 +1097,98 @@ export function TrackingScreen() {
       {/* Reports */}
       {groupedVisitors.length > 0 && (
         <div className="space-y-4">
-          <h2 className="text-lg font-semibold text-zinc-900 dark:text-white">📈 Relatórios</h2>
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-zinc-900 dark:text-white">📈 Relatórios</h2>
+          </div>
+
+          {/* Teste A/B Hero Comparison Panel */}
+          {reports.abVariantsList.length > 0 && (
+            <div className="rounded-xl border border-indigo-200 dark:border-indigo-800/60 bg-gradient-to-br from-indigo-50/40 via-white to-purple-50/30 dark:from-indigo-950/20 dark:via-zinc-950 dark:to-purple-950/20 p-5 shadow-sm">
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+                <div>
+                  <h3 className="text-base font-bold text-zinc-900 dark:text-white flex items-center gap-2">
+                    <span>🧪</span> Desempenho do Teste A/B (Hero)
+                  </h3>
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+                    Comparação de conversão entre variantes da dobra principal do site
+                  </p>
+                </div>
+                <span className="text-xs font-mono px-2.5 py-1 rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300">
+                  {reports.abVariantsList.length} variante(s) ativa(s)
+                </span>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-indigo-100 dark:border-zinc-800 text-left text-xs font-medium text-zinc-500 dark:text-zinc-400">
+                      <th className="py-2.5 px-3">Variante</th>
+                      <th className="py-2.5 px-3 text-center">Visitantes Únicos</th>
+                      <th className="py-2.5 px-3 text-center">Page Views</th>
+                      <th className="py-2.5 px-3 text-center">WhatsApp (Cliques)</th>
+                      <th className="py-2.5 px-3 text-center">Ligações (Cliques)</th>
+                      <th className="py-2.5 px-3 text-center font-semibold text-green-700 dark:text-green-400">CR WhatsApp %</th>
+                      <th className="py-2.5 px-3 text-center font-bold text-indigo-700 dark:text-indigo-400">CR Total %</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800/80">
+                    {reports.abVariantsList.map((row) => {
+                      const isB = row.variant === "hero_v1_b";
+                      const isA = row.variant === "hero_v1_a";
+                      const variantName = isB
+                        ? "Variante B (Otimizada)"
+                        : isA
+                        ? "Variante A (Controle)"
+                        : row.variant;
+
+                      return (
+                        <tr key={row.variant} className="hover:bg-indigo-50/30 dark:hover:bg-indigo-950/10 transition-colors">
+                          <td className="py-3 px-3">
+                            <div className="flex items-center gap-2">
+                              <span className={`inline-block px-2.5 py-1 rounded-md text-xs font-semibold ${
+                                isB
+                                  ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700"
+                                  : isA
+                                  ? "bg-zinc-100 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700"
+                                  : "bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300"
+                              }`}>
+                                {row.variant}
+                              </span>
+                              <span className="text-xs text-zinc-600 dark:text-zinc-400">
+                                {variantName}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="py-3 px-3 text-center font-medium text-zinc-800 dark:text-zinc-200">
+                            {row.visitors}
+                          </td>
+                          <td className="py-3 px-3 text-center text-zinc-600 dark:text-zinc-400">
+                            {row.pageViews}
+                          </td>
+                          <td className="py-3 px-3 text-center text-zinc-800 dark:text-zinc-200">
+                            {row.whatsappConversions}
+                          </td>
+                          <td className="py-3 px-3 text-center text-zinc-800 dark:text-zinc-200">
+                            {row.callConversions}
+                          </td>
+                          <td className="py-3 px-3 text-center">
+                            <span className="inline-block px-2.5 py-0.5 rounded-full text-xs font-bold bg-green-100 text-green-800 dark:bg-green-950/60 dark:text-green-300">
+                              {row.crWhatsappPct}%
+                            </span>
+                          </td>
+                          <td className="py-3 px-3 text-center">
+                            <span className="inline-block px-2.5 py-0.5 rounded-full text-xs font-black bg-indigo-100 text-indigo-800 dark:bg-indigo-950/60 dark:text-indigo-300">
+                              {row.crTotalPct}%
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
 
           {/* Time cards */}
           <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
@@ -1131,6 +1359,9 @@ export function TrackingScreen() {
                 <th className="px-4 py-3 text-left font-semibold text-white whitespace-nowrap">
                   Eventos
                 </th>
+                <th className="px-4 py-3 text-center font-semibold text-white whitespace-nowrap">
+                  🧪 Teste A/B
+                </th>
                 <th className="px-4 py-3 text-left font-semibold text-white whitespace-nowrap">
                   🔍 Keyword
                 </th>
@@ -1228,6 +1459,28 @@ export function TrackingScreen() {
                         <span className="inline-block bg-sky-100 dark:bg-sky-900/30 text-sky-900 dark:text-sky-200 px-2 py-1 rounded text-xs font-medium">
                           {eventList.length}
                         </span>
+                      </td>
+                      <td className="px-4 py-3 text-center whitespace-nowrap text-xs">
+                        {(() => {
+                          const v = eventList.find((e) => e.ab_variant)?.ab_variant || firstEvent?.ab_variant;
+                          if (!v) return <span className="text-zinc-400">—</span>;
+                          const isB = v === "hero_v1_b";
+                          const isA = v === "hero_v1_a";
+                          return (
+                            <span
+                              className={`inline-block px-2 py-0.5 rounded text-[11px] font-semibold ${
+                                isB
+                                  ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700"
+                                  : isA
+                                  ? "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700"
+                                  : "bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300"
+                              }`}
+                              title={isB ? "Hero B: WhatsApp dominante" : isA ? "Hero A: Controle" : v}
+                            >
+                              {v}
+                            </span>
+                          );
+                        })()}
                       </td>
                       <td className="px-4 py-3 text-zinc-900 dark:text-zinc-100 whitespace-nowrap text-xs font-semibold">
                         {firstEvent?.keyword ? (
@@ -1473,6 +1726,11 @@ export function TrackingScreen() {
                                               {event.event}
                                             </span>
                                           </div>
+                                          {event.ab_variant && (
+                                            <span className="text-xs px-1.5 py-0.5 rounded font-mono font-bold bg-indigo-100 text-indigo-700 dark:bg-indigo-900/60 dark:text-indigo-300">
+                                              🧪 {event.ab_variant}
+                                            </span>
+                                          )}
                                           <span className="text-xs px-1.5 py-0.5 rounded bg-zinc-200 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-300">
                                             #{idx + 1}
                                           </span>

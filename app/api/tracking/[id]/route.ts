@@ -36,6 +36,7 @@ export async function PATCH(
       "matchtype",
       "network",
       "group",
+      "ab_variant",
     ];
 
     const fieldMapping: Record<string, string> = {
@@ -57,6 +58,7 @@ export async function PATCH(
       matchtype: "matchtype",
       network: "network",
       group: '"group"',
+      ab_variant: "ab_variant",
     };
 
     const updateClauses: string[] = [];
@@ -108,6 +110,7 @@ export async function PATCH(
          matchtype,
          network,
          "group",
+         ab_variant,
          "createdAt" as created_at,
          "updatedAt" as updated_at`,
       params

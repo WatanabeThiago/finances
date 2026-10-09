@@ -62,7 +62,8 @@ Campos Obrigatorios:
 - visitor_id (string UUID) - ID unico do visitante
 - user_agent (string) - User agent do navegador/dispositivo
 
-Campos Opcionais (UTM Parameters):
+Campos Opcionais (UTM Parameters & A/B Testing):
+- ab_variant (string) - Variante do teste A/B (ex: "hero_v1_a", "hero_v1_b")
 - utm_source (string) - Fonte do trafego (google, facebook, instagram, etc)
 - utm_medium (string) - Meio (cpc, social, email, organic)
 - utm_campaign (string) - Nome da campanha

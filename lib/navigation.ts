@@ -96,6 +96,7 @@ export function titleForPathname(pathname: string): string {
   if (pathname === "/locations") return "Mapa de Calor";
   if (pathname === "/search-terms") return "Termos de Busca";
   if (pathname === "/vendas-lg/nova") return "Nova Venda";
+  if (pathname === "/tracking/ab-test") return "Teste A/B";
 
   const ordered = [...NAV_ITEMS].sort((a, b) => b.href.length - a.href.length);
   for (const item of ordered) {

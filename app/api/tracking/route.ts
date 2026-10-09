@@ -38,6 +38,7 @@ export async function GET() {
         s.matchtype,
         s.network,
         s."group",
+        COALESCE(t.ab_variant, s.ab_variant) as ab_variant,
         to_char(s."createdAt" AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as session_created_at,
         to_char(s."updatedAt" AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as session_updated_at
        FROM public."Tracking" t
@@ -63,6 +64,7 @@ export async function POST(request: Request) {
       event,
       visitor_id,
       user_agent,
+      ab_variant = null,
       // Parâmetros de sessão
       phone = null,
       utm_source = null,
@@ -100,7 +102,9 @@ export async function POST(request: Request) {
     const is_bot = isBot(user_agent) && !gclid && !fbclid && !msclkid;
 
     // UPSERT na sessão do visitante
-    await query(
+    // Se a sessão já possui ab_variant e o evento não enviou, mantém o anterior.
+    // Se o evento enviou ab_variant, atualiza ou inicializa a sessão com ela.
+    const sessionResult = await query(
       `INSERT INTO public."TrackingSession" (
         "visitorId",
         phone,
@@ -119,8 +123,9 @@ export async function POST(request: Request) {
         device,
         matchtype,
         network,
-        "group"
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+        "group",
+        ab_variant
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
       ON CONFLICT ("visitorId") DO UPDATE SET
         phone = COALESCE(EXCLUDED.phone, public."TrackingSession".phone),
         "utmSource" = COALESCE(EXCLUDED."utmSource", public."TrackingSession"."utmSource"),
@@ -139,7 +144,9 @@ export async function POST(request: Request) {
         matchtype = COALESCE(EXCLUDED.matchtype, public."TrackingSession".matchtype),
         network = COALESCE(EXCLUDED.network, public."TrackingSession".network),
         "group" = COALESCE(EXCLUDED."group", public."TrackingSession"."group"),
-        "updatedAt" = CURRENT_TIMESTAMP`,
+        ab_variant = COALESCE(EXCLUDED.ab_variant, public."TrackingSession".ab_variant),
+        "updatedAt" = CURRENT_TIMESTAMP
+      RETURNING ab_variant`,
       [
         visitor_id,
         effectivePhone,
@@ -159,8 +166,12 @@ export async function POST(request: Request) {
         matchtype,
         network,
         group,
+        ab_variant,
       ]
     );
+
+    // Variante efetiva herdada da sessão se o evento não enviou diretamente
+    const effectiveVariant = ab_variant || sessionResult[0]?.ab_variant || null;
 
     // Inserir evento (createdAt gerado automaticamente pelo banco)
     const result = await query(
@@ -168,16 +179,18 @@ export async function POST(request: Request) {
         event,
         "visitorId",
         "userAgent",
-        "isBot"
-      ) VALUES ($1, $2, $3, $4)
+        "isBot",
+        ab_variant
+      ) VALUES ($1, $2, $3, $4, $5)
       RETURNING 
         id,
         to_char("createdAt" AT TIME ZONE 'America/Sao_Paulo', 'YYYY-MM-DD HH24:MI:SS') as created_at,
         event,
         "visitorId" as visitor_id,
         "userAgent" as user_agent,
-        "isBot" as is_bot`,
-      [event, visitor_id, user_agent, is_bot]
+        "isBot" as is_bot,
+        ab_variant`,
+      [event, visitor_id, user_agent, is_bot, effectiveVariant]
     );
 
     const trackingEvent = result[0];

@@ -271,6 +271,7 @@ export async function initializeDatabase() {
         matchtype TEXT,
         network TEXT,
         "group" TEXT,
+        ab_variant VARCHAR(50),
         "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         "updatedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )`
@@ -283,8 +284,19 @@ export async function initializeDatabase() {
         event TEXT NOT NULL,
         "visitorId" TEXT NOT NULL,
         "userAgent" TEXT NOT NULL,
-        "isBot" BOOLEAN DEFAULT false
+        "isBot" BOOLEAN DEFAULT false,
+        ab_variant VARCHAR(50)
       )`
+    );
+
+    await query(
+      `ALTER TABLE public."Tracking"
+       ADD COLUMN IF NOT EXISTS ab_variant VARCHAR(50)`
+    );
+
+    await query(
+      `CREATE INDEX IF NOT EXISTS idx_tracking_ab_variant 
+       ON public."Tracking"(ab_variant, event)`
     );
 
     await query(
@@ -306,7 +318,8 @@ export async function initializeDatabase() {
        ADD COLUMN IF NOT EXISTS device TEXT,
        ADD COLUMN IF NOT EXISTS matchtype TEXT,
        ADD COLUMN IF NOT EXISTS network TEXT,
-       ADD COLUMN IF NOT EXISTS "group" TEXT`
+       ADD COLUMN IF NOT EXISTS "group" TEXT,
+       ADD COLUMN IF NOT EXISTS ab_variant VARCHAR(50)`
     );
 
     await query(
