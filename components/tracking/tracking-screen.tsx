@@ -358,6 +358,34 @@ export function TrackingScreen() {
     }
   };
 
+  const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null);
+
+  const handleDeleteSession = async (visitorId: string) => {
+    if (!confirm(`Tem certeza que deseja excluir todos os dados da sessão ${visitorId.slice(0, 8)}...? Esta ação não pode ser desfeita.`)) {
+      return;
+    }
+
+    setDeletingSessionId(visitorId);
+    try {
+      const res = await fetch(`/api/tracking/${visitorId}`, {
+        method: "DELETE",
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || "Erro ao excluir sessão");
+      }
+
+      // Remover os eventos localmente
+      setEvents((prev) => prev.filter((e) => e.visitor_id !== visitorId));
+    } catch (err: any) {
+      console.error("Erro ao excluir sessão:", err);
+      alert(err.message || "Erro ao excluir sessão");
+    } finally {
+      setDeletingSessionId(null);
+    }
+  };
+
   const toggleExpanded = (visitorId: string) => {
     const newExpanded = new Set(expandedVisitors);
     if (newExpanded.has(visitorId)) {
@@ -1413,6 +1441,9 @@ export function TrackingScreen() {
                 <th className="px-4 py-3 text-left font-semibold text-white whitespace-nowrap">
                   Visitor ID
                 </th>
+                <th className="px-4 py-3 text-center font-semibold text-white whitespace-nowrap">
+                  Ações
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
@@ -1638,6 +1669,24 @@ export function TrackingScreen() {
                       </td>
                       <td className="px-4 py-3 font-mono text-xs text-zinc-600 dark:text-zinc-400 whitespace-nowrap">
                         {visitorId.slice(0, 8)}...{visitorId.slice(-4)}
+                      </td>
+                      <td className="px-4 py-3 text-center whitespace-nowrap">
+                        <button
+                          onClick={() => handleDeleteSession(visitorId)}
+                          disabled={deletingSessionId === visitorId}
+                          title="Excluir sessão e todos os seus eventos"
+                          className="p-1.5 text-zinc-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 rounded-lg transition-colors disabled:opacity-40"
+                        >
+                          {deletingSessionId === visitorId ? (
+                            <svg className="w-4 h-4 animate-spin text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                            </svg>
+                          ) : (
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          )}
+                        </button>
                       </td>
                     </tr>
                     {analysisCache[visitorId] && analysisCache[visitorId] !== "loading" && (

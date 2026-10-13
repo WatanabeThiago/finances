@@ -14,12 +14,14 @@ import {
   Cell,
   Legend,
 } from "recharts";
+import { Trash2 } from "lucide-react";
 import type { TrackingEvent } from "@/lib/tracking";
 
 interface AbTestComparisonScreenProps {
   events: TrackingEvent[];
   loading: boolean;
   onRefresh: () => Promise<void>;
+  onEventsChange?: (updater: (prev: TrackingEvent[]) => TrackingEvent[]) => void;
 }
 
 const COLORS = {
@@ -31,19 +33,22 @@ export function AbTestComparisonScreen({
   events,
   loading,
   onRefresh,
+  onEventsChange,
 }: AbTestComparisonScreenProps) {
   const [dateFilter, setDateFilter] = useState<
     "today" | "yesterday" | "7days" | "30days" | "thisMonth" | "all"
   >("all");
   const [campaignFilter, setCampaignFilter] = useState<string>("all");
   const [selectedVariantModal, setSelectedVariantModal] = useState<string | null>(null);
+  const [deletingVisitorId, setDeletingVisitorId] = useState<string | null>(null);
+  const [copiedMd, setCopiedMd] = useState(false);
 
   const CAMPAIGN_NAMES: Record<string, string> = {
     "23799903003": "Campo Grande",
     "23740263027": "Lead Gen SC",
   };
 
-  // Filtrar eventos reais
+  // Filtrar apenas sessões de TRÁFEGO PAGO legítimo (gclid, fbclid, msclkid) e sem bots
   const filteredEvents = useMemo(() => {
     const spDate = (d: Date) =>
       new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(d);
@@ -55,10 +60,17 @@ export function AbTestComparisonScreen({
     const thisMonthPrefix = todaySp.substring(0, 7);
 
     return events.filter((e) => {
-      // Ignorar bots nos testes A/B
-      if (e.is_bot && !e.gclid && !e.fbclid && !e.msclkid) return false;
+      // 1. Somente tráfego pago (cliques de anúncios com ID de clique de Google, Facebook ou Microsoft)
+      const isPaidTraffic = Boolean(e.gclid || e.fbclid || e.msclkid);
+      if (!isPaidTraffic) return false;
+
+      // 2. Nunca considerar bots
+      if (e.is_bot) return false;
+
+      // 3. Filtro de campanha
       if (campaignFilter !== "all" && e.gad_campaignid !== campaignFilter) return false;
 
+      // 4. Filtro de data
       if (dateFilter === "all") return true;
       const eventDateSp = spDate(new Date(e.created_at));
       if (dateFilter === "today") return eventDateSp === todaySp;
@@ -334,6 +346,132 @@ export function AbTestComparisonScreen({
     { name: "Variante B", value: varB.totalVisitors, color: COLORS.hero_v1_b },
   ];
 
+  const handleDeleteSession = async (visitorId: string) => {
+    if (!confirm(`Tem certeza que deseja excluir todos os dados da sessão ${visitorId.slice(0, 8)}...? Esta ação não pode ser desfeita.`)) {
+      return;
+    }
+
+    setDeletingVisitorId(visitorId);
+    try {
+      const res = await fetch(`/api/tracking/${visitorId}`, {
+        method: "DELETE",
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || "Erro ao excluir sessão");
+      }
+
+      if (onEventsChange) {
+        onEventsChange((prev) => prev.filter((e) => e.visitor_id !== visitorId));
+      } else {
+        await onRefresh();
+      }
+    } catch (err: any) {
+      console.error("Erro ao excluir sessão:", err);
+      alert(err.message || "Erro ao excluir sessão");
+    } finally {
+      setDeletingVisitorId(null);
+    }
+  };
+
+  const handleExportMarkdown = () => {
+    const periodLabel = {
+      today: "Hoje",
+      yesterday: "Ontem",
+      "7days": "Últimos 7 dias",
+      "30days": "Últimos 30 dias",
+      thisMonth: "Este Mês",
+      all: "Todo o Período",
+    }[dateFilter];
+
+    const campaignLabel = campaignFilter === "all" ? "Todas as Campanhas" : (CAMPAIGN_NAMES[campaignFilter] || campaignFilter);
+
+    const nowStr = new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
+
+    const md = `# Relatório de Análise de Teste A/B — Hero (Dobra Principal)
+> Gerado em: ${nowStr}
+> Filtro de Período: ${periodLabel} | Campanha: ${campaignLabel}
+> Tráfego analisado: Exclusivamente Tráfego Pago (Google Ads / Facebook Ads com GCLID/FBCLID/MSCLKID) | Bots 100% excluídos
+
+---
+
+## 1. Visão Geral Executiva
+- **Amostra Total Testada**: ${totalSample} visitantes únicos qualificados de tráfego pago
+- **Variante A (Controle - Original)**: ${varA.totalVisitors} visitantes (${totalSample > 0 ? Math.round((varA.totalVisitors / totalSample) * 100) : 0}% do tráfego)
+- **Variante B (Otimizada - WhatsApp Dominante)**: ${varB.totalVisitors} visitantes (${totalSample > 0 ? Math.round((varB.totalVisitors / totalSample) * 100) : 0}% do tráfego)
+- **Uplift na Taxa de WhatsApp (B vs A)**: ${upliftWa > 0 ? `+${upliftWa}%` : `${upliftWa}%`}
+- **Uplift na Conversão Global (B vs A)**: ${upliftTotal > 0 ? `+${upliftTotal}%` : `${upliftTotal}%`}
+
+---
+
+## 2. Comparativo Detalhado de Métricas de Conversão
+
+| Métrica | Variante A (Controle) | Variante B (Otimizada) | Diferença Absoluta | Uplift Relativo |
+|---|---|---|---|---|
+| **Layout / Hipótese** | Badge genérico, CTA padrão | WhatsApp dominante ("Chamar no WhatsApp") | — | — |
+| **Visitantes Únicos** | ${varA.totalVisitors} | ${varB.totalVisitors} | ${varB.totalVisitors - varA.totalVisitors} | — |
+| **Page Views** | ${varA.pageViews} | ${varB.pageViews} | ${varB.pageViews - varA.pageViews} | — |
+| **Cliques WhatsApp** | ${varA.waCount} | ${varB.waCount} | ${varB.waCount - varA.waCount} | ${upliftWa > 0 ? `+${upliftWa}%` : `${upliftWa}%`} |
+| **Taxa WhatsApp (CR %)** | **${varA.crWa}%** | **${varB.crWa}%** | ${(varB.crWa - varA.crWa).toFixed(2)} p.p. | ${upliftWa > 0 ? `+${upliftWa}%` : `${upliftWa}%`} |
+| **Cliques Ligação** | ${varA.callCount} | ${varB.callCount} | ${varB.callCount - varA.callCount} | — |
+| **Taxa Ligação (CR %)** | **${varA.crCall}%** | **${varB.crCall}%** | ${(varB.crCall - varA.crCall).toFixed(2)} p.p. | — |
+| **Contatos Totais (Wa + Call)**| ${varA.anyCount} | ${varB.anyCount} | ${varB.anyCount - varA.anyCount} | ${upliftTotal > 0 ? `+${upliftTotal}%` : `${upliftTotal}%`} |
+| **Taxa Global (CR %)** | **${varA.crTotal}%** | **${varB.crTotal}%** | ${(varB.crTotal - varA.crTotal).toFixed(2)} p.p. | ${upliftTotal > 0 ? `+${upliftTotal}%` : `${upliftTotal}%`} |
+| **Profundidade Scroll Média** | ${varA.avgScroll}% | ${varB.avgScroll}% | ${(varB.avgScroll - varA.avgScroll).toFixed(0)} p.p. | — |
+| **Tempo Médio na Página** | ${varA.avgTime}s | ${varB.avgTime}s | ${varB.avgTime - varA.avgTime}s | — |
+
+---
+
+## 3. Dispositivos e Palavras-Chave
+
+### Distribuição por Dispositivo
+- **Variante A**: ${Object.entries(varA.devices).map(([k, v]) => `${k}: ${v}`).join(", ") || "Sem dados"}
+- **Variante B**: ${Object.entries(varB.devices).map(([k, v]) => `${k}: ${v}`).join(", ") || "Sem dados"}
+
+### Principais Palavras-Chave Buscadas
+- **Variante A**: ${Object.entries(varA.keywords).slice(0, 5).map(([k, v]) => `"${k}" (${v})`).join(", ") || "Sem dados"}
+- **Variante B**: ${Object.entries(varB.keywords).slice(0, 5).map(([k, v]) => `"${k}" (${v})`).join(", ") || "Sem dados"}
+
+---
+
+## 4. Amostra das Últimas Sessões Auditadas
+
+| Data/Hora | Variante | Visitor ID | Keyword | Eventos | Converteu WA | Converteu Ligação | Telefone |
+|---|---|---|---|---|---|---|---|
+${[...varA.sessions.map(s => ({ ...s, variant: "hero_v1_a" })), ...varB.sessions.map(s => ({ ...s, variant: "hero_v1_b" }))]
+  .sort((a, b) => new Date(b.firstSeen).getTime() - new Date(a.firstSeen).getTime())
+  .slice(0, 30)
+  .map(s => `| ${s.firstSeen ? new Date(s.firstSeen).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" }) : "—"} | ${s.variant} | \`${s.visitor_id.slice(0, 8)}...\` | ${s.keyword || "—"} | ${s.eventsCount} | ${s.convertedWa ? "Sim" : "Não"} | ${s.convertedCall ? "Sim" : "Não"} | ${s.phone || "—"} |`)
+  .join("\n")}
+
+---
+
+## 5. Instruções para o Especialista em CRO / Análise por IA
+1. Avalie a significância estatística com base no tamanho da amostra (${totalSample} visitantes).
+2. Compare a taxa de conversão direta em WhatsApp (canal preferencial) contra canibalização de ligações.
+3. Observe se o tempo de tela e scroll indicam tomada de decisão rápida na Variante B.
+4. Conclua com uma recomendação clara: Manter teste rodando, declarar Variante Vencedora (A ou B), ou sugerir iteração na cópia/CTA.
+`;
+
+    // Download do arquivo .md
+    const blob = new Blob([md], { type: "text/markdown;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `relatorio-teste-ab-hero-${new Date().toISOString().slice(0, 10)}.md`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    // Também copia para a área de transferência para colar direto no chat
+    navigator.clipboard.writeText(md).then(() => {
+      setCopiedMd(true);
+      setTimeout(() => setCopiedMd(false), 2500);
+    }).catch(() => {});
+  };
+
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 pb-28">
       {/* Top Header */}
@@ -346,18 +484,27 @@ export function AbTestComparisonScreen({
                 Teste A/B: Dobra Principal (Hero)
               </h1>
               <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1">
-                Comparativo estatístico de conversão e comportamento dos visitantes
+                Comparativo estatístico de conversão e comportamento dos visitantes (Apenas tráfego pago)
               </p>
             </div>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={handleExportMarkdown}
+            disabled={totalSample === 0}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg bg-indigo-600 text-white hover:bg-indigo-500 transition-colors shadow-sm disabled:opacity-50"
+            title="Exportar arquivo .md formatado para análise com IA"
+          >
+            <span>📝</span>
+            <span>{copiedMd ? "Baixado & Copiado!" : "Exportar Relatório p/ IA (.md)"}</span>
+          </button>
           <Link
             href="/tracking"
             className="px-4 py-2 text-sm font-medium rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors"
           >
-            ← Voltar para Tracking Geral
+            ← Tracking Geral
           </Link>
           <button
             onClick={onRefresh}
@@ -800,6 +947,7 @@ export function AbTestComparisonScreen({
                 <th className="py-2.5 px-4 text-center">Converteu WhatsApp</th>
                 <th className="py-2.5 px-4 text-center">Converteu Ligação</th>
                 <th className="py-2.5 px-4">Telefone</th>
+                <th className="py-2.5 px-4 text-center">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
@@ -821,7 +969,7 @@ export function AbTestComparisonScreen({
                 if (list.length === 0) {
                   return (
                     <tr>
-                      <td colSpan={8} className="py-8 text-center text-zinc-400 text-xs">
+                      <td colSpan={9} className="py-8 text-center text-zinc-400 text-xs">
                         Nenhuma sessão com variante A/B registrada no filtro atual.
                       </td>
                     </tr>
@@ -882,6 +1030,20 @@ export function AbTestComparisonScreen({
                     </td>
                     <td className="py-2.5 px-4 font-mono text-xs text-zinc-600 dark:text-zinc-300 whitespace-nowrap">
                       {sess.phone || "—"}
+                    </td>
+                    <td className="py-2.5 px-4 text-center whitespace-nowrap">
+                      <button
+                        onClick={() => handleDeleteSession(sess.visitor_id)}
+                        disabled={deletingVisitorId === sess.visitor_id}
+                        title="Excluir esta sessão e seus eventos"
+                        className="inline-flex items-center justify-center p-1.5 rounded-lg text-rose-500 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors disabled:opacity-50"
+                      >
+                        {deletingVisitorId === sess.visitor_id ? (
+                          <div className="w-3.5 h-3.5 border-2 border-rose-500 border-t-transparent rounded-full animate-spin" />
+                        ) : (
+                          <Trash2 className="w-3.5 h-3.5" />
+                        )}
+                      </button>
                     </td>
                   </tr>
                 ));

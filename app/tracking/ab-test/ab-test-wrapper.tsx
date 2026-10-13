@@ -52,6 +52,7 @@ export function AbTestPageWrapper() {
         events={events}
         loading={loading}
         onRefresh={fetchEvents}
+        onEventsChange={setEvents}
       />
     </div>
   );

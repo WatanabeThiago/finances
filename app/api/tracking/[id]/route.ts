@@ -134,9 +134,61 @@ export async function PATCH(
   }
 }
 
+export async function DELETE(
+  request: NextRequest,
+  context: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await context.params;
+
+    if (!id) {
+      return Response.json(
+        { error: "ID da sessão é obrigatório" },
+        { status: 400, headers: corsHeaders }
+      );
+    }
+
+    // Deletar todos os eventos vinculados ao visitorId (ou id da sessão)
+    await query(
+      `DELETE FROM public."Tracking" 
+       WHERE "visitorId" = $1 OR "visitorId" IN (
+         SELECT "visitorId" FROM public."TrackingSession" WHERE id = $1
+       )`,
+      [id]
+    );
+
+    // Deletar a sessão vinculada
+    const res = await query(
+      `DELETE FROM public."TrackingSession" 
+       WHERE "visitorId" = $1 OR id = $1 
+       RETURNING "visitorId"`,
+      [id]
+    );
+
+    return Response.json(
+      {
+        success: true,
+        deleted: true,
+        visitorId: id,
+        sessionDeleted: res.length > 0,
+      },
+      { headers: corsHeaders }
+    );
+  } catch (error) {
+    console.error("Erro ao excluir sessão:", error);
+    return Response.json(
+      { error: "Falha ao excluir sessão" },
+      { status: 500, headers: corsHeaders }
+    );
+  }
+}
+
 export async function OPTIONS() {
   return new Response(null, {
     status: 200,
-    headers: corsHeaders,
+    headers: {
+      ...corsHeaders,
+      "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS",
+    },
   });
 }
