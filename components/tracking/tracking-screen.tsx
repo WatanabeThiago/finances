@@ -1479,11 +1479,33 @@ export function TrackingScreen() {
                         </td>
                       <td className="px-4 py-3 text-zinc-900 dark:text-zinc-100 whitespace-nowrap text-xs">
                         {(() => {
-                          const updated = firstEvent?.session_updated_at;
-                          const oldestEvent = eventList[eventList.length - 1];
-                          const start = oldestEvent?.created_at;
-                          if (!start || !updated) return <span className="text-zinc-400">—</span>;
-                          const secs = Math.floor((new Date(updated).getTime() - new Date(start).getTime()) / 1000);
+                          const asc = [...eventList].sort(
+                            (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+                          );
+                          const firstEv = asc[0];
+                          if (!firstEv) return <span className="text-zinc-400">—</span>;
+
+                          const firstCtaEv = asc.find((e) =>
+                            e.event === "whatsapp_click" ||
+                            e.event === "click" ||
+                            e.event === "automotive_whatsapp_click" ||
+                            e.event === "board_repair_whatsapp_click" ||
+                            e.event === "call_click" ||
+                            e.event === "call" ||
+                            e.event === "automotive_call_click" ||
+                            e.event === "board_repair_call_click"
+                          );
+
+                          let secs: number;
+                          if (firstCtaEv) {
+                            secs = Math.floor((new Date(firstCtaEv.created_at).getTime() - new Date(firstEv.created_at).getTime()) / 1000);
+                          } else {
+                            const lastEv = asc[asc.length - 1];
+                            const updated = firstEvent?.session_updated_at;
+                            const endTime = updated ? new Date(updated).getTime() : new Date(lastEv.created_at).getTime();
+                            secs = Math.floor((endTime - new Date(firstEv.created_at).getTime()) / 1000);
+                          }
+
                           if (secs < 0 || secs > 3600) return <span className="text-zinc-400">—</span>;
                           if (secs < 60) return <span>{secs}s</span>;
                           const m = Math.floor(secs / 60), s = secs % 60;

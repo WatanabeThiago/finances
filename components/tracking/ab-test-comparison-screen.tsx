@@ -217,16 +217,46 @@ export function AbTestComparisonScreen({
       const maxScroll = depths.find((d) => evList.some((e) => e.event === `scroll_${d}`)) || 0;
       target.scrollDepths.push(maxScroll);
 
-      // Tempo de sessão
-      const updated = first?.session_updated_at;
-      const oldestEvent = evList[evList.length - 1];
-      const start = oldestEvent?.created_at;
-      if (start && updated) {
-        const secs = Math.floor(
-          (new Date(updated).getTime() - new Date(start).getTime()) / 1000
-        );
-        if (secs >= 0 && secs <= 3600) {
-          target.timeSpentSeconds.push(secs);
+      // Tempo de sessão / Tempo até a Conversão (CTA)
+      // Ordena cronologicamente (mais antigo primeiro)
+      const chronologicalEvents = [...evList].sort(
+        (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+      );
+      const firstEv = chronologicalEvents[0];
+      const isConvertedSession = isWa || isCall;
+
+      if (firstEv) {
+        if (isConvertedSession) {
+          // Sessão que converteu: do primeiro evento (page_view) até o PRIMEIRO CTA (whatsapp_click, call_click, etc.)
+          const firstCtaEv = chronologicalEvents.find((e) =>
+            e.event === "whatsapp_click" ||
+            e.event === "click" ||
+            e.event === "automotive_whatsapp_click" ||
+            e.event === "board_repair_whatsapp_click" ||
+            e.event === "call_click" ||
+            e.event === "call" ||
+            e.event === "automotive_call_click" ||
+            e.event === "board_repair_call_click"
+          );
+
+          if (firstCtaEv) {
+            const secs = Math.floor(
+              (new Date(firstCtaEv.created_at).getTime() - new Date(firstEv.created_at).getTime()) / 1000
+            );
+            if (secs >= 0 && secs <= 3600) {
+              target.timeSpentSeconds.push(secs);
+            }
+          }
+        } else {
+          // Sessão que NÃO converteu: do primeiro evento até o último evento registrado na sessão
+          const lastEv = chronologicalEvents[chronologicalEvents.length - 1];
+          const updatedTime = first?.session_updated_at ? new Date(first.session_updated_at).getTime() : new Date(lastEv.created_at).getTime();
+          const secs = Math.floor(
+            (updatedTime - new Date(firstEv.created_at).getTime()) / 1000
+          );
+          if (secs >= 0 && secs <= 3600) {
+            target.timeSpentSeconds.push(secs);
+          }
         }
       }
 
@@ -421,7 +451,9 @@ export function AbTestComparisonScreen({
 | **Contatos Totais (Wa + Call)**| ${varA.anyCount} | ${varB.anyCount} | ${varB.anyCount - varA.anyCount} | ${upliftTotal > 0 ? `+${upliftTotal}%` : `${upliftTotal}%`} |
 | **Taxa Global (CR %)** | **${varA.crTotal}%** | **${varB.crTotal}%** | ${(varB.crTotal - varA.crTotal).toFixed(2)} p.p. | ${upliftTotal > 0 ? `+${upliftTotal}%` : `${upliftTotal}%`} |
 | **Profundidade Scroll Média** | ${varA.avgScroll}% | ${varB.avgScroll}% | ${(varB.avgScroll - varA.avgScroll).toFixed(0)} p.p. | — |
-| **Tempo Médio na Página** | ${varA.avgTime}s | ${varB.avgTime}s | ${varB.avgTime - varA.avgTime}s | — |
+| **Tempo Médio de Decisão** | ${varA.avgTime}s | ${varB.avgTime}s | ${varB.avgTime - varA.avgTime}s | — |
+
+> **Nota sobre o Tempo**: Para sessões que converteram, o tempo é medido estritamente desde a entrada (page_view) até o **1º clique no CTA** (WhatsApp ou Ligação). Para sessões que não converteram, é medido até o último evento registrado na página.
 
 ---
 
@@ -736,7 +768,9 @@ ${[...varA.sessions.map(s => ({ ...s, variant: "hero_v1_a" })), ...varB.sessions
               <span className="font-semibold text-zinc-900 dark:text-white">{varA.avgScroll}%</span>
             </div>
             <div className="flex justify-between py-1 text-zinc-600 dark:text-zinc-400">
-              <span>Tempo Médio na Página:</span>
+              <span title="Para sessões que converteram: tempo até o 1º clique (CTA). Para as demais: tempo até o último evento.">
+                Tempo Médio de Decisão:
+              </span>
               <span className="font-semibold text-zinc-900 dark:text-white">{varA.avgTime}s</span>
             </div>
           </div>
@@ -809,7 +843,9 @@ ${[...varA.sessions.map(s => ({ ...s, variant: "hero_v1_a" })), ...varB.sessions
               <span className="font-semibold text-zinc-900 dark:text-white">{varB.avgScroll}%</span>
             </div>
             <div className="flex justify-between py-1 text-zinc-600 dark:text-zinc-400">
-              <span>Tempo Médio na Página:</span>
+              <span title="Para sessões que converteram: tempo até o 1º clique (CTA). Para as demais: tempo até o último evento.">
+                Tempo Médio de Decisão:
+              </span>
               <span className="font-semibold text-zinc-900 dark:text-white">{varB.avgTime}s</span>
             </div>
           </div>
