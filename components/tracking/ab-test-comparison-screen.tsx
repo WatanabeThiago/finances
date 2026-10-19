@@ -122,6 +122,9 @@ export function AbTestComparisonScreen({
           convertedCall: boolean;
           keyword?: string;
           device?: string;
+          timeSeconds: number | null;
+          timeFormatted: string;
+          isOutlier?: boolean;
         }[];
       }
     > = {
@@ -225,6 +228,7 @@ export function AbTestComparisonScreen({
       const firstEv = chronologicalEvents[0];
       const isConvertedSession = isWa || isCall;
 
+      let calculatedSecs: number | null = null;
       if (firstEv) {
         if (isConvertedSession) {
           // Sessão que converteu: do primeiro evento (page_view) até o PRIMEIRO CTA (whatsapp_click, call_click, etc.)
@@ -240,22 +244,23 @@ export function AbTestComparisonScreen({
           );
 
           if (firstCtaEv) {
-            const secs = Math.floor(
+            calculatedSecs = Math.floor(
               (new Date(firstCtaEv.created_at).getTime() - new Date(firstEv.created_at).getTime()) / 1000
             );
-            if (secs >= 0 && secs <= 3600) {
-              target.timeSpentSeconds.push(secs);
-            }
           }
         } else {
           // Sessão que NÃO converteu: do primeiro evento até o último evento registrado na sessão
           const lastEv = chronologicalEvents[chronologicalEvents.length - 1];
           const updatedTime = first?.session_updated_at ? new Date(first.session_updated_at).getTime() : new Date(lastEv.created_at).getTime();
-          const secs = Math.floor(
+          calculatedSecs = Math.floor(
             (updatedTime - new Date(firstEv.created_at).getTime()) / 1000
           );
-          if (secs >= 0 && secs <= 3600) {
-            target.timeSpentSeconds.push(secs);
+        }
+
+        if (calculatedSecs !== null && calculatedSecs >= 0) {
+          // Considera para média apenas até 3600s para não explodir
+          if (calculatedSecs <= 3600) {
+            target.timeSpentSeconds.push(calculatedSecs);
           }
         }
       }
@@ -269,6 +274,18 @@ export function AbTestComparisonScreen({
         target.keywords[first.keyword] = (target.keywords[first.keyword] || 0) + 1;
       }
 
+      const formatTimeStr = (secs: number | null) => {
+        if (secs === null || secs < 0) return "—";
+        if (secs < 60) return `${secs}s`;
+        const m = Math.floor(secs / 60);
+        const s = secs % 60;
+        if (m < 60) return `${m}m ${s}s`;
+        const h = Math.floor(m / 60);
+        return `${h}h ${m % 60}m`;
+      };
+
+      const isOutlier = calculatedSecs !== null && calculatedSecs > 900; // > 15 minutos
+
       target.sessions.push({
         session_number: first?.session_number,
         visitor_id: vId,
@@ -279,6 +296,9 @@ export function AbTestComparisonScreen({
         convertedCall: isCall,
         keyword: first?.keyword,
         device: first?.device,
+        timeSeconds: calculatedSecs,
+        timeFormatted: formatTimeStr(calculatedSecs),
+        isOutlier,
       });
     });
 
@@ -298,11 +318,15 @@ export function AbTestComparisonScreen({
           )
         : 0;
 
-      const avgTime = data.timeSpentSeconds.length
+      const sortedTimes = [...data.timeSpentSeconds].sort((a, b) => a - b);
+      const avgTime = sortedTimes.length
         ? Math.round(
-            data.timeSpentSeconds.reduce((a, b) => a + b, 0) /
-              data.timeSpentSeconds.length
+            sortedTimes.reduce((a, b) => a + b, 0) / sortedTimes.length
           )
+        : 0;
+
+      const medianTime = sortedTimes.length
+        ? sortedTimes[Math.floor(sortedTimes.length / 2)]
         : 0;
 
       return {
@@ -316,6 +340,7 @@ export function AbTestComparisonScreen({
         crTotal: Number(crTotal.toFixed(2)),
         avgScroll,
         avgTime,
+        medianTime,
       };
     };
 
@@ -452,8 +477,9 @@ export function AbTestComparisonScreen({
 | **Taxa Global (CR %)** | **${varA.crTotal}%** | **${varB.crTotal}%** | ${(varB.crTotal - varA.crTotal).toFixed(2)} p.p. | ${upliftTotal > 0 ? `+${upliftTotal}%` : `${upliftTotal}%`} |
 | **Profundidade Scroll Média** | ${varA.avgScroll}% | ${varB.avgScroll}% | ${(varB.avgScroll - varA.avgScroll).toFixed(0)} p.p. | — |
 | **Tempo Médio de Decisão** | ${varA.avgTime}s | ${varB.avgTime}s | ${varB.avgTime - varA.avgTime}s | — |
+| **Mediana de Tempo (Anti-Outlier)** | ${varA.medianTime}s | ${varB.medianTime}s | ${varB.medianTime - varA.medianTime}s | — |
 
-> **Nota sobre o Tempo**: Para sessões que converteram, o tempo é medido estritamente desde a entrada (page_view) até o **1º clique no CTA** (WhatsApp ou Ligação). Para sessões que não converteram, é medido até o último evento registrado na página.
+> **Nota sobre o Tempo**: Para sessões que converteram, o tempo é medido estritamente desde a entrada (page_view) até o **1º clique no CTA** (WhatsApp ou Ligação). Para sessões que não converteram, é medido até o último evento registrado na página. Sessões com tempo > 15m são sinalizadas com ⚠️ (Outlier - aba deixada aberta).
 
 ---
 
@@ -469,14 +495,13 @@ export function AbTestComparisonScreen({
 
 ---
 
-## 4. Amostra das Últimas Sessões Auditadas
+## 4. Auditoria Individual de Sessões (Todos os Tempos)
 
-| # Sessão | Data/Hora | Variante | Visitor ID | Keyword | Eventos | Converteu WA | Converteu Ligação | Telefone |
-|---|---|---|---|---|---|---|---|---|
+| # Sessão | Data/Hora | Variante | Tempo Registrado | Outlier? | Visitor ID | Keyword | Eventos | Converteu WA | Converteu Ligação | Telefone |
+|---|---|---|---|---|---|---|---|---|---|---|
 ${[...varA.sessions.map(s => ({ ...s, variant: "hero_v1_a" })), ...varB.sessions.map(s => ({ ...s, variant: "hero_v1_b" }))]
   .sort((a, b) => new Date(b.firstSeen).getTime() - new Date(a.firstSeen).getTime())
-  .slice(0, 30)
-  .map(s => `| ${s.session_number ? `#${s.session_number}` : "—"} | ${s.firstSeen ? new Date(s.firstSeen).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" }) : "—"} | ${s.variant} | \`${s.visitor_id.slice(0, 8)}...\` | ${s.keyword || "—"} | ${s.eventsCount} | ${s.convertedWa ? "Sim" : "Não"} | ${s.convertedCall ? "Sim" : "Não"} | ${s.phone || "—"} |`)
+  .map(s => `| ${s.session_number ? `#${s.session_number}` : "—"} | ${s.firstSeen ? new Date(s.firstSeen).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" }) : "—"} | ${s.variant} | ${s.timeFormatted} | ${s.isOutlier ? "⚠️ Sim (>15m)" : "Não"} | \`${s.visitor_id.slice(0, 8)}...\` | ${s.keyword || "—"} | ${s.eventsCount} | ${s.convertedWa ? "Sim" : "Não"} | ${s.convertedCall ? "Sim" : "Não"} | ${s.phone || "—"} |`)
   .join("\n")}
 
 ---
@@ -485,7 +510,8 @@ ${[...varA.sessions.map(s => ({ ...s, variant: "hero_v1_a" })), ...varB.sessions
 1. Avalie a significância estatística com base no tamanho da amostra (${totalSample} visitantes).
 2. Compare a taxa de conversão direta em WhatsApp (canal preferencial) contra canibalização de ligações.
 3. Observe se o tempo de tela e scroll indicam tomada de decisão rápida na Variante B.
-4. Conclua com uma recomendação clara: Manter teste rodando, declarar Variante Vencedora (A ou B), ou sugerir iteração na cópia/CTA.
+4. Utilize a **Mediana de Tempo** e a coluna **Tempo Registrado** da tabela individual para desconsiderar distorções de usuários que deixaram a aba aberta por horas (outliers).
+5. Conclua com uma recomendação clara: Manter teste rodando, declarar Variante Vencedora (A ou B), ou sugerir iteração na cópia/CTA.
 `;
 
     // Download do arquivo .md
@@ -773,6 +799,12 @@ ${[...varA.sessions.map(s => ({ ...s, variant: "hero_v1_a" })), ...varB.sessions
               </span>
               <span className="font-semibold text-zinc-900 dark:text-white">{varA.avgTime}s</span>
             </div>
+            <div className="flex justify-between py-1 text-zinc-600 dark:text-zinc-400">
+              <span title="Mediana estatística: imune a sessões que deixaram a página aberta por horas (outliers).">
+                Mediana de Tempo:
+              </span>
+              <span className="font-semibold text-indigo-600 dark:text-indigo-400">{varA.medianTime}s</span>
+            </div>
           </div>
         </div>
 
@@ -847,6 +879,12 @@ ${[...varA.sessions.map(s => ({ ...s, variant: "hero_v1_a" })), ...varB.sessions
                 Tempo Médio de Decisão:
               </span>
               <span className="font-semibold text-zinc-900 dark:text-white">{varB.avgTime}s</span>
+            </div>
+            <div className="flex justify-between py-1 text-zinc-600 dark:text-zinc-400">
+              <span title="Mediana estatística: imune a sessões que deixaram a página aberta por horas (outliers).">
+                Mediana de Tempo:
+              </span>
+              <span className="font-semibold text-indigo-600 dark:text-indigo-400">{varB.medianTime}s</span>
             </div>
           </div>
         </div>
@@ -980,6 +1018,7 @@ ${[...varA.sessions.map(s => ({ ...s, variant: "hero_v1_a" })), ...varB.sessions
                 <th className="py-2.5 px-4"># Sessão</th>
                 <th className="py-2.5 px-4">Data/Hora</th>
                 <th className="py-2.5 px-4">Variante</th>
+                <th className="py-2.5 px-4">⏱️ Tempo</th>
                 <th className="py-2.5 px-4">Visitor ID</th>
                 <th className="py-2.5 px-4">Keyword</th>
                 <th className="py-2.5 px-4 text-center">Eventos</th>
@@ -1008,7 +1047,7 @@ ${[...varA.sessions.map(s => ({ ...s, variant: "hero_v1_a" })), ...varB.sessions
                 if (list.length === 0) {
                   return (
                     <tr>
-                      <td colSpan={10} className="py-8 text-center text-zinc-400 text-xs">
+                      <td colSpan={11} className="py-8 text-center text-zinc-400 text-xs">
                         Nenhuma sessão com variante A/B registrada no filtro atual.
                       </td>
                     </tr>
@@ -1039,6 +1078,25 @@ ${[...varA.sessions.map(s => ({ ...s, variant: "hero_v1_a" })), ...varB.sessions
                         }`}
                       >
                         {sess.variant}
+                      </span>
+                    </td>
+                    <td className="py-2.5 px-4 text-xs font-mono whitespace-nowrap">
+                      <span
+                        className={`inline-flex items-center gap-1 font-medium ${
+                          sess.isOutlier
+                            ? "text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-1.5 py-0.5 rounded"
+                            : "text-zinc-700 dark:text-zinc-300"
+                        }`}
+                        title={
+                          sess.isOutlier
+                            ? "Tempo muito longo (>15m). Aba provavelmente esquecida aberta."
+                            : (sess.convertedWa || sess.convertedCall)
+                            ? "Tempo até o 1º CTA"
+                            : "Tempo até o último evento"
+                        }
+                      >
+                        {sess.timeFormatted}
+                        {sess.isOutlier && <span className="text-[10px]" title="Outlier">⚠️</span>}
                       </span>
                     </td>
                     <td className="py-2.5 px-4 font-mono text-xs text-zinc-500 whitespace-nowrap">
