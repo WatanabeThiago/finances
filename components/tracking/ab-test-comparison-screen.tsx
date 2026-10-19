@@ -113,6 +113,7 @@ export function AbTestComparisonScreen({
         devices: Record<string, number>;
         keywords: Record<string, number>;
         sessions: {
+          session_number?: number | string | null;
           visitor_id: string;
           firstSeen: string;
           eventsCount: number;
@@ -239,6 +240,7 @@ export function AbTestComparisonScreen({
       }
 
       target.sessions.push({
+        session_number: first?.session_number,
         visitor_id: vId,
         firstSeen: first?.created_at || "",
         eventsCount: evList.length,
@@ -437,12 +439,12 @@ export function AbTestComparisonScreen({
 
 ## 4. Amostra das Últimas Sessões Auditadas
 
-| Data/Hora | Variante | Visitor ID | Keyword | Eventos | Converteu WA | Converteu Ligação | Telefone |
-|---|---|---|---|---|---|---|---|
+| # Sessão | Data/Hora | Variante | Visitor ID | Keyword | Eventos | Converteu WA | Converteu Ligação | Telefone |
+|---|---|---|---|---|---|---|---|---|
 ${[...varA.sessions.map(s => ({ ...s, variant: "hero_v1_a" })), ...varB.sessions.map(s => ({ ...s, variant: "hero_v1_b" }))]
   .sort((a, b) => new Date(b.firstSeen).getTime() - new Date(a.firstSeen).getTime())
   .slice(0, 30)
-  .map(s => `| ${s.firstSeen ? new Date(s.firstSeen).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" }) : "—"} | ${s.variant} | \`${s.visitor_id.slice(0, 8)}...\` | ${s.keyword || "—"} | ${s.eventsCount} | ${s.convertedWa ? "Sim" : "Não"} | ${s.convertedCall ? "Sim" : "Não"} | ${s.phone || "—"} |`)
+  .map(s => `| ${s.session_number ? `#${s.session_number}` : "—"} | ${s.firstSeen ? new Date(s.firstSeen).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" }) : "—"} | ${s.variant} | \`${s.visitor_id.slice(0, 8)}...\` | ${s.keyword || "—"} | ${s.eventsCount} | ${s.convertedWa ? "Sim" : "Não"} | ${s.convertedCall ? "Sim" : "Não"} | ${s.phone || "—"} |`)
   .join("\n")}
 
 ---
@@ -939,6 +941,7 @@ ${[...varA.sessions.map(s => ({ ...s, variant: "hero_v1_a" })), ...varB.sessions
           <table className="w-full text-sm">
             <thead className="sticky top-0 bg-zinc-50 dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800">
               <tr className="text-left text-xs font-medium text-zinc-500 dark:text-zinc-400">
+                <th className="py-2.5 px-4"># Sessão</th>
                 <th className="py-2.5 px-4">Data/Hora</th>
                 <th className="py-2.5 px-4">Variante</th>
                 <th className="py-2.5 px-4">Visitor ID</th>
@@ -969,7 +972,7 @@ ${[...varA.sessions.map(s => ({ ...s, variant: "hero_v1_a" })), ...varB.sessions
                 if (list.length === 0) {
                   return (
                     <tr>
-                      <td colSpan={9} className="py-8 text-center text-zinc-400 text-xs">
+                      <td colSpan={10} className="py-8 text-center text-zinc-400 text-xs">
                         Nenhuma sessão com variante A/B registrada no filtro atual.
                       </td>
                     </tr>
@@ -981,6 +984,9 @@ ${[...varA.sessions.map(s => ({ ...s, variant: "hero_v1_a" })), ...varB.sessions
                     key={sess.visitor_id}
                     className="hover:bg-zinc-50 dark:hover:bg-zinc-900/40 transition-colors"
                   >
+                    <td className="py-2.5 px-4 text-xs font-mono font-bold text-indigo-600 dark:text-indigo-400 whitespace-nowrap">
+                      {sess.session_number ? `#${sess.session_number}` : "—"}
+                    </td>
                     <td className="py-2.5 px-4 text-xs font-mono text-zinc-600 dark:text-zinc-400 whitespace-nowrap">
                       {sess.firstSeen
                         ? new Date(sess.firstSeen).toLocaleString("pt-BR", {

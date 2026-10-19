@@ -1381,6 +1381,9 @@ export function TrackingScreen() {
                 <th className="px-4 py-3 text-left font-semibold text-white whitespace-nowrap sticky left-0 z-30 bg-zinc-900 dark:bg-zinc-950">
                   📅 Data/Hora
                 </th>
+                <th className="px-4 py-3 text-center font-semibold text-white whitespace-nowrap">
+                  #️⃣ Sessão
+                </th>
                 <th className="px-4 py-3 text-left font-semibold text-white whitespace-nowrap">
                   ⏱️ Tempo
                 </th>
@@ -1470,6 +1473,9 @@ export function TrackingScreen() {
                             </svg>
                           </button>
                           <span>{new Date(firstEvent?.created_at || '').toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}</span>
+                        </td>
+                        <td className="px-4 py-3 text-center whitespace-nowrap text-xs font-mono font-bold text-indigo-600 dark:text-indigo-400">
+                          {firstEvent?.session_number ? `#${firstEvent.session_number}` : "—"}
                         </td>
                       <td className="px-4 py-3 text-zinc-900 dark:text-zinc-100 whitespace-nowrap text-xs">
                         {(() => {

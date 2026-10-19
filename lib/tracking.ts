@@ -83,6 +83,7 @@ export type TrackingEvent = {
   user_agent: string;
   is_bot: boolean;
   ab_variant?: string | null;
+  session_number?: number | string | null;
   session_created_at?: string;
   session_updated_at?: string;
 };
@@ -90,6 +91,7 @@ export type TrackingEvent = {
 export type TrackingSession = {
   id: string;
   visitor_id: string;
+  session_number?: number | string | null;
   phone?: string;
   venda?: boolean;
   ab_variant?: string | null;

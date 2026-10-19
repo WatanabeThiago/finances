@@ -39,6 +39,7 @@ export async function GET() {
         s.network,
         s."group",
         COALESCE(t.ab_variant, s.ab_variant) as ab_variant,
+        s.session_number,
         to_char(s."createdAt" AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as session_created_at,
         to_char(s."updatedAt" AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as session_updated_at
        FROM public."Tracking" t

@@ -272,9 +272,15 @@ export async function initializeDatabase() {
         network TEXT,
         "group" TEXT,
         ab_variant VARCHAR(50),
+        session_number BIGSERIAL,
         "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         "updatedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )`
+    );
+
+    await query(
+      `ALTER TABLE public."TrackingSession"
+       ADD COLUMN IF NOT EXISTS session_number BIGSERIAL`
     );
 
     await query(
