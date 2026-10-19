@@ -147,7 +147,7 @@ export async function POST(request: Request) {
         "group" = COALESCE(EXCLUDED."group", public."TrackingSession"."group"),
         ab_variant = COALESCE(EXCLUDED.ab_variant, public."TrackingSession".ab_variant),
         "updatedAt" = CURRENT_TIMESTAMP
-      RETURNING ab_variant`,
+      RETURNING ab_variant, session_number`,
       [
         visitor_id,
         effectivePhone,
@@ -173,6 +173,7 @@ export async function POST(request: Request) {
 
     // Variante efetiva herdada da sessão se o evento não enviou diretamente
     const effectiveVariant = ab_variant || sessionResult[0]?.ab_variant || null;
+    const sessionNumber = sessionResult[0]?.session_number || null;
 
     // Inserir evento (createdAt gerado automaticamente pelo banco)
     const result = await query(
@@ -194,7 +195,10 @@ export async function POST(request: Request) {
       [event, visitor_id, user_agent, is_bot, effectiveVariant]
     );
 
-    const trackingEvent = result[0];
+    const trackingEvent = {
+      ...result[0],
+      session_number: sessionNumber,
+    };
     console.log("Evento de tracking registrado:", trackingEvent);
 
     // Processar notificações push no celular via ApiAlerts (apenas visitantes reais)
