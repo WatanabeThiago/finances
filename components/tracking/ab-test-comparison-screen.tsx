@@ -13,9 +13,13 @@ import {
   Pie,
   Cell,
   Legend,
+  LineChart,
+  Line,
+  CartesianGrid,
 } from "recharts";
 import { Trash2 } from "lucide-react";
 import type { TrackingEvent } from "@/lib/tracking";
+import { Skeleton } from "@/components/ui/skeleton";
 
 interface AbTestComparisonScreenProps {
   events: TrackingEvent[];
@@ -28,6 +32,49 @@ const COLORS = {
   hero_v1_a: "#64748b", // slate-500
   hero_v1_b: "#10b981", // emerald-500
 };
+
+export type KeywordIntentCategory = "urgency" | "local" | "generic";
+
+export function categorizeKeywordIntent(keyword?: string | null): {
+  category: KeywordIntentCategory;
+  label: string;
+} {
+  if (!keyword || !keyword.trim()) {
+    return { category: "generic", label: "Genérico" };
+  }
+  const kw = keyword.toLowerCase().trim();
+
+  // 1. Urgência / Emergência / 24h / Aberturas
+  if (
+    kw.includes("24") ||
+    kw.includes("hora") ||
+    kw.includes("abertura") ||
+    kw.includes("abrir") ||
+    kw.includes("urgente") ||
+    kw.includes("emerg") ||
+    kw.includes("socorro") ||
+    kw.includes("trancad") ||
+    kw.includes("perdi") ||
+    kw.includes("fechadura")
+  ) {
+    return { category: "urgency", label: "🚨 Urgência / 24h" };
+  }
+
+  // 2. Bairro / Localidade específica da Grande Fpolis / SC
+  const localTerms = [
+    "palhoça", "palhoca", "florianopolis", "florianópolis", "floripa",
+    "kobrasol", "serraria", "forquilhinhas", "itacorubi", "trindade",
+    "biguaçu", "biguacu", "coqueiros", "centro", "lagoa", "barra",
+    "ingleses", "campeche", "estreito", "campinas", "são josé", "sao jose",
+    "bairro", "continente"
+  ];
+
+  if (localTerms.some((loc) => kw.includes(loc))) {
+    return { category: "local", label: "📍 Bairro / Local" };
+  }
+
+  return { category: "generic", label: "🔍 Genérico" };
+}
 
 export function AbTestComparisonScreen({
   events,
@@ -112,6 +159,10 @@ export function AbTestComparisonScreen({
         timeSpentSeconds: number[];
         devices: Record<string, number>;
         keywords: Record<string, number>;
+        intentStats: Record<
+          KeywordIntentCategory,
+          { total: number; wa: number; call: number; any: number }
+        >;
         sessions: {
           session_number?: number | string | null;
           visitor_id: string;
@@ -121,6 +172,8 @@ export function AbTestComparisonScreen({
           convertedWa: boolean;
           convertedCall: boolean;
           keyword?: string;
+          intentCategory: KeywordIntentCategory;
+          intentLabel: string;
           device?: string;
           timeSeconds: number | null;
           timeFormatted: string;
@@ -144,6 +197,11 @@ export function AbTestComparisonScreen({
         timeSpentSeconds: [],
         devices: {},
         keywords: {},
+        intentStats: {
+          urgency: { total: 0, wa: 0, call: 0, any: 0 },
+          local: { total: 0, wa: 0, call: 0, any: 0 },
+          generic: { total: 0, wa: 0, call: 0, any: 0 },
+        },
         sessions: [],
       },
       hero_v1_b: {
@@ -162,6 +220,11 @@ export function AbTestComparisonScreen({
         timeSpentSeconds: [],
         devices: {},
         keywords: {},
+        intentStats: {
+          urgency: { total: 0, wa: 0, call: 0, any: 0 },
+          local: { total: 0, wa: 0, call: 0, any: 0 },
+          generic: { total: 0, wa: 0, call: 0, any: 0 },
+        },
         sessions: [],
       },
     };
@@ -258,8 +321,8 @@ export function AbTestComparisonScreen({
         }
 
         if (calculatedSecs !== null && calculatedSecs >= 0) {
-          // Considera para média apenas até 3600s para não explodir
-          if (calculatedSecs <= 3600) {
+          // Desconsidera outliers (> 15 minutos / 900s) para o cálculo da média
+          if (calculatedSecs <= 900) {
             target.timeSpentSeconds.push(calculatedSecs);
           }
         }
@@ -269,7 +332,13 @@ export function AbTestComparisonScreen({
       const dev = first?.device || "desconhecido";
       target.devices[dev] = (target.devices[dev] || 0) + 1;
 
-      // Keyword
+      // Keyword & Intent Classification
+      const intentInfo = categorizeKeywordIntent(first?.keyword);
+      target.intentStats[intentInfo.category].total++;
+      if (isWa) target.intentStats[intentInfo.category].wa++;
+      if (isCall) target.intentStats[intentInfo.category].call++;
+      if (isWa || isCall) target.intentStats[intentInfo.category].any++;
+
       if (first?.keyword) {
         target.keywords[first.keyword] = (target.keywords[first.keyword] || 0) + 1;
       }
@@ -295,6 +364,8 @@ export function AbTestComparisonScreen({
         convertedWa: isWa,
         convertedCall: isCall,
         keyword: first?.keyword,
+        intentCategory: intentInfo.category,
+        intentLabel: intentInfo.label,
         device: first?.device,
         timeSeconds: calculatedSecs,
         timeFormatted: formatTimeStr(calculatedSecs),
@@ -377,6 +448,116 @@ export function AbTestComparisonScreen({
   }, [visitorSessions]);
 
   const { varA, varB, upliftWa, upliftTotal, totalSample } = abStats;
+
+  // Evolução acumulada da Taxa de Conversão (CR %) ao longo do tempo por variante
+  const crTimelineData = useMemo(() => {
+    // Coleta todas as sessões das duas variantes
+    const allSessions = [
+      ...varA.sessions.map((s) => ({ ...s, variant: "hero_v1_a" })),
+      ...varB.sessions.map((s) => ({ ...s, variant: "hero_v1_b" })),
+    ].filter((s) => Boolean(s.firstSeen));
+
+    // Ordena da mais antiga para a mais recente
+    allSessions.sort(
+      (a, b) => new Date(a.firstSeen).getTime() - new Date(b.firstSeen).getTime()
+    );
+
+    if (allSessions.length === 0) return [];
+
+    // Agrupa por data (dia) no fuso horário de São Paulo
+    const spDateFormat = (iso: string) => {
+      const d = new Date(iso);
+      return new Intl.DateTimeFormat("pt-BR", {
+        timeZone: "America/Sao_Paulo",
+        day: "2-digit",
+        month: "2-digit",
+      }).format(d);
+    };
+
+    const spDateFull = (iso: string) => {
+      return new Intl.DateTimeFormat("en-CA", {
+        timeZone: "America/Sao_Paulo",
+      }).format(new Date(iso));
+    };
+
+    // Mapa de dias ordenados
+    const dayMap = new Map<
+      string,
+      {
+        displayDate: string;
+        sessionsA: typeof allSessions;
+        sessionsB: typeof allSessions;
+      }
+    >();
+
+    allSessions.forEach((s) => {
+      const dayKey = spDateFull(s.firstSeen);
+      const displayDate = spDateFormat(s.firstSeen);
+      if (!dayMap.has(dayKey)) {
+        dayMap.set(dayKey, { displayDate, sessionsA: [], sessionsB: [] });
+      }
+      const entry = dayMap.get(dayKey)!;
+      if (s.variant === "hero_v1_a") {
+        entry.sessionsA.push(s);
+      } else {
+        entry.sessionsB.push(s);
+      }
+    });
+
+    let cumVisitorsA = 0;
+    let cumConvertedA = 0;
+    let cumVisitorsB = 0;
+    let cumConvertedB = 0;
+
+    const timeline: {
+      date: string;
+      rawDate: string;
+      "Variante A (Controle)": number | null;
+      "Variante B (Otimizada)": number | null;
+      visitorsA: number;
+      convertedA: number;
+      visitorsB: number;
+      convertedB: number;
+    }[] = [];
+
+    const sortedDays = Array.from(dayMap.entries()).sort((a, b) =>
+      a[0].localeCompare(b[0])
+    );
+
+    sortedDays.forEach(([rawDate, data]) => {
+      cumVisitorsA += data.sessionsA.length;
+      cumConvertedA += data.sessionsA.filter(
+        (s) => s.convertedWa || s.convertedCall
+      ).length;
+
+      cumVisitorsB += data.sessionsB.length;
+      cumConvertedB += data.sessionsB.filter(
+        (s) => s.convertedWa || s.convertedCall
+      ).length;
+
+      const crA =
+        cumVisitorsA > 0
+          ? Number(((cumConvertedA / cumVisitorsA) * 100).toFixed(1))
+          : null;
+      const crB =
+        cumVisitorsB > 0
+          ? Number(((cumConvertedB / cumVisitorsB) * 100).toFixed(1))
+          : null;
+
+      timeline.push({
+        date: data.displayDate,
+        rawDate,
+        "Variante A (Controle)": crA,
+        "Variante B (Otimizada)": crB,
+        visitorsA: cumVisitorsA,
+        convertedA: cumConvertedA,
+        visitorsB: cumVisitorsB,
+        convertedB: cumConvertedB,
+      });
+    });
+
+    return timeline;
+  }, [varA.sessions, varB.sessions]);
 
   // Gráfico de comparação direta
   const chartData = [
@@ -479,7 +660,7 @@ export function AbTestComparisonScreen({
 | **Tempo Médio de Decisão** | ${varA.avgTime}s | ${varB.avgTime}s | ${varB.avgTime - varA.avgTime}s | — |
 | **Mediana de Tempo (Anti-Outlier)** | ${varA.medianTime}s | ${varB.medianTime}s | ${varB.medianTime - varA.medianTime}s | — |
 
-> **Nota sobre o Tempo**: Para sessões que converteram, o tempo é medido estritamente desde a entrada (page_view) até o **1º clique no CTA** (WhatsApp ou Ligação). Para sessões que não converteram, é medido até o último evento registrado na página. Sessões com tempo > 15m são sinalizadas com ⚠️ (Outlier - aba deixada aberta).
+> **Nota sobre o Tempo**: Para sessões que converteram, o tempo é medido estritamente desde a entrada (page_view) até o **1º clique no CTA** (WhatsApp ou Ligação). Para sessões que não converteram, é medido até o último evento registrado na página. Sessões com tempo > 15m são sinalizadas com ⚠️ (Outlier - aba deixada aberta) e são automaticamente excluídas do cálculo do Tempo Médio.
 
 ---
 
@@ -493,15 +674,37 @@ export function AbTestComparisonScreen({
 - **Variante A**: ${Object.entries(varA.keywords).slice(0, 5).map(([k, v]) => `"${k}" (${v})`).join(", ") || "Sem dados"}
 - **Variante B**: ${Object.entries(varB.keywords).slice(0, 5).map(([k, v]) => `"${k}" (${v})`).join(", ") || "Sem dados"}
 
+### Desempenho por Intenção da Busca (Urgência vs. Local vs. Genérico)
+
+${(() => {
+  const formatIntentRow = (
+    label: string,
+    statA: { total: number; wa: number; call: number; any: number },
+    statB: { total: number; wa: number; call: number; any: number }
+  ) => {
+    const crA = statA.total > 0 ? (statA.any / statA.total) * 100 : 0;
+    const crB = statB.total > 0 ? (statB.any / statB.total) * 100 : 0;
+    const diff = crB - crA;
+    const diffStr = statA.total === 0 && statB.total === 0 ? "—" : `${diff >= 0 ? `+${diff.toFixed(1)}` : diff.toFixed(1)} p.p.`;
+    return `| **${label}** | ${statA.total} vist. (${statA.any} conv. • **${crA.toFixed(1)}%**) | ${statB.total} vist. (${statB.any} conv. • **${crB.toFixed(1)}%**) | ${diffStr} |`;
+  };
+
+  return `| Categoria de Intenção | Variante A (Controle) | Variante B (Otimizada) | Diferença CR (B vs A) |
+|---|---|---|---|
+${formatIntentRow("🚨 Urgência / 24 Horas", varA.intentStats.urgency, varB.intentStats.urgency)}
+${formatIntentRow("📍 Bairro / Localidade", varA.intentStats.local, varB.intentStats.local)}
+${formatIntentRow("🔍 Genérico ('chaveiro')", varA.intentStats.generic, varB.intentStats.generic)}`;
+})()}
+
 ---
 
 ## 4. Auditoria Individual de Sessões (Todos os Tempos)
 
-| # Sessão | Data/Hora | Variante | Tempo Registrado | Outlier? | Visitor ID | Keyword | Eventos | Converteu WA | Converteu Ligação | Telefone |
-|---|---|---|---|---|---|---|---|---|---|---|
+| # Sessão | Data/Hora | Variante | Intenção | Tempo Registrado | Outlier? | Visitor ID | Keyword | Eventos | Converteu WA | Converteu Ligação | Telefone |
+|---|---|---|---|---|---|---|---|---|---|---|---|
 ${[...varA.sessions.map(s => ({ ...s, variant: "hero_v1_a" })), ...varB.sessions.map(s => ({ ...s, variant: "hero_v1_b" }))]
   .sort((a, b) => new Date(b.firstSeen).getTime() - new Date(a.firstSeen).getTime())
-  .map(s => `| ${s.session_number ? `#${s.session_number}` : "—"} | ${s.firstSeen ? new Date(s.firstSeen).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" }) : "—"} | ${s.variant} | ${s.timeFormatted} | ${s.isOutlier ? "⚠️ Sim (>15m)" : "Não"} | \`${s.visitor_id.slice(0, 8)}...\` | ${s.keyword || "—"} | ${s.eventsCount} | ${s.convertedWa ? "Sim" : "Não"} | ${s.convertedCall ? "Sim" : "Não"} | ${s.phone || "—"} |`)
+  .map(s => `| ${s.session_number ? `#${s.session_number}` : "—"} | ${s.firstSeen ? new Date(s.firstSeen).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" }) : "—"} | ${s.variant} | ${s.intentLabel} | ${s.timeFormatted} | ${s.isOutlier ? "⚠️ Sim (>15m)" : "Não"} | \`${s.visitor_id.slice(0, 8)}...\` | ${s.keyword || "—"} | ${s.eventsCount} | ${s.convertedWa ? "Sim" : "Não"} | ${s.convertedCall ? "Sim" : "Não"} | ${s.phone || "—"} |`)
   .join("\n")}
 
 ---
@@ -511,7 +714,8 @@ ${[...varA.sessions.map(s => ({ ...s, variant: "hero_v1_a" })), ...varB.sessions
 2. Compare a taxa de conversão direta em WhatsApp (canal preferencial) contra canibalização de ligações.
 3. Observe se o tempo de tela e scroll indicam tomada de decisão rápida na Variante B.
 4. Utilize a **Mediana de Tempo** e a coluna **Tempo Registrado** da tabela individual para desconsiderar distorções de usuários que deixaram a aba aberta por horas (outliers).
-5. Conclua com uma recomendação clara: Manter teste rodando, declarar Variante Vencedora (A ou B), ou sugerir iteração na cópia/CTA.
+5. Analise o **Desempenho por Intenção da Busca**: verifique se a Variante B é superior tanto em termos de socorro imediato ("Urgência/24h") quanto em termos de busca de bairro ("Localidade").
+6. Conclua com uma recomendação clara: Manter teste rodando, declarar Variante Vencedora (A ou B), ou sugerir iteração na cópia/CTA.
 `;
 
     // Download do arquivo .md
@@ -531,6 +735,10 @@ ${[...varA.sessions.map(s => ({ ...s, variant: "hero_v1_a" })), ...varB.sessions
       setTimeout(() => setCopiedMd(false), 2500);
     }).catch(() => {});
   };
+
+  if (loading && events.length === 0) {
+    return <AbTestComparisonSkeleton />;
+  }
 
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 pb-28">
@@ -794,7 +1002,7 @@ ${[...varA.sessions.map(s => ({ ...s, variant: "hero_v1_a" })), ...varB.sessions
               <span className="font-semibold text-zinc-900 dark:text-white">{varA.avgScroll}%</span>
             </div>
             <div className="flex justify-between py-1 text-zinc-600 dark:text-zinc-400">
-              <span title="Para sessões que converteram: tempo até o 1º clique (CTA). Para as demais: tempo até o último evento.">
+              <span title="Para sessões que converteram: tempo até o 1º clique (CTA). Para as demais: tempo até o último evento. Exclui outliers > 15m.">
                 Tempo Médio de Decisão:
               </span>
               <span className="font-semibold text-zinc-900 dark:text-white">{varA.avgTime}s</span>
@@ -875,7 +1083,7 @@ ${[...varA.sessions.map(s => ({ ...s, variant: "hero_v1_a" })), ...varB.sessions
               <span className="font-semibold text-zinc-900 dark:text-white">{varB.avgScroll}%</span>
             </div>
             <div className="flex justify-between py-1 text-zinc-600 dark:text-zinc-400">
-              <span title="Para sessões que converteram: tempo até o 1º clique (CTA). Para as demais: tempo até o último evento.">
+              <span title="Para sessões que converteram: tempo até o 1º clique (CTA). Para as demais: tempo até o último evento. Exclui outliers > 15m.">
                 Tempo Médio de Decisão:
               </span>
               <span className="font-semibold text-zinc-900 dark:text-white">{varB.avgTime}s</span>
@@ -963,6 +1171,220 @@ ${[...varA.sessions.map(s => ({ ...s, variant: "hero_v1_a" })), ...varB.sessions
           <div className="text-center text-xs text-zinc-400 font-mono mt-2">
             Target ideal do algoritmo: 50% / 50%
           </div>
+        </div>
+      </div>
+
+      {/* Gráfico de Evolução da Taxa de Conversão ao Longo do Tempo */}
+      <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
+          <div>
+            <h3 className="font-bold text-base text-zinc-900 dark:text-white flex items-center gap-2">
+              <span>📈</span>
+              <span>Evolução da Taxa de Conversão ao Longo do Tempo (CR % Acumulada)</span>
+            </h3>
+            <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+              Acompanhamento diário da estabilidade e convergência da conversão (WhatsApp + Ligação) para cada variante
+            </p>
+          </div>
+          <div className="flex items-center gap-3 text-xs font-mono">
+            <span className="flex items-center gap-1.5 text-zinc-600 dark:text-zinc-400">
+              <span className="w-2.5 h-2.5 rounded-full bg-slate-500" />
+              Variante A: <strong className="text-zinc-900 dark:text-white">{varA.crTotal}%</strong>
+            </span>
+            <span className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+              Variante B: <strong className="text-emerald-600 dark:text-emerald-400">{varB.crTotal}%</strong>
+            </span>
+          </div>
+        </div>
+
+        {crTimelineData.length === 0 ? (
+          <div className="h-64 flex items-center justify-center text-zinc-400 text-xs">
+            Sem dados suficientes para traçar a evolução no período selecionado.
+          </div>
+        ) : (
+          <div className="h-72 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart
+                data={crTimelineData}
+                margin={{ top: 15, right: 30, left: 0, bottom: 5 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="#27272a" opacity={0.3} />
+                <XAxis
+                  dataKey="date"
+                  stroke="#888888"
+                  fontSize={12}
+                  tickLine={false}
+                  axisLine={false}
+                />
+                <YAxis
+                  stroke="#888888"
+                  fontSize={12}
+                  tickLine={false}
+                  axisLine={false}
+                  unit="%"
+                  domain={[0, (dataMax: number) => Math.min(100, Math.max(50, Math.ceil(dataMax + 10)))]}
+                />
+                <Tooltip
+                  content={({ active, payload, label }) => {
+                    if (active && payload && payload.length) {
+                      const dataPoint = payload[0].payload;
+                      return (
+                        <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-3 shadow-xl text-xs space-y-2 text-white">
+                          <p className="font-semibold text-zinc-300 border-b border-zinc-800 pb-1">
+                            📅 Dia {label} (Acumulado até a data)
+                          </p>
+                          <div className="flex items-center justify-between gap-4">
+                            <span className="flex items-center gap-1.5 text-slate-400">
+                              <span className="w-2 h-2 rounded-full bg-slate-500" />
+                              Variante A:
+                            </span>
+                            <span className="font-mono font-bold text-slate-200">
+                              {dataPoint["Variante A (Controle)"] !== null
+                                ? `${dataPoint["Variante A (Controle)"]}%`
+                                : "—"}{" "}
+                              <span className="text-[10px] text-zinc-500 font-normal">
+                                ({dataPoint.convertedA}/{dataPoint.visitorsA} conv.)
+                              </span>
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between gap-4">
+                            <span className="flex items-center gap-1.5 text-emerald-400">
+                              <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                              Variante B:
+                            </span>
+                            <span className="font-mono font-bold text-emerald-400">
+                              {dataPoint["Variante B (Otimizada)"] !== null
+                                ? `${dataPoint["Variante B (Otimizada)"]}%`
+                                : "—"}{" "}
+                              <span className="text-[10px] text-zinc-500 font-normal">
+                                ({dataPoint.convertedB}/{dataPoint.visitorsB} conv.)
+                              </span>
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    }
+                    return null;
+                  }}
+                />
+                <Legend wrapperStyle={{ paddingTop: "12px" }} />
+                <Line
+                  type="monotone"
+                  dataKey="Variante A (Controle)"
+                  stroke={COLORS.hero_v1_a}
+                  strokeWidth={2.5}
+                  dot={{ r: 3, fill: COLORS.hero_v1_a }}
+                  activeDot={{ r: 5 }}
+                  connectNulls
+                />
+                <Line
+                  type="monotone"
+                  dataKey="Variante B (Otimizada)"
+                  stroke={COLORS.hero_v1_b}
+                  strokeWidth={2.5}
+                  dot={{ r: 3, fill: COLORS.hero_v1_b }}
+                  activeDot={{ r: 5 }}
+                  connectNulls
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+      </div>
+
+      {/* Desempenho por Intenção da Busca */}
+      <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-6">
+        <div className="mb-4">
+          <h3 className="font-bold text-base text-zinc-900 dark:text-white">
+            🎯 Desempenho por Intenção de Busca
+          </h3>
+          <p className="text-xs text-zinc-500 dark:text-zinc-400">
+            Comparativo de taxa de conversão segmentado por urgência imediata vs busca de bairro
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {(
+            [
+              {
+                key: "urgency" as const,
+                label: "🚨 Urgência / 24 Horas",
+                desc: "chaveiro 24h, abertura de fechaduras, socorro",
+                color: "rose",
+              },
+              {
+                key: "local" as const,
+                label: "📍 Bairro / Localidade",
+                desc: "chaveiro palhoça, kobrasol, trindade, etc.",
+                color: "blue",
+              },
+              {
+                key: "generic" as const,
+                label: "🔍 Genérico ('chaveiro')",
+                desc: "buscas amplas sem especificação de local/urgência",
+                color: "zinc",
+              },
+            ] as const
+          ).map((item) => {
+            const statA = varA.intentStats[item.key];
+            const statB = varB.intentStats[item.key];
+            const crA = statA.total > 0 ? (statA.any / statA.total) * 100 : 0;
+            const crB = statB.total > 0 ? (statB.any / statB.total) * 100 : 0;
+            const diff = crB - crA;
+
+            return (
+              <div
+                key={item.key}
+                className="bg-zinc-50 dark:bg-zinc-900/50 p-4 rounded-xl border border-zinc-100 dark:border-zinc-800 flex flex-col justify-between"
+              >
+                <div>
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-sm text-zinc-900 dark:text-white">
+                      {item.label}
+                    </span>
+                    <span
+                      className={`text-xs font-bold px-2 py-0.5 rounded ${
+                        statA.total === 0 && statB.total === 0
+                          ? "bg-zinc-100 text-zinc-400 dark:bg-zinc-800"
+                          : diff > 0
+                          ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
+                          : diff < 0
+                          ? "bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300"
+                          : "bg-zinc-100 text-zinc-600 dark:bg-zinc-800"
+                      }`}
+                    >
+                      {statA.total === 0 && statB.total === 0
+                        ? "Sem dados"
+                        : `${diff >= 0 ? `+${diff.toFixed(1)}` : diff.toFixed(1)} p.p.`}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-zinc-400 mt-0.5">{item.desc}</p>
+                </div>
+
+                <div className="mt-4 pt-3 border-t border-zinc-200/60 dark:border-zinc-800 space-y-2 text-xs">
+                  <div className="flex justify-between items-center">
+                    <span className="text-zinc-500 flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-slate-500" />
+                      Variante A:
+                    </span>
+                    <span className="font-mono font-semibold text-zinc-800 dark:text-zinc-200">
+                      {crA.toFixed(1)}% ({statA.any}/{statA.total})
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-zinc-500 flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                      Variante B:
+                    </span>
+                    <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                      {crB.toFixed(1)}% ({statB.any}/{statB.total})
+                    </span>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
 
@@ -1103,13 +1525,27 @@ ${[...varA.sessions.map(s => ({ ...s, variant: "hero_v1_a" })), ...varB.sessions
                       {sess.visitor_id.slice(0, 8)}...{sess.visitor_id.slice(-4)}
                     </td>
                     <td className="py-2.5 px-4 text-xs font-medium text-zinc-800 dark:text-zinc-200 whitespace-nowrap">
-                      {sess.keyword ? (
-                        <span className="bg-pink-50 dark:bg-pink-950/40 text-pink-700 dark:text-pink-300 px-2 py-0.5 rounded">
-                          {sess.keyword}
+                      <div className="flex items-center gap-1.5">
+                        <span
+                          className={`text-[10px] px-1.5 py-0.5 rounded font-semibold whitespace-nowrap ${
+                            sess.intentCategory === "urgency"
+                              ? "bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300"
+                              : sess.intentCategory === "local"
+                              ? "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300"
+                              : "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
+                          }`}
+                          title={`Intenção detectada: ${sess.intentLabel}`}
+                        >
+                          {sess.intentLabel}
                         </span>
-                      ) : (
-                        <span className="text-zinc-400">—</span>
-                      )}
+                        {sess.keyword ? (
+                          <span className="bg-pink-50 dark:bg-pink-950/40 text-pink-700 dark:text-pink-300 px-2 py-0.5 rounded">
+                            {sess.keyword}
+                          </span>
+                        ) : (
+                          <span className="text-zinc-400">—</span>
+                        )}
+                      </div>
                     </td>
                     <td className="py-2.5 px-4 text-center text-xs font-semibold">
                       {sess.eventsCount}
@@ -1150,6 +1586,213 @@ ${[...varA.sessions.map(s => ({ ...s, variant: "hero_v1_a" })), ...varB.sessions
               })()}
             </tbody>
           </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function AbTestComparisonSkeleton() {
+  return (
+    <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 pb-28">
+      {/* Top Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-200 dark:border-zinc-800 pb-5">
+        <div className="flex items-center gap-3">
+          <Skeleton className="h-10 w-10 rounded-xl" />
+          <div className="space-y-2">
+            <Skeleton className="h-8 w-64 sm:w-80" />
+            <Skeleton className="h-4 w-72 sm:w-96" />
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <Skeleton className="h-9 w-44 rounded-lg" />
+          <Skeleton className="h-9 w-32 rounded-lg" />
+          <Skeleton className="h-9 w-24 rounded-lg" />
+        </div>
+      </div>
+
+      {/* Filtros de Data e Campanha */}
+      <div className="flex flex-wrap items-center justify-between gap-3 bg-zinc-50 dark:bg-zinc-900/50 p-4 rounded-xl border border-zinc-200 dark:border-zinc-800">
+        <div className="flex flex-wrap items-center gap-2">
+          <Skeleton className="h-4 w-14" />
+          {Array.from({ length: 6 }).map((_, i) => (
+            <Skeleton key={i} className="h-7 w-16 sm:w-20 rounded-lg" />
+          ))}
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Skeleton className="h-4 w-16" />
+          {Array.from({ length: 3 }).map((_, i) => (
+            <Skeleton key={i} className="h-7 w-20 sm:w-24 rounded-lg" />
+          ))}
+        </div>
+      </div>
+
+      {/* Destaque de Vencedor / Uplift */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <div
+            key={i}
+            className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-5 space-y-3"
+          >
+            <div className="flex items-center justify-between">
+              <Skeleton className="h-4 w-36" />
+              <Skeleton className="h-6 w-6 rounded-full" />
+            </div>
+            <Skeleton className="h-9 w-28" />
+            <Skeleton className="h-3 w-48" />
+          </div>
+        ))}
+      </div>
+
+      {/* Cards Lado a Lado: Variante A vs Variante B */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {Array.from({ length: 2 }).map((_, i) => (
+          <div
+            key={i}
+            className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-6 space-y-6"
+          >
+            <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-4">
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <Skeleton className="h-5 w-20 rounded-md" />
+                  <Skeleton className="h-6 w-36" />
+                </div>
+                <Skeleton className="h-3 w-56" />
+              </div>
+              <Skeleton className="h-8 w-8 rounded-full" />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              {Array.from({ length: 4 }).map((_, j) => (
+                <div
+                  key={j}
+                  className="bg-zinc-50 dark:bg-zinc-900/60 p-3.5 rounded-xl border border-zinc-100 dark:border-zinc-800 space-y-2"
+                >
+                  <Skeleton className="h-3 w-20" />
+                  <Skeleton className="h-7 w-24" />
+                  <Skeleton className="h-2.5 w-28" />
+                </div>
+              ))}
+            </div>
+
+            <div className="space-y-3 border-t border-zinc-100 dark:border-zinc-800 pt-4">
+              <div className="flex justify-between">
+                <Skeleton className="h-3 w-24" />
+                <Skeleton className="h-3 w-12" />
+              </div>
+              <div className="flex justify-between">
+                <Skeleton className="h-3 w-36" />
+                <Skeleton className="h-3 w-12" />
+              </div>
+              <div className="flex justify-between">
+                <Skeleton className="h-3 w-28" />
+                <Skeleton className="h-3 w-12" />
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Gráficos de Comparação e Distribuição */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-6 space-y-4">
+          <Skeleton className="h-5 w-64" />
+          <Skeleton className="h-3 w-80" />
+          <Skeleton className="h-72 w-full rounded-xl" />
+        </div>
+        <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-6 space-y-4 flex flex-col justify-between">
+          <div className="space-y-2">
+            <Skeleton className="h-5 w-36" />
+            <Skeleton className="h-3 w-48" />
+          </div>
+          <div className="flex items-center justify-center my-4">
+            <Skeleton className="h-44 w-44 rounded-full" />
+          </div>
+          <Skeleton className="h-3 w-36 mx-auto" />
+        </div>
+      </div>
+
+      {/* Skeleton para Gráfico de Evolução ao Longo do Tempo */}
+      <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-6 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div className="space-y-1">
+            <Skeleton className="h-5 w-72" />
+            <Skeleton className="h-3 w-96" />
+          </div>
+          <div className="flex gap-4">
+            <Skeleton className="h-4 w-28" />
+            <Skeleton className="h-4 w-28" />
+          </div>
+        </div>
+        <Skeleton className="h-72 w-full rounded-xl" />
+      </div>
+
+      {/* Desempenho por Intenção da Busca */}
+      <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-6 space-y-4">
+        <div className="space-y-1">
+          <Skeleton className="h-5 w-60" />
+          <Skeleton className="h-3 w-80" />
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div
+              key={i}
+              className="bg-zinc-50 dark:bg-zinc-900/50 p-4 rounded-xl border border-zinc-100 dark:border-zinc-800 space-y-4"
+            >
+              <div className="flex items-center justify-between">
+                <Skeleton className="h-4 w-32" />
+                <Skeleton className="h-5 w-16 rounded-md" />
+              </div>
+              <Skeleton className="h-3 w-44" />
+              <div className="pt-3 border-t border-zinc-200/60 dark:border-zinc-800 space-y-2">
+                <div className="flex justify-between">
+                  <Skeleton className="h-3 w-20" />
+                  <Skeleton className="h-3 w-20" />
+                </div>
+                <div className="flex justify-between">
+                  <Skeleton className="h-3 w-20" />
+                  <Skeleton className="h-3 w-20" />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Tabela de Amostras Recentes das Variantes */}
+      <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 overflow-hidden">
+        <div className="px-6 py-4 border-b border-zinc-100 dark:border-zinc-800 flex items-center justify-between">
+          <div className="space-y-1">
+            <Skeleton className="h-5 w-56" />
+            <Skeleton className="h-3 w-72" />
+          </div>
+          <div className="flex gap-2">
+            <Skeleton className="h-7 w-20 rounded-lg" />
+            <Skeleton className="h-7 w-16 rounded-lg" />
+            <Skeleton className="h-7 w-16 rounded-lg" />
+          </div>
+        </div>
+
+        <div className="p-4 space-y-3">
+          {Array.from({ length: 8 }).map((_, i) => (
+            <div
+              key={i}
+              className="flex items-center justify-between gap-4 py-2 border-b border-zinc-100 dark:border-zinc-800/60 last:border-none"
+            >
+              <Skeleton className="h-4 w-12" />
+              <Skeleton className="h-4 w-28" />
+              <Skeleton className="h-5 w-16 rounded" />
+              <Skeleton className="h-4 w-12" />
+              <Skeleton className="h-4 w-24" />
+              <Skeleton className="h-5 w-36 rounded" />
+              <Skeleton className="h-4 w-8" />
+              <Skeleton className="h-4 w-14" />
+              <Skeleton className="h-4 w-14" />
+              <Skeleton className="h-4 w-20" />
+              <Skeleton className="h-6 w-6 rounded-lg ml-auto" />
+            </div>
+          ))}
         </div>
       </div>
     </div>
